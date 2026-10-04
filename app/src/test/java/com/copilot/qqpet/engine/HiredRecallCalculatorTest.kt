@@ -156,4 +156,48 @@ class HiredRecallCalculatorTest {
         assertFalse(PetAdventureEngine.isPetAlreadyOutError(0, "成功"))
         assertFalse(PetAdventureEngine.isPetAlreadyOutError(135010, "配置为空"))
     }
+
+    @Test
+    fun `resolveEffectiveTotalSec falls back to standard work tiers when total is zero`() {
+        // total 正常大于 0 且覆盖 remaining 时，直接返回原 total
+        assertEquals(14400L, PetAdventureEngine.resolveEffectiveTotalSec(14400L, 12000L))
+
+        // total 为 0 时，根据 remainingSec 自动自适应匹配最近的标准工时档位 (2700s, 7200s, 14400s)
+        assertEquals(14400L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 10000L))
+        assertEquals(7200L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 5000L))
+        assertEquals(2700L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 1200L))
+        assertEquals(0L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 0L))
+    }
+
+    @Test
+    fun `calculateHiredRemainingToTarget accurately predicts countdown to target percentage`() {
+        val total = 14400L
+        // 72% 目标需要走过 10368s
+        // 剩余 14000s (走过 400s) -> 还需要 9968s
+        val needed1 = PetAdventureEngine.calculateHiredRemainingToTarget(total, 14000L, 72)
+        assertEquals(9968L, needed1)
+
+        // 剩余 4032s (恰好走过 10368s) -> 还需要 0s
+        val needed2 = PetAdventureEngine.calculateHiredRemainingToTarget(total, 4032L, 72)
+        assertEquals(0L, needed2)
+
+        // 剩余 2000s (走过 12400s) -> 已超出目标，返回负数
+        val needed3 = PetAdventureEngine.calculateHiredRemainingToTarget(total, 2000L, 72)
+        assertTrue(needed3 < 0L)
+    }
+
+    @Test
+    fun `calculateHiredMonitorSleepMillis prevents deep sleep and handles precision countdown`() {
+        // 1. 较远距离 (还需要 3000 秒)，休眠必须被钳位在 45~75 秒内，绝不能睡死数小时
+        val sleepFar = StealthScheduler.calculateHiredMonitorSleepMillis(3000L, hasReachedTarget = false)
+        assertTrue("较远休眠必须在 45~76 秒之间: $sleepFar", sleepFar in 45000L..76000L)
+
+        // 2. 临近窗口 (还需要 30 秒)，倒计时唤醒并在越过阈值时醒来 (31~34秒)
+        val sleepNear = StealthScheduler.calculateHiredMonitorSleepMillis(30L, hasReachedTarget = false)
+        assertTrue("临近休眠必须在 31~34 秒之间: $sleepNear", sleepNear in 31000L..35000L)
+
+        // 3. 已达到或正在重试 (neededSec <= 0)，以短频 10~15 秒快速唤醒
+        val sleepRetry = StealthScheduler.calculateHiredMonitorSleepMillis(0L, hasReachedTarget = true)
+        assertTrue("重试或达标休眠必须在 10~16 秒之间: $sleepRetry", sleepRetry in 10000L..16000L)
+    }
 }

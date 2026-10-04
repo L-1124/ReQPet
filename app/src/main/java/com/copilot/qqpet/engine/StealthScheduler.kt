@@ -79,6 +79,21 @@ object StealthScheduler {
         }
     }
 
+    /**
+     * 计算被雇佣监控期间的下一次唤醒毫秒数，防止长任务休眠睡死
+     */
+    fun calculateHiredMonitorSleepMillis(neededSec: Long, hasReachedTarget: Boolean): Long {
+        if (hasReachedTarget || neededSec <= 0L) {
+            return Random.nextLong(10, 16) * 1000L
+        }
+        val safeSleepSec = if (neededSec <= 60L) {
+            maxOf(neededSec + Random.nextLong(1, 4), 10L)
+        } else {
+            minOf(neededSec, Random.nextLong(45, 76))
+        }
+        return safeSleepSec * 1000L
+    }
+
    fun isLogAllowed(debugEnabled: Boolean): Boolean = debugEnabled
 
    fun shouldInjectSettingCard(hideSettingEntry: Boolean): Boolean = !hideSettingEntry

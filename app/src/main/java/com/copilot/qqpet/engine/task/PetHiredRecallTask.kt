@@ -1,6 +1,7 @@
 package com.copilot.qqpet.engine.task
 
 import android.content.Context
+import com.copilot.qqpet.engine.StealthScheduler
 import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.delay
@@ -77,33 +78,45 @@ object PetHiredRecallTask {
         val targetThresh: Int
     )
 
-    suspend fun checkAndExecuteRecall(
-        context: Context,
+    data class HiredMonitorDecision(
+        val isHired: Boolean,
+        val hasRecalled: Boolean,
+        val nextSleepMillis: Long
+    )
+
+    suspend fun evaluateHiredMonitor(
         bridge: QQPetDirectBridge,
         petId: String,
         param: RecallCheckParam,
         onLog: (String) -> Unit
-    ): Boolean {
-        if (param.targetThresh <= 0 || param.totalSec <= 0L || !param.currentStoryId.startsWith("6400")) {
-            return false
+    ): HiredMonitorDecision {
+        if (param.targetThresh <= 0 || !param.currentStoryId.startsWith("6400")) {
+            return HiredMonitorDecision(isHired = false, hasRecalled = false, nextSleepMillis = 0L)
         }
-        val curProgress = PetPureCalculations.calculateHiredProgress(param.totalSec, param.remainingSec)
+        val effectiveTotal = PetPureCalculations.resolveEffectiveTotalSec(param.totalSec, param.remainingSec)
+        val curProgress = PetPureCalculations.calculateHiredProgress(effectiveTotal, param.remainingSec)
         val processInfo = queryProcessStoryInfoAwait(bridge, param.currentStoryId, petId)
         val isHired = PetPureCalculations.isTrueHiredWork(
             isHiredFlag = (processInfo.code == 0 && processInfo.isHired),
             currentStoryId = param.currentStoryId,
             selfDispatchedStoryId = param.selfDispatchedStoryId,
             rewardTip = processInfo.tipText,
-            totalSec = param.totalSec
+            totalSec = effectiveTotal
         )
-        if (!isHired) return false
+        if (!isHired) {
+            return HiredMonitorDecision(isHired = false, hasRecalled = false, nextSleepMillis = 0L)
+        }
 
         val progressInt = curProgress.toInt()
         val mins = param.remainingSec / 60
         val secs = param.remainingSec % 60
         onLog("💼 [被雇佣监控] 小宠正处于好友雇佣打工中，当前进度: ${progressInt}% (剩余 ${mins}分${secs}秒)，设定召回阈值: ${param.targetThresh}%")
+
         if (!PetPureCalculations.shouldTriggerHiredRecall(curProgress, param.targetThresh)) {
-            return false
+            val neededSec = PetPureCalculations.calculateHiredRemainingToTarget(effectiveTotal, param.remainingSec, param.targetThresh)
+            val sleepMs = StealthScheduler.calculateHiredMonitorSleepMillis(neededSec, hasReachedTarget = false)
+            onLog("⏳ [召回守候] 距离目标 ${param.targetThresh}% 约剩 ${neededSec}秒，调度休眠 ${sleepMs / 1000L}秒后巡检")
+            return HiredMonitorDecision(isHired = true, hasRecalled = false, nextSleepMillis = sleepMs)
         }
 
         onLog("💰 [雇佣收益抢跑] 当前打工进度 ${progressInt}% 已达到设定目标 ${param.targetThresh}%！正在执行提前召回以抢得满额基础工资与最高增益分成...")
@@ -113,10 +126,26 @@ object PetHiredRecallTask {
             delay(800L)
             val (sCode, _) = settleStoryAwait(bridge, param.currentStoryId, petId)
             if (sCode == 0) onLog("✅ [雇佣收益入账] 基础工资与最高加成奖金已全额入账！")
-            return true
+            return HiredMonitorDecision(isHired = true, hasRecalled = true, nextSleepMillis = 4000L)
         } else {
-            onLog("⚠️ [提前召回重试] 召回指令返回 code=$rCode, 说明: ${rErr ?: "未知"}")
-            return false
+            onLog("⚠️ [提前召回重试] 召回指令返回 code=$rCode, 说明: ${rErr ?: "未知"}，将在 15 秒后重试")
+            val retrySleepMs = StealthScheduler.calculateHiredMonitorSleepMillis(0L, hasReachedTarget = true)
+            return HiredMonitorDecision(isHired = true, hasRecalled = false, nextSleepMillis = retrySleepMs)
         }
     }
+
+    suspend fun checkAndExecuteRecall(
+        bridge: QQPetDirectBridge,
+        petId: String,
+        param: RecallCheckParam,
+        onLog: (String) -> Unit
+    ): Boolean = evaluateHiredMonitor(bridge, petId, param, onLog).hasRecalled
+
+    suspend fun checkAndExecuteRecall(
+        context: Context,
+        bridge: QQPetDirectBridge,
+        petId: String,
+        param: RecallCheckParam,
+        onLog: (String) -> Unit
+    ): Boolean = checkAndExecuteRecall(bridge, petId, param, onLog)
 }

@@ -6,10 +6,27 @@ package com.copilot.qqpet.engine.utils
 object PetPureCalculations {
 
     fun calculateHiredProgress(totalSec: Long, remainingSec: Long): Double {
-        if (totalSec <= 0L) return 0.0
-        val safeRem = remainingSec.coerceIn(0L, totalSec)
-        val elapsed = totalSec - safeRem
-        return (elapsed.toDouble() / totalSec.toDouble()) * 100.0
+        val effectiveTotal = resolveEffectiveTotalSec(totalSec, remainingSec)
+        if (effectiveTotal <= 0L) return 0.0
+        val safeRem = remainingSec.coerceIn(0L, effectiveTotal)
+        val elapsed = effectiveTotal - safeRem
+        return (elapsed.toDouble() / effectiveTotal.toDouble()) * 100.0
+    }
+
+    fun resolveEffectiveTotalSec(totalSec: Long, remainingSec: Long): Long {
+        if (totalSec > 0L && totalSec >= remainingSec) return totalSec
+        if (remainingSec <= 0L) return if (totalSec > 0L) totalSec else 0L
+        val standardTiers = listOf(2700L, 7200L, 14400L)
+        return standardTiers.firstOrNull { it >= remainingSec } ?: maxOf(remainingSec, 14400L)
+    }
+
+    fun calculateHiredRemainingToTarget(totalSec: Long, remainingSec: Long, targetThreshold: Int): Long {
+        if (targetThreshold <= 0) return remainingSec
+        val effectiveTotal = resolveEffectiveTotalSec(totalSec, remainingSec)
+        val targetElapsedSec = (effectiveTotal * targetThreshold) / 100L
+        val safeRem = remainingSec.coerceIn(0L, effectiveTotal)
+        val currentElapsedSec = effectiveTotal - safeRem
+        return targetElapsedSec - currentElapsedSec
     }
 
     fun shouldTriggerHiredRecall(currentProgress: Double, targetThreshold: Int): Boolean {

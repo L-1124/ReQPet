@@ -65,6 +65,8 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         @Volatile var learnedWorkSubEvent: Long? = null; @Volatile var learnedWorkName: String? = null
 
         fun calculateHiredProgress(totalSec: Long, remainingSec: Long): Double = PetPureCalculations.calculateHiredProgress(totalSec, remainingSec)
+        fun resolveEffectiveTotalSec(totalSec: Long, remainingSec: Long): Long = PetPureCalculations.resolveEffectiveTotalSec(totalSec, remainingSec)
+        fun calculateHiredRemainingToTarget(totalSec: Long, remainingSec: Long, targetThreshold: Int): Long = PetPureCalculations.calculateHiredRemainingToTarget(totalSec, remainingSec, targetThreshold)
         fun shouldTriggerHiredRecall(currentProgress: Double, targetThreshold: Int): Boolean = PetPureCalculations.shouldTriggerHiredRecall(currentProgress, targetThreshold)
         fun isHiredTask(strings: Collection<String>): Boolean = PetPureCalculations.isHiredTask(strings)
         fun isTrueHiredWork(isHiredFlag: Boolean, currentStoryId: String?, selfDispatchedStoryId: String?, rewardTip: String? = null, totalSec: Long = 0L): Boolean =
@@ -222,13 +224,17 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         currentTaskTypeName = when { storyId.startsWith("6100") -> "进阶修习中"; storyId.startsWith("6400") -> "小镇打工中"; else -> "森林探险中" }
         currentStatusText = "$currentTaskTypeName · 剩余 ${PetPureCalculations.formatDuration(rem)}"
 
-        if (PetHiredRecallTask.checkAndExecuteRecall(context, bridge, petId,
+        val decision = PetHiredRecallTask.evaluateHiredMonitor(
+            bridge, petId,
             PetHiredRecallTask.RecallCheckParam(storyId, rem, total, selfDispatchedWorkStoryId, prefHiredRecallProgress)
-        ) { sendLog(context, it) }) {
-            lastActiveStoryId = null
-            selfDispatchedWorkStoryId = null
-            currentTaskEndTimeMillis = 0L
-            return 4000L
+        ) { sendLog(context, it) }
+        if (decision.isHired) {
+            if (decision.hasRecalled) {
+                lastActiveStoryId = null
+                selfDispatchedWorkStoryId = null
+                currentTaskEndTimeMillis = 0L
+            }
+            return decision.nextSleepMillis
         }
         return null
     }

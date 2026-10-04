@@ -16,7 +16,7 @@ object PetPureCalculations {
     fun resolveEffectiveTotalSec(totalSec: Long, remainingSec: Long): Long {
         if (totalSec > 0L && totalSec >= remainingSec) return totalSec
         if (remainingSec <= 0L) return if (totalSec > 0L) totalSec else 0L
-        val standardTiers = listOf(2700L, 7200L, 14400L)
+        val standardTiers = listOf(600L, 2700L, 7200L, 14400L)
         return standardTiers.firstOrNull { it >= remainingSec } ?: maxOf(remainingSec, 14400L)
     }
 
@@ -35,7 +35,10 @@ object PetPureCalculations {
     }
 
     fun isHiredTask(strings: Collection<String>): Boolean {
-        val keywords = listOf("被雇佣", "雇佣者", "被雇佣者", "基础工资", "加成奖金", "可获得基础工资")
+        val keywords = listOf(
+            "被雇佣", "雇佣者", "被雇佣者", "基础工资", "加成奖金", "可获得基础工资",
+            "现在召回", "额外加成", "固定工资", "icon/1776409721409"
+        )
         return strings.any { s -> keywords.any { k -> s.contains(k) } }
     }
 

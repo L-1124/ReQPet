@@ -162,10 +162,12 @@ class HiredRecallCalculatorTest {
         // total 正常大于 0 且覆盖 remaining 时，直接返回原 total
         assertEquals(14400L, PetAdventureEngine.resolveEffectiveTotalSec(14400L, 12000L))
 
-        // total 为 0 时，根据 remainingSec 自动自适应匹配最近的标准工时档位 (2700s, 7200s, 14400s)
+        // total 为 0 时，根据 remainingSec 自动自适应匹配最近的标准工时档位 (600s, 2700s, 7200s, 14400s)
         assertEquals(14400L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 10000L))
         assertEquals(7200L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 5000L))
         assertEquals(2700L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 1200L))
+        assertEquals(600L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 300L))
+        assertEquals(600L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 180L))
         assertEquals(0L, PetAdventureEngine.resolveEffectiveTotalSec(0L, 0L))
     }
 

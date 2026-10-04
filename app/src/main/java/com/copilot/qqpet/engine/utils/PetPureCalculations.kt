@@ -98,11 +98,14 @@ object PetPureCalculations {
         return "${mins}分${secs}秒"
     }
 
+    const val ENERGY_PER_FEED = 10
+    const val MAX_FEED_ROUNDS_PER_SESSION = 10
+
     fun calculateFeedingRounds(
         currentEnergy: Int,
         targetThreshold: Int,
-        energyPerFeed: Int = 20,
-        maxRoundsPerSession: Int = 5
+        energyPerFeed: Int = ENERGY_PER_FEED,
+        maxRoundsPerSession: Int = MAX_FEED_ROUNDS_PER_SESSION
     ): Int {
         if (currentEnergy >= targetThreshold || energyPerFeed <= 0) return 0
         val deficit = targetThreshold - currentEnergy
@@ -114,8 +117,8 @@ object PetPureCalculations {
         currentEnergy: Int,
         targetThreshold: Int,
         dailyRemainFeeds: Int,
-        energyPerFeed: Int = 20,
-        maxRoundsPerSession: Int = 5
+        energyPerFeed: Int = ENERGY_PER_FEED,
+        maxRoundsPerSession: Int = MAX_FEED_ROUNDS_PER_SESSION
     ): Int = calculateFeedingRounds(currentEnergy, targetThreshold, energyPerFeed, maxRoundsPerSession)
 
     fun filterPendingCoinBags(

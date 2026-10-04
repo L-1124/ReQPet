@@ -11,41 +11,33 @@ class PetBusinessRulesTest {
 
     @Test
     fun calculateFeedingRoundsShouldHonorDeficitAndSessionLimit() {
-        // 当前 30，目标 80 -> 差额 50，需喂 3 次 (+60)
+        // 当前 30，目标 80 -> 差额 50，每块 10 点需喂 5 次 (+50)
         val rounds1 = PetPureCalculations.calculateFeedingRounds(
             currentEnergy = 30,
-            targetThreshold = 80,
-            energyPerFeed = 20,
-            maxRoundsPerSession = 5
+            targetThreshold = 80
         )
-        assertEquals(3, rounds1)
+        assertEquals(5, rounds1)
 
-        // 当前 75，目标 80 -> 差额 5，需喂 1 次 (+20)
+        // 当前 75，目标 80 -> 差额 5，需喂 1 次 (+10)
         val rounds2 = PetPureCalculations.calculateFeedingRounds(
             currentEnergy = 75,
-            targetThreshold = 80,
-            energyPerFeed = 20,
-            maxRoundsPerSession = 5
+            targetThreshold = 80
         )
         assertEquals(1, rounds2)
 
         // 当前 85，目标 80 -> 已充足，返回 0
         val rounds3 = PetPureCalculations.calculateFeedingRounds(
             currentEnergy = 85,
-            targetThreshold = 80,
-            energyPerFeed = 20,
-            maxRoundsPerSession = 5
+            targetThreshold = 80
         )
         assertEquals(0, rounds3)
 
-        // 当前 0，目标 100 -> 差额 100，需喂 5 次达到上限
+        // 当前 0，目标 100 -> 差额 100，每块 10 点需喂 10 次精准拉满
         val rounds4 = PetPureCalculations.calculateFeedingRounds(
             currentEnergy = 0,
-            targetThreshold = 100,
-            energyPerFeed = 20,
-            maxRoundsPerSession = 5
+            targetThreshold = 100
         )
-        assertEquals(5, rounds4)
+        assertEquals(10, rounds4)
     }
 
     @Test

@@ -13,6 +13,8 @@ import kotlin.coroutines.resume
 object PetCareTask {
 
     private const val NETWORK_TIMEOUT_MS = 8000L
+    private const val ENERGY_PER_FEED = com.copilot.qqpet.engine.utils.PetPureCalculations.ENERGY_PER_FEED
+    private const val MAX_FEED_ROUNDS = com.copilot.qqpet.engine.utils.PetPureCalculations.MAX_FEED_ROUNDS_PER_SESSION
 
     suspend fun queryFeedTimesAwait(bridge: QQPetDirectBridge, timeoutMs: Long = NETWORK_TIMEOUT_MS): Triple<Int, Int, Int> =
         try {
@@ -222,7 +224,7 @@ object PetCareTask {
         var fedCount = 0
         var lastCode = 0
         var lastErr: String? = null
-        val rounds = param.maxRounds.coerceIn(1, 5)
+        val rounds = param.maxRounds.coerceIn(1, MAX_FEED_ROUNDS)
 
         while (fedCount < rounds) {
             val (fCode, fErr) = tryFeedOnceWithAutoBuy(bridge, petId, onLog)
@@ -231,9 +233,9 @@ object PetCareTask {
             if (fCode != 0) break
 
             fedCount++
-            curEnergy = if (curEnergy >= 0) minOf(100, curEnergy + 20) else curEnergy
+            curEnergy = if (curEnergy >= 0) minOf(100, curEnergy + ENERGY_PER_FEED) else curEnergy
             val curStr = if (curEnergy >= 0) " -> 预估体力: $curEnergy/100" else ""
-            onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干 (+20 体力)$curStr")
+            onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干 (+${ENERGY_PER_FEED} 体力)$curStr")
             if (param.targetThreshold > 0 && curEnergy >= param.targetThreshold) break
             delay(500L)
         }

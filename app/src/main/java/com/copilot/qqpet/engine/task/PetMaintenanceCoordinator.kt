@@ -12,6 +12,8 @@ import java.util.concurrent.ThreadLocalRandom
  */
 object PetMaintenanceCoordinator {
 
+    private const val CARE_CHECK_INTERVAL_MS = 3 * 60 * 1000L
+
     suspend fun performMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String) {
         val now = System.currentTimeMillis()
         checkCareMaintenance(context, bridge, petId, now)
@@ -37,7 +39,7 @@ object PetMaintenanceCoordinator {
     }
 
     private suspend fun checkCareMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String, now: Long) {
-        if (!PetAdventureEngine.enableCare || (now - PetAdventureEngine.lastCareTimeMillis <= 5 * 60 * 1000L)) return
+        if (!PetAdventureEngine.enableCare || (now - PetAdventureEngine.lastCareTimeMillis <= CARE_CHECK_INTERVAL_MS)) return
         PetAdventureEngine.lastCareTimeMillis = now
         bridge.refreshProfile()
         val attrs = PetCareTask.queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)

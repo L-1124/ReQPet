@@ -37,14 +37,20 @@ object StealthScheduler {
         return diffMinutes * 60 * 1000L
     }
 
+    const val MIN_SLICE_SECONDS = 180L
+    const val MAX_SLICE_SECONDS = 300L
+    const val SHORT_TASK_THRESHOLD_SECONDS = 180L
+
     /**
-     * 计算在途任务休眠秒数
-     * @param remainingSeconds 任务剩余秒数
+     * 计算在途任务休眠秒数（支持长任务切片式守护，防止睡死阻断日常自理）
+     * @param remainingSeconds 任务总剩余秒数
      * @param humanLikeEnabled 是否开启自选拟人休眠
+     * @param enableSlices 是否启用长任务切片守护巡检
      */
     fun calculateTaskSleepSeconds(
         remainingSeconds: Long?,
-        humanLikeEnabled: Boolean = true
+        humanLikeEnabled: Boolean = true,
+        enableSlices: Boolean = true
     ): Long {
         if (remainingSeconds == null || remainingSeconds <= 0) {
             return if (humanLikeEnabled) {
@@ -55,16 +61,22 @@ object StealthScheduler {
             }
         }
 
-        return if (humanLikeEnabled) {
-            val clampedRemaining = minOf(remainingSeconds, 15000L)
-            if (clampedRemaining <= 60) {
-                clampedRemaining + Random.nextLong(5, 16)
-            } else {
-                clampedRemaining + Random.nextLong(10, 36)
-            }
-        } else {
+        if (!humanLikeEnabled) {
             // 关闭拟人休眠时的常规保底
-            minOf(remainingSeconds + 2, 60L)
+            return minOf(remainingSeconds + 2, 60L)
+        }
+
+        // 拟人休眠开启：当长任务剩余时间大于切片阈值时，拆分成 3~5 分钟随机抖动切片守护巡检
+        if (enableSlices && remainingSeconds > SHORT_TASK_THRESHOLD_SECONDS) {
+            val sliceSec = Random.nextLong(MIN_SLICE_SECONDS, MAX_SLICE_SECONDS + 1)
+            return minOf(remainingSeconds, sliceSec)
+        }
+
+        // 剩余时间进入收尾期时，休眠到任务到期并带微小 Jitter (5~15 秒)
+        return if (remainingSeconds <= 60L) {
+            remainingSeconds + Random.nextLong(5, 16)
+        } else {
+            remainingSeconds + Random.nextLong(10, 26)
         }
     }
 

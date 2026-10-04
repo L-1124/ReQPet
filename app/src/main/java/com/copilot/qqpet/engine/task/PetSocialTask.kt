@@ -191,18 +191,21 @@ object PetSocialTask {
         return discoveredBags.values.toList()
     }
 
-    suspend fun refreshOwnCoinBagFromProfileAwait(bridge: QQPetDirectBridge): String? =
+    suspend fun refreshOwnCoinBagAwait(bridge: QQPetDirectBridge, ownPetId: String): String? =
         try {
-            withTimeoutOrNull(4000L) {
+            withTimeoutOrNull(NETWORK_TIMEOUT_MS) {
                 suspendCancellableCoroutine { cont ->
-                    bridge.queryOwnPet { _, _, _ ->
-                        if (cont.isActive) cont.resume(QQPetDirectBridge.cachedOwnCoinBagId)
+                    bridge.fetchOwnGroundCoinBag(ownPetId) { _, bagId, _ ->
+                        if (cont.isActive) cont.resume(bagId)
                     }
                 }
             }
         } catch (_: Throwable) {
             null
         }
+
+    suspend fun refreshOwnCoinBagFromProfileAwait(_bridge: QQPetDirectBridge): String? =
+        QQPetDirectBridge.cachedOwnCoinBagId
 
     enum class SnatchOutcome { SUCCESS, LIMIT_REACHED, SKIP, FAIL }
 
@@ -261,16 +264,20 @@ object PetSocialTask {
         onLog: (String) -> Unit
     ) {
         val selfBagId = QQPetDirectBridge.cachedOwnCoinBagId?.trim().orEmpty().ifEmpty {
-            refreshOwnCoinBagFromProfileAwait(bridge)?.trim().orEmpty()
+            refreshOwnCoinBagAwait(bridge, ownPetId)?.trim().orEmpty()
         }
         if (selfBagId.isNotEmpty() && (isManual || !AccountSessionStore.isCoinBagClaimedToday(context, currentUin, selfBagId))) {
+            if (isManual) onLog("🧧 [自家福袋] 发现小窝地面掉落金币福袋，正在拆领...")
             val res = snatchCoinBagAwait(bridge, ownPetId, selfBagId)
             if (res.code == 0 || res.code in listOf(135091, 135092, 135096)) {
                 AccountSessionStore.markCoinBagHandledToday(context, currentUin, selfBagId)
                 QQPetDirectBridge.cachedOwnCoinBagId = null
-                if (res.code == 0 && res.gotGold > 0L) {
-                    onLog("🎉 [自家福袋] 成功拆开地面金币福袋，斩获 +${res.gotGold} 金币！")
+                if (res.code == 0) {
+                    val goldStr = if (res.gotGold > 0L) "，斩获 +${res.gotGold} 金币！" else "！"
+                    onLog("🎉 [自家福袋] 成功拆开地面金币福袋$goldStr")
                 }
+            } else if (isManual) {
+                onLog("⚠️ [自家福袋] 拆领地面福袋失败 (code=${res.code}, err=${res.errorMsg})")
             }
             delay(1500L)
         }

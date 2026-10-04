@@ -308,6 +308,11 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
         callback: (code: Int, alreadyLiked: Boolean, likeCount: String, rawData: ByteArray?, errorMsg: String?) -> Unit
     ) = socialClient.queryLikeCount(targetUin, callback)
 
+    fun fetchOwnGroundCoinBag(
+        petId: String,
+        callback: (code: Int, coinbagId: String?, errorMsg: String?) -> Unit
+    ) = socialClient.fetchOwnGroundCoinBag(petId, callback)
+
     fun fetchFriendCoinBags(
         cookie: String = "",
         callback: (code: Int, bags: List<FriendCoinBagInfo>, totalFriendsInPage: Int, hasMore: Boolean, nextCookie: String, errorMsg: String?) -> Unit

@@ -18,6 +18,11 @@ class PetSocialProtocolClient(
 ) {
     companion object {
         private const val TAG = "PetSocialProtocolClient"
+        private const val CMD_HOME_MSG = 39627
+        private const val SUBCMD_HOME_MSG = 0
+        private const val MSG_TYPE_COINBAG = 14
+        private const val BAG_STATUS_OPENED = 3
+        private const val BAG_STATUS_EXPIRED = 4
     }
 
     fun fetchLikeList(
@@ -197,6 +202,46 @@ class PetSocialProtocolClient(
             }
         }
         return list
+    }
+
+    fun fetchOwnGroundCoinBag(
+        petId: String,
+        callback: (code: Int, coinbagId: String?, errorMsg: String?) -> Unit
+    ) {
+        val body = ProtoWire.message()
+            .writeString(1, petId)
+            .writeBytes(2, byteArrayOf(MSG_TYPE_COINBAG.toByte()))
+            .toByteArray()
+        channel.sendOidb("OidbSvcTrpcTcp.0x9acb_0", CMD_HOME_MSG, SUBCMD_HOME_MSG, body) { code, data, errorMsg ->
+            if (code == 0 && data != null) {
+                val bagId = parseGroundCoinBagId(data)
+                if (!bagId.isNullOrEmpty()) {
+                    onOwnBagFound(bagId)
+                    Log.i(TAG, "🧧 [0x9acb_0] 捕获到自家地面钱袋: $bagId")
+                }
+                callback(0, bagId, null)
+            } else {
+                Log.w(TAG, "fetchOwnGroundCoinBag 失败: code=$code, err=$errorMsg")
+                callback(code, null, errorMsg)
+            }
+        }
+    }
+
+    private fun parseGroundCoinBagId(data: ByteArray): String? {
+        val msgList = ProtoWire.allBytes(data, 1)
+        for (mBytes in msgList) {
+            val type = (ProtoWire.firstVarint(mBytes, 1) ?: 0L).toInt()
+            if (type == MSG_TYPE_COINBAG) {
+                val payload = ProtoWire.firstBytes(mBytes, 2) ?: continue
+                val bagId = ProtoWire.firstString(payload, 1)?.trim().orEmpty()
+                val status = (ProtoWire.firstVarint(payload, 5) ?: 0L).toInt()
+                val alreadyOpened = (ProtoWire.firstVarint(payload, 31) ?: 0L) != 0L
+                if (bagId.isNotEmpty() && !alreadyOpened && status != BAG_STATUS_OPENED && status != BAG_STATUS_EXPIRED) {
+                    return bagId
+                }
+            }
+        }
+        return null
     }
 
     fun snatchCoinBag(

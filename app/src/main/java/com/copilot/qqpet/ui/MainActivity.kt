@@ -268,8 +268,11 @@ class MainActivity : AppCompatActivity() {
                     val msg = intent.getStringExtra(PetAdventureEngine.EXTRA_LOG_TEXT) ?: return
                     appendLog(msg)
                 } else if (intent.action == HookEntry.ACTION_PONG) {
-                    val reason = intent.getStringExtra("extra_reason") ?: "心跳回传"
-                    appendLog("🟢 [在线确认] 收到 QQ 内核 Pong 握手 ($reason)")
+                    val debug = PreferencesHelper.getPrefs(this@MainActivity).getBoolean(PreferencesHelper.KEY_DEBUG_LOG, false)
+                    if (debug) {
+                        val reason = intent.getStringExtra("extra_reason") ?: "心跳回传"
+                        appendLog("🟢 [在线确认] 收到 QQ 内核 Pong 握手 ($reason)")
+                    }
                 }
             }
         }

@@ -177,48 +177,52 @@ object PetCareTask {
             Pair(-99, t.message)
         }
 
+    private data class FeedLoopParam(
+        val startEnergy: Int,
+        val targetThreshold: Int,
+        val maxRounds: Int
+    )
+
     suspend fun feedWithAutoBuyAwait(
-        context: Context,
         bridge: QQPetDirectBridge,
         petId: String,
         targetThreshold: Int = 80,
         onLog: (String) -> Unit
     ): Pair<Int, String?> {
-        val (tCode, remainFeeds, totalFeeds) = queryFeedTimesAwait(bridge)
-        if (tCode == 0 && remainFeeds <= 0) {
-            onLog("ℹ️ [日常进食] 今日喂食次数已用尽 ($totalFeeds/$totalFeeds)，明日将自动重置")
-            return Pair(0, "今日喂食次数已用尽")
-        }
         val attrs = queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
         val curEnergy = attrs?.energy?.toInt() ?: -1
         if (curEnergy >= targetThreshold && targetThreshold > 0) {
             onLog("✨ [进食检查] 当前体力充足 ($curEnergy/$targetThreshold)，无需补充爱心饼干")
             return Pair(0, null)
         }
-        val safeRem = if (tCode == 0) remainFeeds else 4
         val maxRounds = if (targetThreshold > 0 && curEnergy >= 0) {
-            com.copilot.qqpet.engine.utils.PetPureCalculations.calculateFeedingRounds(curEnergy, targetThreshold, safeRem)
+            com.copilot.qqpet.engine.utils.PetPureCalculations.calculateFeedingRounds(curEnergy, targetThreshold)
         } else {
             1
         }
-        return executeFeedLoop(bridge, petId, curEnergy, targetThreshold, maxRounds, if (tCode == 0) remainFeeds else -1, onLog)
+        val loopParam = FeedLoopParam(curEnergy, targetThreshold, maxRounds)
+        return executeFeedLoop(bridge, petId, loopParam, onLog)
     }
+
+    suspend fun feedWithAutoBuyAwait(
+        context: Context,
+        bridge: QQPetDirectBridge,
+        petId: String,
+        targetThreshold: Int = 80,
+        onLog: (String) -> Unit
+    ): Pair<Int, String?> = feedWithAutoBuyAwait(bridge, petId, targetThreshold, onLog)
 
     private suspend fun executeFeedLoop(
         bridge: QQPetDirectBridge,
         petId: String,
-        startEnergy: Int,
-        targetThreshold: Int,
-        maxRounds: Int,
-        initialRemainFeeds: Int,
+        param: FeedLoopParam,
         onLog: (String) -> Unit
     ): Pair<Int, String?> {
-        var curEnergy = startEnergy
+        var curEnergy = param.startEnergy
         var fedCount = 0
-        var remain = initialRemainFeeds
         var lastCode = 0
         var lastErr: String? = null
-        val rounds = maxRounds.coerceIn(1, 4)
+        val rounds = param.maxRounds.coerceIn(1, 5)
 
         while (fedCount < rounds) {
             val (fCode, fErr) = tryFeedOnceWithAutoBuy(bridge, petId, onLog)
@@ -227,12 +231,10 @@ object PetCareTask {
             if (fCode != 0) break
 
             fedCount++
-            if (remain > 0) remain--
             curEnergy = if (curEnergy >= 0) minOf(100, curEnergy + 20) else curEnergy
-            val remainStr = if (remain >= 0) " (今日剩余: $remain 次)" else ""
             val curStr = if (curEnergy >= 0) " -> 预估体力: $curEnergy/100" else ""
-            onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干 (+20 体力)$curStr$remainStr")
-            if (targetThreshold > 0 && curEnergy >= targetThreshold) break
+            onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干 (+20 体力)$curStr")
+            if (param.targetThreshold > 0 && curEnergy >= param.targetThreshold) break
             delay(500L)
         }
 

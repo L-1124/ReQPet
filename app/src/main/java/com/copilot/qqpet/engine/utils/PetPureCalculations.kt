@@ -101,15 +101,22 @@ object PetPureCalculations {
     fun calculateFeedingRounds(
         currentEnergy: Int,
         targetThreshold: Int,
-        dailyRemainFeeds: Int,
         energyPerFeed: Int = 20,
-        maxRoundsPerSession: Int = 4
+        maxRoundsPerSession: Int = 5
     ): Int {
-        if (currentEnergy >= targetThreshold || dailyRemainFeeds <= 0 || energyPerFeed <= 0) return 0
+        if (currentEnergy >= targetThreshold || energyPerFeed <= 0) return 0
         val deficit = targetThreshold - currentEnergy
         val needed = (deficit + energyPerFeed - 1) / energyPerFeed
-        return minOf(needed, dailyRemainFeeds, maxRoundsPerSession)
+        return minOf(needed, maxRoundsPerSession)
     }
+
+    fun calculateFeedingRounds(
+        currentEnergy: Int,
+        targetThreshold: Int,
+        dailyRemainFeeds: Int,
+        energyPerFeed: Int = 20,
+        maxRoundsPerSession: Int = 5
+    ): Int = calculateFeedingRounds(currentEnergy, targetThreshold, energyPerFeed, maxRoundsPerSession)
 
     fun filterPendingCoinBags(
         allBags: List<com.copilot.qqpet.protocol.QQPetDirectBridge.FriendCoinBagInfo>,

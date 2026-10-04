@@ -35,6 +35,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         @Volatile var selfDispatchedWorkStoryId: String? = null
         var cachedPetId: String? = null
         var lastActiveStoryId: String? = null
+        @Volatile var lastReportedOngoingStoryId: String? = null
         @Volatile var currentActiveUin: String = ""
         @Volatile var isLoopRunning = false
         @Volatile var lastFatigueSwitchTimeMillis = 0L
@@ -224,6 +225,11 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         currentTaskTypeName = when { storyId.startsWith("6100") -> "进阶修习中"; storyId.startsWith("6400") -> "小镇打工中"; else -> "森林探险中" }
         currentStatusText = "$currentTaskTypeName · 剩余 ${PetPureCalculations.formatDuration(rem)}"
 
+        if (lastReportedOngoingStoryId != storyId) {
+            lastReportedOngoingStoryId = storyId
+            sendLog(context, "⏳ [任务进行中] 小宠正在 $currentTaskTypeName (剩余 ${PetPureCalculations.formatDuration(rem)})，到期后将自动结算")
+        }
+
         val decision = PetHiredRecallTask.evaluateHiredMonitor(
             bridge, petId,
             PetHiredRecallTask.RecallCheckParam(storyId, rem, total, selfDispatchedWorkStoryId, prefHiredRecallProgress)
@@ -232,6 +238,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             if (decision.hasRecalled) {
                 lastActiveStoryId = null
                 selfDispatchedWorkStoryId = null
+                lastReportedOngoingStoryId = null
                 currentTaskEndTimeMillis = 0L
             }
             return decision.nextSleepMillis
@@ -247,6 +254,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             if (code == 0) sendLog(context, "✅ [结算] 收益结算成功！金币与经验已入账")
             lastActiveStoryId = null
             selfDispatchedWorkStoryId = null
+            lastReportedOngoingStoryId = null
             currentTaskEndTimeMillis = 0L
             delay(1500L)
         }

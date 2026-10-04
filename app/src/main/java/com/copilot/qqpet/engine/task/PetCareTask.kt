@@ -181,7 +181,7 @@ object PetCareTask {
 
     private data class FeedLoopParam(
         val startEnergy: Int,
-        val targetThreshold: Int,
+        val targetEnergy: Int,
         val maxRounds: Int
     )
 
@@ -193,16 +193,17 @@ object PetCareTask {
     ): Pair<Int, String?> {
         val attrs = queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
         val curEnergy = attrs?.energy?.toInt() ?: -1
+        val maxEnergy = attrs?.maxEnergy?.toInt()?.takeIf { it > 0 } ?: 100
         if (curEnergy >= targetThreshold && targetThreshold > 0) {
             onLog("✨ [进食检查] 当前体力充足 ($curEnergy/$targetThreshold)，无需补充爱心饼干")
             return Pair(0, null)
         }
-        val maxRounds = if (targetThreshold > 0 && curEnergy >= 0) {
-            com.copilot.qqpet.engine.utils.PetPureCalculations.calculateFeedingRounds(curEnergy, targetThreshold)
+        val maxRounds = if (curEnergy >= 0) {
+            com.copilot.qqpet.engine.utils.PetPureCalculations.calculateFeedingRounds(curEnergy, maxEnergy)
         } else {
             1
         }
-        val loopParam = FeedLoopParam(curEnergy, targetThreshold, maxRounds)
+        val loopParam = FeedLoopParam(curEnergy, maxEnergy, maxRounds)
         return executeFeedLoop(bridge, petId, loopParam, onLog)
     }
 
@@ -233,10 +234,10 @@ object PetCareTask {
             if (fCode != 0) break
 
             fedCount++
-            curEnergy = if (curEnergy >= 0) minOf(100, curEnergy + ENERGY_PER_FEED) else curEnergy
-            val curStr = if (curEnergy >= 0) " -> 预估体力: $curEnergy/100" else ""
+            curEnergy = if (curEnergy >= 0) minOf(param.targetEnergy, curEnergy + ENERGY_PER_FEED) else curEnergy
+            val curStr = if (curEnergy >= 0) " -> 预估体力: $curEnergy/${param.targetEnergy}" else ""
             onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干 (+${ENERGY_PER_FEED} 体力)$curStr")
-            if (param.targetThreshold > 0 && curEnergy >= param.targetThreshold) break
+            if (param.targetEnergy > 0 && curEnergy >= param.targetEnergy) break
             delay(500L)
         }
 
@@ -245,7 +246,7 @@ object PetCareTask {
         if (fedCount > 0) {
             val finalAttrs = bridge.getPetAttributes(petId)
             val finalEnergy = finalAttrs?.energy?.toInt() ?: curEnergy
-            onLog("🎉 [日常进食] 进食补充完成！共投喂 $fedCount 次，最新体力: $finalEnergy/100")
+            onLog("🎉 [日常进食] 进食补充完成！共投喂 $fedCount 次，最新体力: $finalEnergy/${param.targetEnergy}")
         }
         return Pair(lastCode, lastErr)
     }

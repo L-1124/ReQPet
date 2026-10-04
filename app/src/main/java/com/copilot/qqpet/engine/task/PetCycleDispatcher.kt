@@ -250,7 +250,7 @@ object PetCycleDispatcher {
         val res = PetAdaptiveWorkTask.executeAdaptiveWork(context, bridge, petId, param) { PetAdventureEngine.sendLog(context, it) }
         if (res.isSuccess) {
             PetAdventureEngine.lastActiveStoryId = res.storyId
-            PetAdventureEngine.selfDispatchedWorkStoryId = res.storyId
+            PetAdventureEngine.recordSelfDispatchedWork(context, res.storyId)
             val hireSuffix = if (res.hiredFriend != null) " · 雇佣:${res.hiredFriend.friendNick.ifEmpty { res.hiredFriend.uin.toString() }}" else ""
             PetAdventureEngine.currentTaskTypeName = "打工中 · ${res.placeName ?: "小镇"} (${res.jobName ?: "兼职"}$hireSuffix)"
             PetAdventureEngine.currentTaskEndTimeMillis = System.currentTimeMillis() + 3600 * 1000L

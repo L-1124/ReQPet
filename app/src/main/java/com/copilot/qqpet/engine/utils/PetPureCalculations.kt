@@ -36,8 +36,8 @@ object PetPureCalculations {
 
     fun isHiredTask(strings: Collection<String>): Boolean {
         val keywords = listOf(
-            "被雇佣", "雇佣者", "被雇佣者", "基础工资", "加成奖金", "可获得基础工资",
-            "现在召回", "额外加成", "固定工资", "icon/1776409721409"
+            "被雇佣", "雇佣者", "被雇佣者", "加成奖金", "额外加成", "可获得基础工资",
+            "icon/1776409721409"
         )
         return strings.any { s -> keywords.any { k -> s.contains(k) } }
     }

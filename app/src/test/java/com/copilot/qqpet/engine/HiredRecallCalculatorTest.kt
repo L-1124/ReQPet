@@ -64,12 +64,14 @@ class HiredRecallCalculatorTest {
         )
         assertTrue(PetAdventureEngine.isHiredTask(hiredStrings))
 
-        // 普通打工文本
+        // 普通打工文本 (包含通用提前召回按钮与基础工资收益，绝对不能被误判为被雇佣)
         val regularWorkStrings = listOf(
             "风铃旅社",
             "打工进行中",
             "获得打工收益",
-            "小宠正在勤劳工作中"
+            "小宠正在勤劳工作中",
+            "现在召回",
+            "基础工资"
         )
         assertFalse(PetAdventureEngine.isHiredTask(regularWorkStrings))
 

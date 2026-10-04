@@ -33,6 +33,8 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         const val EXTRA_SCHOOL_DETAILS_JSON = "extra_school_details_json"
 
         @Volatile var selfDispatchedWorkStoryId: String? = null
+        fun recordSelfDispatchedWork(context: Context, storyId: String?) { selfDispatchedWorkStoryId = storyId; AccountSessionStore.saveSelfDispatchedWorkStoryId(context, currentActiveUin, storyId) }
+        fun clearSelfDispatchedWork(context: Context) { selfDispatchedWorkStoryId = null; AccountSessionStore.saveSelfDispatchedWorkStoryId(context, currentActiveUin, null) }
         var cachedPetId: String? = null
         var lastActiveStoryId: String? = null
         @Volatile var lastReportedOngoingStoryId: String? = null
@@ -230,14 +232,15 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             sendLog(context, "⏳ [任务进行中] 小宠正在 $currentTaskTypeName (剩余 ${PetPureCalculations.formatDuration(rem)})，到期后将自动结算")
         }
 
+        val selfWorkId = selfDispatchedWorkStoryId ?: AccountSessionStore.loadSelfDispatchedWorkStoryId(context, currentActiveUin)
         val decision = PetHiredRecallTask.evaluateHiredMonitor(
             bridge, petId,
-            PetHiredRecallTask.RecallCheckParam(storyId, rem, total, selfDispatchedWorkStoryId, prefHiredRecallProgress)
+            PetHiredRecallTask.RecallCheckParam(storyId, rem, total, selfWorkId, prefHiredRecallProgress)
         ) { sendLog(context, it) }
         if (decision.isHired) {
             if (decision.hasRecalled) {
                 lastActiveStoryId = null
-                selfDispatchedWorkStoryId = null
+                clearSelfDispatchedWork(context)
                 lastReportedOngoingStoryId = null
                 currentTaskEndTimeMillis = 0L
             }
@@ -253,7 +256,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, pendingId, petId)
             if (code == 0) sendLog(context, "✅ [结算] 收益结算成功！金币与经验已入账")
             lastActiveStoryId = null
-            selfDispatchedWorkStoryId = null
+            clearSelfDispatchedWork(context)
             lastReportedOngoingStoryId = null
             currentTaskEndTimeMillis = 0L
             delay(1500L)

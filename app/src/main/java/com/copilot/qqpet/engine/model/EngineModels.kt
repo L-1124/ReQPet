@@ -35,7 +35,9 @@ data class StoryStatusResult(
     val code: Int,
     val remaining: Long?,
     val total: Long?,
-    val storyId: String?
+    val storyId: String?,
+    val status: Long? = null,
+    val bodyNote: String? = null
 )
 
 data class PetFriendsPageResult(

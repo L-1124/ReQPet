@@ -13,6 +13,29 @@ import java.util.concurrent.ThreadLocalRandom
 object PetMaintenanceCoordinator {
 
     private const val CARE_CHECK_INTERVAL_MS = 3 * 60 * 1000L
+    private const val FRIEND_CARE_INTERVAL_MS = 10 * 60 * 1000L
+    private const val COIN_BAG_INTERVAL_MS = 5 * 60 * 1000L
+    private const val LIKE_BACK_INTERVAL_MS = 6 * 60 * 1000L
+    private const val ACTIVE_VISIT_INTERVAL_MS = 8 * 60 * 1000L
+
+    /** 距离下一次喂食、洗澡、好友照料、福袋、回踩、串门或 PK 到点还有多久。外出不会拉长这个等待。 */
+    fun millisUntilNextCheck(context: Context, now: Long = System.currentTimeMillis()): Long {
+        val due = ArrayList<Long>(6)
+        if (PetAdventureEngine.enableCare) due += waitAfter(PetAdventureEngine.lastCareTimeMillis, CARE_CHECK_INTERVAL_MS, now)
+        if (PetAdventureEngine.enableFriendCare) due += waitAfter(PetAdventureEngine.lastFriendCareTimeMillis, FRIEND_CARE_INTERVAL_MS, now)
+        if (PetAdventureEngine.enableClaimCoinBag) due += waitAfter(PetAdventureEngine.lastCoinBagTimeMillis, COIN_BAG_INTERVAL_MS, now)
+        if (PetAdventureEngine.enableLikeBack) due += waitAfter(PetAdventureEngine.lastLikeBackTimeMillis, LIKE_BACK_INTERVAL_MS, now)
+        if (PetAdventureEngine.enableActiveVisit) due += waitAfter(PetAdventureEngine.lastActiveVisitTimeMillis, ACTIVE_VISIT_INTERVAL_MS, now)
+        if (PetAdventureEngine.enableAutoPk && AccountSessionStore.getDailyPkCount(context, PetAdventureEngine.currentActiveUin) < 10) {
+            due += waitAfter(PetAdventureEngine.lastPkTimeMillis, PetAdventureEngine.pkCooldownMillis, now)
+        }
+        return due.minOrNull() ?: Long.MAX_VALUE
+    }
+
+    private fun waitAfter(last: Long, interval: Long, now: Long): Long {
+        if (last <= 0L) return 0L
+        return (last + interval + 1L - now).coerceAtLeast(0L)
+    }
 
     suspend fun performMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String) {
         val now = System.currentTimeMillis()
@@ -25,7 +48,7 @@ object PetMaintenanceCoordinator {
     }
 
     private suspend fun checkFriendCareMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String, now: Long) {
-        if (!PetAdventureEngine.enableFriendCare || (now - PetAdventureEngine.lastFriendCareTimeMillis <= 10 * 60 * 1000L)) return
+        if (!PetAdventureEngine.enableFriendCare || (now - PetAdventureEngine.lastFriendCareTimeMillis <= FRIEND_CARE_INTERVAL_MS)) return
         PetAdventureEngine.lastFriendCareTimeMillis = now
         val params = PetFriendCareTask.FriendCareParams(
             context = context,
@@ -43,19 +66,19 @@ object PetMaintenanceCoordinator {
         PetAdventureEngine.lastCareTimeMillis = now
         bridge.refreshProfile()
         val attrs = PetCareTask.queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
-        if (attrs != null && (attrs.energy < PetAdventureEngine.prefCareEnergyThreshold || attrs.clean < PetAdventureEngine.prefCareCleanThreshold)) {
-            if (attrs.energy < PetAdventureEngine.prefCareEnergyThreshold) {
+        if (attrs != null && (attrs.energy <= PetAdventureEngine.prefCareEnergyThreshold || attrs.clean <= PetAdventureEngine.prefCareCleanThreshold)) {
+            if (attrs.energy <= PetAdventureEngine.prefCareEnergyThreshold) {
                 PetCareTask.feedWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareEnergyThreshold) { PetAdventureEngine.sendLog(context, it) }
             }
-            if (attrs.clean < PetAdventureEngine.prefCareCleanThreshold) {
-                PetCareTask.bathWithAutoBuyAwait(context, bridge, petId) { PetAdventureEngine.sendLog(context, it) }
+            if (attrs.clean <= PetAdventureEngine.prefCareCleanThreshold) {
+                PetCareTask.bathWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareCleanThreshold) { PetAdventureEngine.sendLog(context, it) }
             }
             delay(1200L)
         }
     }
 
     private suspend fun checkCoinBagMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String, now: Long) {
-        if (!PetAdventureEngine.enableClaimCoinBag || (now - PetAdventureEngine.lastCoinBagTimeMillis <= 5 * 60 * 1000L)) return
+        if (!PetAdventureEngine.enableClaimCoinBag || (now - PetAdventureEngine.lastCoinBagTimeMillis <= COIN_BAG_INTERVAL_MS)) return
         PetAdventureEngine.lastCoinBagTimeMillis = now
         PetSocialTask.executeAutoClaimCoinBags(context, bridge, petId, PetAdventureEngine.currentActiveUin, false) {
             PetAdventureEngine.sendLog(context, it)
@@ -63,7 +86,7 @@ object PetMaintenanceCoordinator {
     }
 
     private suspend fun checkLikeBackMaintenance(context: Context, bridge: QQPetDirectBridge, now: Long) {
-        if (!PetAdventureEngine.enableLikeBack || (now - PetAdventureEngine.lastLikeBackTimeMillis <= 6 * 60 * 1000L)) return
+        if (!PetAdventureEngine.enableLikeBack || (now - PetAdventureEngine.lastLikeBackTimeMillis <= LIKE_BACK_INTERVAL_MS)) return
         PetAdventureEngine.lastLikeBackTimeMillis = now
         val friends = PetAdventureEngine.loadCachedHireableFriends(context)
         val params = PetSocialTask.LikeBackParams(
@@ -77,7 +100,7 @@ object PetMaintenanceCoordinator {
     }
 
     private suspend fun checkActiveVisitMaintenance(context: Context, bridge: QQPetDirectBridge, now: Long) {
-        if (!PetAdventureEngine.enableActiveVisit || (now - PetAdventureEngine.lastActiveVisitTimeMillis <= 8 * 60 * 1000L)) return
+        if (!PetAdventureEngine.enableActiveVisit || (now - PetAdventureEngine.lastActiveVisitTimeMillis <= ACTIVE_VISIT_INTERVAL_MS)) return
         PetAdventureEngine.lastActiveVisitTimeMillis = now
         val friends = PetAdventureEngine.loadCachedHireableFriends(context)
         PetActiveVisitTask.executeActiveVisitSession(

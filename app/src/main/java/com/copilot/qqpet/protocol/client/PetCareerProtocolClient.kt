@@ -1,6 +1,9 @@
 package com.copilot.qqpet.protocol.client
 
+import com.copilot.qqpet.engine.AccountSessionGuard
+import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.hook.HookLog as Log
+import com.copilot.qqpet.protocol.DeviceTrace
 import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.protocol.QQPetDirectBridge.SecondMapDetails
@@ -24,29 +27,38 @@ class PetCareerProtocolClient(
 
     fun queryStoryStatus(
         petId: String,
-        callback: (code: Int, remainingSec: Long?, totalSec: Long?, activeStoryId: String?) -> Unit
+        callback: (code: Int, remainingSec: Long?, totalSec: Long?, activeStoryId: String?, status: Long?, bodyNote: String?) -> Unit
     ) {
         val body = ProtoWire.message()
             .writeString(1, petId)
             .writeVarint(2, 0L)
             .writeVarint(100, 2L)
             .toByteArray()
-        channel.sendOidb("OidbSvcTrpcTcp.0x975a_1", 38746, 1, body) { code, data, _ ->
+        channel.sendOidb("OidbSvcTrpcTcp.0x975a_1", 38746, 1, body) { code, data, err ->
+            traceSuspicious("STAT975a code=$code err=${err ?: "无"}", data)
             var remaining: Long? = null
             var total: Long? = null
             var storyId: String? = null
-            if (code == 0 && data != null) {
-                val subInfo = ProtoWire.firstBytes(data, 1)
-                if (subInfo != null) {
-                    val status = ProtoWire.firstVarint(subInfo, 1) ?: 0L
-                    if (status != 0L) {
-                        remaining = ProtoWire.firstVarint(subInfo, 2) ?: 0L
-                        total = ProtoWire.firstVarint(subInfo, 3) ?: 0L
+            var status: Long? = null
+            val note = buildString {
+                append("bytes=${data?.size ?: -1} err=${err ?: "无"} ")
+                if (code == 0 && data != null) {
+                    val subInfo = ProtoWire.firstBytes(data, 1)
+                    if (subInfo != null) {
+                        status = ProtoWire.firstVarint(subInfo, 1)
+                        append("子状态=${status ?: "无"} ")
+                        if ((status ?: 0L) != 0L) {
+                            remaining = ProtoWire.firstVarint(subInfo, 2) ?: 0L
+                            total = ProtoWire.firstVarint(subInfo, 3) ?: 0L
+                        }
+                    } else {
+                        append("无字段1 ")
                     }
+                    storyId = ProtoWire.firstString(data, 2)
+                    append(ProtoWire.outline(data, 260))
                 }
-                storyId = ProtoWire.firstString(data, 2)
             }
-            callback(code, remaining, total, storyId)
+            callback(code, remaining, total, storyId, status, note)
         }
     }
 
@@ -61,24 +73,38 @@ class PetCareerProtocolClient(
             .writeVarint(100, 2L)
             .toByteArray()
         channel.sendOidb("OidbSvcTrpcTcp.0x975f_1", 38751, 1, body) { code, data, errorMsg ->
+            traceSuspicious("HIRE975f code=$code err=${errorMsg ?: "无"}", data)
             if (code == 0 && data != null) {
                 val eventType = (ProtoWire.firstVarint(data, 5) ?: 0L).toInt()
                 val (fatigued, displayTip) = extractFatigueFromStoryData(data)
                 val effectiveTip: String? = if (fatigued) displayTip else null
                 onFatigueDetected(fatigued, effectiveTip)
-                val allStrings = ProtoWire.extractAllStrings(data)
-                val isHired = allStrings.any { s ->
-                    s.contains("被雇佣") || s.contains("雇佣者") || s.contains("被雇佣者") ||
-                    s.contains("加成奖金") || s.contains("额外加成") || s.contains("可获得基础工资") ||
-                    s.contains("icon/1776409721409")
-                }
-                Log.i(TAG, "queryProcessStoryInfo: storyId=$storyId, fatigued=$fatigued, tip='$displayTip'")
-                callback(ProcessStoryFatigueResult(0, fatigued, displayTip, eventType, null, isHired))
+                val employedUin = parseEmployedUin(data)
+                val selfUin = AccountSessionGuard.extractOwnerUinFromPetId(petId).toLongOrNull() ?: 0L
+                val storyText = ProtoWire.extractAllStrings(data).joinToString("\n")
+                val hiredByCopy = PetPureCalculations.hiredByFriendEvidence(storyText) != null
+                val isHired = hiredByCopy || PetPureCalculations.isEmployedByFriend(employedUin, selfUin)
+                val note = describeHireBody(data)
+                Log.i(TAG, "queryProcessStoryInfo: storyId=$storyId, fatigued=$fatigued, employed=$employedUin, self=$selfUin, hiredByCopy=$hiredByCopy")
+                callback(ProcessStoryFatigueResult(0, fatigued, displayTip, eventType, null, isHired, employedUin, note, storyText))
             } else {
                 Log.w(TAG, "queryProcessStoryInfo 失败: code=$code, err=$errorMsg")
-                callback(ProcessStoryFatigueResult(code, false, null, 0, errorMsg, false))
+                val note = "bytes=${data?.size ?: -1} err=${errorMsg ?: "无"} ${ProtoWire.outline(data, 400)}"
+                callback(ProcessStoryFatigueResult(code, false, null, 0, errorMsg, false, 0L, note))
             }
         }
+    }
+
+    private fun describeHireBody(data: ByteArray): String = ProtoWire.hireScan(data)
+
+    private fun traceSuspicious(tag: String, data: ByteArray?) {
+        ProtoWire.suspiciousLines(data).forEach { DeviceTrace.i("$tag $it") }
+    }
+
+    private fun parseEmployedUin(data: ByteArray): Long {
+        // 0x975f 实测整包没有 QQ 号。字段 4 是「最高额外+42%」这类加成文案，不能当成开工请求里的用户信息。
+        if (data.isEmpty()) return 0L
+        return 0L
     }
 
     private fun extractFatigueFromStoryData(data: ByteArray): Pair<Boolean, String?> {

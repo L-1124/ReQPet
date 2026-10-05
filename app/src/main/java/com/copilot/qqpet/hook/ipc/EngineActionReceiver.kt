@@ -10,6 +10,7 @@ import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.engine.WakeLockHelper
 import com.copilot.qqpet.hook.HookLog
 import com.copilot.qqpet.ui.PreferencesHelper
+import com.copilot.qqpet.ui.util.UiDescUtils
 
 /**
  * 负责与主界面及外部交互的跨进程广播接收与指令分发 (IPC 通道)
@@ -174,8 +175,19 @@ object EngineActionReceiver {
             editor.putBoolean(PreferencesHelper.KEY_DISABLE_TINKER_PATCH, disableTinker).commit()
         } catch (_: Throwable) {}
         HookLog.log(TAG, "跨进程配置更新完成并写入偏好存储")
-        HookEntry.globalEngine?.sendLog(ctx, "⚙️ [配置已同步] 学习=$study, 打工=$work, 照顾=$care, 冒险=$adv, 结算=$settle, 阶段=$schoolStage, 工种=$workType, 召回=${if (hiredRecall > 0) "${hiredRecall}%" else "关闭"}")
+        val placeTitle = PetAdventureEngine.cachedWorkPlaces?.stages?.find { it.stage == workType }?.title
+        val hireCount = hireUinsCsv.split(',').count { it.isNotBlank() }
+        HookEntry.globalEngine?.sendLog(
+            ctx,
+            "⚙️ [配置已同步到 QQ 调度] 学习=${onOff(study)}，打工=${onOff(work)}，照顾=${onOff(care)}，冒险=${onOff(adv)}，结算=${onOff(settle)}，雇佣好友=${onOff(hireFriend)}（${hireCount}人），好友照顾=${onOff(friendCareEnabled)}，回踩=${onOff(likeBack)}，福袋=${onOff(claimBag)}，串门=${onOff(activeVisit)}，自动PK=${onOff(autoPk)}，疲惫转探险=${onOff(fatigueToAdv)}"
+        )
+        HookEntry.globalEngine?.sendLog(
+            ctx,
+            "⚙️ [调度明细] 学园=${UiDescUtils.schoolStageLabel(schoolStage)}，科目=${UiDescUtils.courseSubjectLabel(courseSubject)}，课时=${UiDescUtils.courseDurationLabel(courseDuration)}，打工场所=${UiDescUtils.workTypeLabel(workType, placeTitle)}，工时=${UiDescUtils.workDurationLabel(workDuration)}，体力≤$careEnergy，清洁≤$careClean，好友体力≤$friendCareEnergy，好友清洁≤$friendCareClean，召回=${if (hiredRecall > 0) "${hiredRecall}%" else "关闭"}，拟人休眠=${onOff(humanLikeSleep)}，夜间静默=${onOff(nightSleep)}，熄屏静默=${onOff(screenOffSilent)}"
+        )
         WakeLockHelper.wakeUpImmediately()
         HookEntry.globalEngine?.wakeUpMasterCycle(ctx)
     }
+
+    private fun onOff(enabled: Boolean): String = if (enabled) "开" else "关"
 }

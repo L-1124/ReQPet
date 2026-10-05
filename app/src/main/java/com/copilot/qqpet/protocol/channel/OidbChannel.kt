@@ -172,6 +172,7 @@ class OidbChannel(
                     delegateInstance = inst
                     sendOidbMethod = method
                     isReady = true
+                    com.copilot.qqpet.protocol.DeviceTrace.bind(context)
                     Log.d(TAG, "✅ 成功反射挂载 QQ 宠物原生发包代理: ${cls.name}")
                 } else {
                     Log.e(TAG, "❌ 实例化 QQ 宠物发包代理类失败: ${cls.name}")

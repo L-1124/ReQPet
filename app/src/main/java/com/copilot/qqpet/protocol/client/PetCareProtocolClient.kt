@@ -82,9 +82,7 @@ class PetCareProtocolClient(
         if (bodyBytes == null) {
             bodyBytes = buildProtoFeedBody(petId, targetFoodId, petUin, foodItemId)
         }
-        channel.sendOidb("OidbSvcTrpcTcp.0x992d_1", 39213, 1, bodyBytes) { code, data, err ->
-            callback(code, data, err)
-        }
+        channel.sendOidb("OidbSvcTrpcTcp.0x992d_1", 39213, 1, bodyBytes, callback)
     }
 
     private fun tryReflectFeedBody(petId: String, targetFoodId: Long): ByteArray? {

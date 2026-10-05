@@ -7,10 +7,17 @@ import com.copilot.qqpet.engine.model.PetFriendsPageResult
 import com.copilot.qqpet.engine.model.StoryStatusResult
 import com.copilot.qqpet.engine.state.AccountSessionStore
 import com.copilot.qqpet.engine.utils.PetPureCalculations
+import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.QQPetDirectBridge
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
 /**
@@ -19,6 +26,7 @@ import kotlin.coroutines.resume
 object PetWorkTask {
 
     private const val NETWORK_TIMEOUT_MS = 8000L
+    private val watchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val CANDIDATE_JOBS_CLERK = listOf(
         Triple("星尘魔法塔", 6400L, 6401L),
@@ -103,7 +111,7 @@ object PetWorkTask {
                     return WorkStartWithHireResult(code, storyId, errMsg, candidate)
                 }
                 if (PetPureCalculations.isPetAlreadyOutError(code, errMsg)) {
-                    onLog("ℹ️ [雇佣阻断] 宠物已处于外出打工状态中 (code=$code)，立即终止后续雇佣尝试与单人打工")
+                    onLog("ℹ️ [雇佣阻断] 开工被拒绝，小宠已在外出 (code=$code ${errMsg ?: "无说明"})，停止后续雇佣和单人打工")
                     return WorkStartWithHireResult(code, storyId, errMsg, null)
                 }
                 onLog("ℹ️ [雇佣顺延] 雇佣好友「$friendLabel」未能生效 (code=$code ${errMsg ?: ""})，尝试下一候选或回退单人打工...")
@@ -161,15 +169,47 @@ object PetWorkTask {
         }
 
     suspend fun querySelectEventsAwait(
-        bridge: QQPetDirectBridge, page: Long, petId: String, schoolStage: Int = 0, careerType: Int = 0, timeoutMs: Long = NETWORK_TIMEOUT_MS
-    ): Pair<Int, List<QQPetDirectBridge.SelectEvent>> =
-        withTimeoutOrNull(timeoutMs) {
-            suspendCancellableCoroutine { cont ->
-                bridge.querySelectEvents(page, petId, schoolStage, careerType) { code, events, _, _ ->
-                    if (cont.isActive) cont.resume(Pair(code, events))
+        bridge: QQPetDirectBridge,
+        page: Long,
+        petId: String,
+        schoolStage: Int = 0,
+        careerType: Int = 0,
+        timeoutMs: Long = NETWORK_TIMEOUT_MS,
+        onLog: (String) -> Unit = {}
+    ): Pair<Int, List<QQPetDirectBridge.SelectEvent>> {
+        onLog("📤 [岗位查询] 已发出 0x9ab2 page=$page career=$careerType，单独计时 ${timeoutMs / 1000} 秒")
+        val done = AtomicBoolean(false)
+        val watch = watchScope.launch {
+            delay(timeoutMs)
+            if (!done.get()) onLog("⏱️ [岗位查询] ${timeoutMs / 1000} 秒到点仍无 0x9ab2 回包。调用还卡在发包里")
+        }
+        return try {
+            val result = withTimeoutOrNull(timeoutMs) {
+                suspendCancellableCoroutine { cont ->
+                    bridge.querySelectEvents(page, petId, schoolStage, careerType) { code, events, raw, err ->
+                        done.set(true)
+                        val note = "code=$code 岗位=${events.size} err=${err ?: "无"} bytes=${raw?.size ?: -1} ${ProtoWire.outline(raw, 220)}"
+                        if (cont.isActive) cont.resume(Pair(code, events) to note)
+                    }
                 }
             }
-        } ?: Pair(-99, emptyList())
+            done.set(true)
+            if (result == null) {
+                onLog("⏱️ [岗位查询] 等待结束，0x9ab2 没有回包")
+                Pair(-99, emptyList())
+            } else {
+                onLog("📥 [岗位查询] ${result.second}")
+                result.first
+            }
+        } catch (t: Throwable) {
+            done.set(true)
+            if (t is CancellationException) throw t
+            onLog("⚠️ [岗位查询] 中断 ${t.javaClass.simpleName}: ${t.message ?: "无说明"}")
+            Pair(-99, emptyList())
+        } finally {
+            watch.cancel()
+        }
+    }
 
     suspend fun queryStoryStatusAwait(
         bridge: QQPetDirectBridge, petId: String, timeoutMs: Long = NETWORK_TIMEOUT_MS
@@ -177,13 +217,14 @@ object PetWorkTask {
         try {
             withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
-                    bridge.queryStoryStatus(petId) { code, rem, tot, storyId ->
-                        if (cont.isActive) cont.resume(StoryStatusResult(code, rem, tot, storyId))
+                    bridge.queryStoryStatus(petId) { code, rem, tot, storyId, status, note ->
+                        if (cont.isActive) cont.resume(StoryStatusResult(code, rem, tot, storyId, status, note))
                     }
                 }
-            } ?: StoryStatusResult(-99, null, null, null)
-        } catch (_: Throwable) {
-            StoryStatusResult(-99, null, null, null)
+            } ?: StoryStatusResult(-99, null, null, null, bodyNote = "状态查询超时")
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            StoryStatusResult(-99, null, null, null, bodyNote = "状态查询异常 ${t.message ?: ""}")
         }
 
     suspend fun fetchPetFriendsPageAwait(

@@ -267,29 +267,4 @@ object AccountSessionStore {
             .apply()
     }
 
-    fun saveSelfDispatchedWorkStoryId(context: Context, uin: String, storyId: String?) {
-        try {
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            val editor = prefs.edit()
-            val scopedKey = AccountSessionGuard.scopedKey("key_self_dispatched_work_story_id", uin)
-            if (storyId.isNullOrEmpty()) {
-                editor.remove("key_self_dispatched_work_story_id").remove(scopedKey)
-            } else {
-                editor.putString("key_self_dispatched_work_story_id", storyId)
-                if (AccountSessionGuard.isValidUin(uin)) editor.putString(scopedKey, storyId)
-            }
-            editor.apply()
-        } catch (_: Throwable) {}
-    }
-
-    fun loadSelfDispatchedWorkStoryId(context: Context, uin: String): String? {
-        return try {
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            val scopedKey = AccountSessionGuard.scopedKey("key_self_dispatched_work_story_id", uin)
-            prefs.getString(scopedKey, null) ?: prefs.getString("key_self_dispatched_work_story_id", null)
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
 }

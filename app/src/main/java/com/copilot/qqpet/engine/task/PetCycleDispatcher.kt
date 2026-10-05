@@ -4,6 +4,7 @@ import android.content.Context
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.engine.model.StudyDispatchParam
 import com.copilot.qqpet.engine.model.WorkDispatchParam
+import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlin.coroutines.resume
 
@@ -89,7 +90,7 @@ object PetCycleDispatcher {
         return when (action) {
             "care" -> {
                 PetCareTask.feedWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareEnergyThreshold) { PetAdventureEngine.sendLog(context, it) }
-                PetCareTask.bathWithAutoBuyAwait(context, bridge, petId) { PetAdventureEngine.sendLog(context, it) }
+                PetCareTask.bathWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareCleanThreshold) { PetAdventureEngine.sendLog(context, it) }
                 showToast(context, "已触发小宠进食与洗澡巡检")
                 true
             }
@@ -99,7 +100,7 @@ object PetCycleDispatcher {
                 true
             }
             "bath" -> {
-                PetCareTask.bathWithAutoBuyAwait(context, bridge, petId) { PetAdventureEngine.sendLog(context, it) }
+                PetCareTask.bathWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareCleanThreshold) { PetAdventureEngine.sendLog(context, it) }
                 showToast(context, "已触发小宠沐浴恢复清洁")
                 true
             }
@@ -250,7 +251,6 @@ object PetCycleDispatcher {
         val res = PetAdaptiveWorkTask.executeAdaptiveWork(context, bridge, petId, param) { PetAdventureEngine.sendLog(context, it) }
         if (res.isSuccess) {
             PetAdventureEngine.lastActiveStoryId = res.storyId
-            PetAdventureEngine.recordSelfDispatchedWork(context, res.storyId)
             val hireSuffix = if (res.hiredFriend != null) " · 雇佣:${res.hiredFriend.friendNick.ifEmpty { res.hiredFriend.uin.toString() }}" else ""
             PetAdventureEngine.currentTaskTypeName = "打工中 · ${res.placeName ?: "小镇"} (${res.jobName ?: "兼职"}$hireSuffix)"
             PetAdventureEngine.currentTaskEndTimeMillis = System.currentTimeMillis() + 3600 * 1000L
@@ -268,6 +268,10 @@ object PetCycleDispatcher {
             dispatchAdventure(context, bridge, petId)
             return true
         }
+        if (res.code == PetAdaptiveWorkTask.CODE_ALREADY_OUT || PetPureCalculations.isPetAlreadyOutError(res.code, res.errorMsg)) {
+            return false
+        }
+        if (res.jobName == null && res.code != 0) return false
         PetAdventureEngine.sendLog(context, "⚠️ [打工调度] 本轮打工未成功开工 (${res.errorMsg ?: "服务端拒绝"})")
         return false
     }

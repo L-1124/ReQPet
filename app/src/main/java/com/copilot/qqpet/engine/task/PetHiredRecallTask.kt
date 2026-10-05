@@ -3,7 +3,9 @@ package com.copilot.qqpet.engine.task
 import android.content.Context
 import com.copilot.qqpet.engine.StealthScheduler
 import com.copilot.qqpet.engine.utils.PetPureCalculations
+import com.copilot.qqpet.protocol.DeviceTrace
 import com.copilot.qqpet.protocol.QQPetDirectBridge
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -29,9 +31,10 @@ object PetHiredRecallTask {
                         if (cont.isActive) cont.resume(res)
                     }
                 }
-            } ?: QQPetDirectBridge.ProcessStoryFatigueResult(-99, false, null, 0, "超时")
+            } ?: QQPetDirectBridge.ProcessStoryFatigueResult(-99, false, null, 0, "超时", bodyNote = "状态详情查询超时")
         } catch (t: Throwable) {
-            QQPetDirectBridge.ProcessStoryFatigueResult(-99, false, null, 0, t.message)
+            if (t is CancellationException) throw t
+            QQPetDirectBridge.ProcessStoryFatigueResult(-99, false, null, 0, t.message, bodyNote = "状态详情异常 ${t.message ?: ""}")
         }
 
     suspend fun recallStoryAwait(
@@ -74,7 +77,7 @@ object PetHiredRecallTask {
         val currentStoryId: String,
         val remainingSec: Long,
         val totalSec: Long,
-        val selfDispatchedStoryId: String?,
+        val selfUin: Long,
         val targetThresh: Int
     )
 
@@ -90,20 +93,33 @@ object PetHiredRecallTask {
         param: RecallCheckParam,
         onLog: (String) -> Unit
     ): HiredMonitorDecision {
+        onLog("🧭 [召回检查] 阈值=${param.targetThresh}% story=${param.currentStoryId} 剩余=${param.remainingSec}秒 总时长=${param.totalSec}秒 当前账号=${param.selfUin}")
         if (param.targetThresh <= 0 || !param.currentStoryId.startsWith("6400")) {
+            val reason = if (param.targetThresh <= 0) "召回关闭" else "不是小镇打工"
+            onLog("🧭 [召回跳过] $reason")
             return HiredMonitorDecision(isHired = false, hasRecalled = false, nextSleepMillis = 0L)
         }
         val effectiveTotal = PetPureCalculations.resolveEffectiveTotalSec(param.totalSec, param.remainingSec)
         val curProgress = PetPureCalculations.calculateHiredProgress(effectiveTotal, param.remainingSec)
         val processInfo = queryProcessStoryInfoAwait(bridge, param.currentStoryId, petId)
-        val isHired = PetPureCalculations.isTrueHiredWork(
-            isHiredFlag = (processInfo.code == 0 && processInfo.isHired),
-            currentStoryId = param.currentStoryId,
-            selfDispatchedStoryId = param.selfDispatchedStoryId,
-            rewardTip = processInfo.tipText,
-            totalSec = effectiveTotal
-        )
-        if (!isHired) {
+        val employedUin = if (processInfo.code == 0) processInfo.employedUin else 0L
+        val storyText = if (processInfo.code == 0) processInfo.storyText.orEmpty() else ""
+        val copyHit = PetPureCalculations.hiredByFriendEvidence(storyText)
+        val packet = "code=${processInfo.code} 解析被雇佣号码=$employedUin 文案=${copyHit ?: "无"} ${processInfo.bodyNote ?: processInfo.errorMsg ?: "无回包"}"
+        onLog("🧭 [雇佣回包] $packet")
+        DeviceTrace.i("HIRE975f $packet")
+        val isHiredByUin = PetPureCalculations.isEmployedByFriend(employedUin, param.selfUin)
+        if (copyHit != null) {
+            onLog("💼 [雇佣文案] 识别为被好友雇佣：$copyHit")
+        } else if (employedUin > 0L) {
+            val role = if (isHiredByUin) "被好友雇佣" else "自己派出并雇佣了好友"
+            onLog("💼 [雇佣关系] 被雇佣号码=$employedUin，当前账号=${param.selfUin}，$role")
+        } else {
+            onLog("🧭 [召回跳过] 详情里没有「被…拉来一起」或「现在召回，可获得」，本次不召回")
+            return HiredMonitorDecision(isHired = false, hasRecalled = false, nextSleepMillis = 0L)
+        }
+        if (copyHit == null && !isHiredByUin) {
+            onLog("🧭 [召回跳过] 当前是自己雇佣好友，不执行被雇佣召回")
             return HiredMonitorDecision(isHired = false, hasRecalled = false, nextSleepMillis = 0L)
         }
 

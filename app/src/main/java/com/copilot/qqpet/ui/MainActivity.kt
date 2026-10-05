@@ -19,6 +19,7 @@ import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.R
 import com.copilot.qqpet.databinding.ActivityMainBinding
 import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.ui.util.SettingConfigSyncer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,6 +46,9 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         initStatusCard()
         pingQQHost()
+        try {
+            SettingConfigSyncer.syncConfig(PreferencesHelper.getPrefs(this), null, this)
+        } catch (_: Throwable) {}
         try {
             val intent = Intent(HookEntry.ACTION_TRIGGER_ACTION).apply {
                 setPackage(HookEntry.TARGET_PACKAGE)
@@ -288,7 +292,7 @@ class MainActivity : AppCompatActivity() {
         val logEntry = "[$time] $line"
         runOnUiThread {
             synchronized(logBuffer) {
-                if (logBuffer.size >= 30) {
+                if (logBuffer.size >= 80) {
                     logBuffer.removeFirst()
                 }
                 logBuffer.addLast(logEntry)

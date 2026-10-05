@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine
 
+import com.copilot.qqpet.engine.utils.PetPureCalculations
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -50,38 +51,23 @@ class HiredRecallCalculatorTest {
     }
 
     @Test
-    fun `isHiredTask distinguishes between hired and regular tasks`() {
-        // 图2实测真机文案：包含雇佣者、被雇佣者、基础工资、加成
-        val hiredStrings = listOf(
-            "被雇佣中",
-            "刘花",
-            "赵海波",
-            "75%",
-            "25%",
-            "当前可获得基础工资249",
-            "和额外加成的25%",
-            "现在召回，可获得"
-        )
-        assertTrue(PetAdventureEngine.isHiredTask(hiredStrings))
+    fun `story copy identifies being hired by a friend`() {
+        val json = """[{"text":"被"},{"text":"小福猪","font_weight":"2"},{"text":"拉来一起做禁咒实验！"}]"""
+        assertEquals("被小福猪拉来一起", PetPureCalculations.hiredByFriendEvidence(json))
+        assertEquals("被Tom拉来一起", PetPureCalculations.hiredByFriendEvidence("被Tom拉来一起打工"))
+        assertEquals("被🐱拉来一起", PetPureCalculations.hiredByFriendEvidence("被🐱拉来一起"))
+        assertEquals("现在召回，可获得（金币）1968", PetPureCalculations.hiredByFriendEvidence("现在召回，可获得（金币）1968"))
+        assertEquals(null, PetPureCalculations.hiredByFriendEvidence("拉来一起做实验"))
+        assertEquals(null, PetPureCalculations.hiredByFriendEvidence("最高额外+42%"))
+    }
 
-        // 普通打工文本 (包含通用提前召回按钮与基础工资收益，绝对不能被误判为被雇佣)
-        val regularWorkStrings = listOf(
-            "风铃旅社",
-            "打工进行中",
-            "获得打工收益",
-            "小宠正在勤劳工作中",
-            "现在召回",
-            "基础工资"
-        )
-        assertFalse(PetAdventureEngine.isHiredTask(regularWorkStrings))
-
-        // 普通进修文本
-        val schoolStrings = listOf(
-            "初级学园",
-            "武术课程",
-            "正在认真听讲中"
-        )
-        assertFalse(PetAdventureEngine.isHiredTask(schoolStrings))
+    @Test
+    fun `employed uin matches self only when the pet was hired by a friend`() {
+        val selfUin = 972455807L
+        val friendUin = 1028645636L
+        assertTrue(PetAdventureEngine.isEmployedByFriend(selfUin, selfUin))
+        assertFalse(PetAdventureEngine.isEmployedByFriend(friendUin, selfUin))
+        assertFalse(PetAdventureEngine.isEmployedByFriend(0L, selfUin))
     }
 
     @Test
@@ -111,42 +97,6 @@ class HiredRecallCalculatorTest {
             15L
         }
         assertEquals(15L, safeSleepSec)
-    }
-
-    @Test
-    fun `isTrueHiredWork strictly excludes self-dispatched and regular town work`() {
-        val selfStoryId = "6400_self_dispatched_uuid"
-        val hiredStoryId = "6400_friend_hired_uuid"
-
-        // 1. 自己派出的打工，即使带有 isHiredFlag，也绝对不能被判定为被雇佣召回
-        assertFalse(
-            PetAdventureEngine.isTrueHiredWork(
-                isHiredFlag = true,
-                currentStoryId = selfStoryId,
-                selfDispatchedStoryId = selfStoryId,
-                rewardTip = "1248"
-            )
-        )
-
-        // 2. 普通小镇打工（收益为区间浮动，如 68~91），绝不能被判定为被雇佣召回
-        assertFalse(
-            PetAdventureEngine.isTrueHiredWork(
-                isHiredFlag = true,
-                currentStoryId = "6400_town_work",
-                selfDispatchedStoryId = null,
-                rewardTip = "68~91"
-            )
-        )
-
-        // 3. 真正的被好友雇佣打工（非自主派遣、命中雇佣特征且固定提成奖励）-> 判定为被雇佣
-        assertTrue(
-            PetAdventureEngine.isTrueHiredWork(
-                isHiredFlag = true,
-                currentStoryId = hiredStoryId,
-                selfDispatchedStoryId = null,
-                rewardTip = "1248"
-            )
-        )
     }
 
     @Test

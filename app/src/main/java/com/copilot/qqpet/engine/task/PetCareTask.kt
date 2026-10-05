@@ -181,7 +181,8 @@ object PetCareTask {
 
     private data class FeedLoopParam(
         val startEnergy: Int,
-        val targetEnergy: Int,
+        val targetThreshold: Int,
+        val maxEnergy: Int,
         val maxRounds: Int
     )
 
@@ -194,16 +195,18 @@ object PetCareTask {
         val attrs = queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
         val curEnergy = attrs?.energy?.toInt() ?: -1
         val maxEnergy = attrs?.maxEnergy?.toInt()?.takeIf { it > 0 } ?: 100
-        if (curEnergy >= targetThreshold && targetThreshold > 0) {
-            onLog("✨ [进食检查] 当前体力充足 ($curEnergy/$targetThreshold)，无需补充爱心饼干")
+        if (targetThreshold > 0 && curEnergy > targetThreshold) {
+            onLog("✨ [进食检查] 当前体力已高于阈值 ($curEnergy>$targetThreshold)，无需补充爱心饼干")
             return Pair(0, null)
         }
         val maxRounds = if (curEnergy >= 0) {
-            com.copilot.qqpet.engine.utils.PetPureCalculations.calculateFeedingRounds(curEnergy, maxEnergy)
+            com.copilot.qqpet.engine.utils.PetPureCalculations.calculateFeedingRounds(
+                curEnergy, targetThreshold, maxValue = maxEnergy
+            )
         } else {
-            1
+            MAX_FEED_ROUNDS
         }
-        val loopParam = FeedLoopParam(curEnergy, maxEnergy, maxRounds)
+        val loopParam = FeedLoopParam(curEnergy, targetThreshold, maxEnergy, maxRounds)
         return executeFeedLoop(bridge, petId, loopParam, onLog)
     }
 
@@ -234,19 +237,16 @@ object PetCareTask {
             if (fCode != 0) break
 
             fedCount++
-            curEnergy = if (curEnergy >= 0) minOf(param.targetEnergy, curEnergy + ENERGY_PER_FEED) else curEnergy
-            val curStr = if (curEnergy >= 0) " -> 预估体力: $curEnergy/${param.targetEnergy}" else ""
-            onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干 (+${ENERGY_PER_FEED} 体力)$curStr")
-            if (param.targetEnergy > 0 && curEnergy >= param.targetEnergy) break
+            if (curEnergy >= 0) curEnergy = minOf(param.maxEnergy, curEnergy + ENERGY_PER_FEED)
+            val curStr = if (curEnergy >= 0) " -> 估计+${ENERGY_PER_FEED}: $curEnergy（阈值 ${param.targetThreshold}）" else ""
+            onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干$curStr")
+            if (param.targetThreshold > 0 && curEnergy > param.targetThreshold) break
+            if (curEnergy >= param.maxEnergy) break
             delay(500L)
         }
 
-        queryPetAttributesAwait(bridge, petId)
-        bridge.refreshProfile()
         if (fedCount > 0) {
-            val finalAttrs = bridge.getPetAttributes(petId)
-            val finalEnergy = finalAttrs?.energy?.toInt() ?: curEnergy
-            onLog("🎉 [日常进食] 进食补充完成！共投喂 $fedCount 次，最新体力: $finalEnergy/${param.targetEnergy}")
+            onLog("🎉 [日常进食] 进食补充完成！共投喂 $fedCount 次，体力: $curEnergy（阈值 ${param.targetThreshold}）")
         }
         return Pair(lastCode, lastErr)
     }
@@ -277,11 +277,12 @@ object PetCareTask {
         context: Context,
         bridge: QQPetDirectBridge,
         petId: String,
+        targetThreshold: Int = 80,
         onLog: (String) -> Unit
     ): QQPetDirectBridge.BathResult {
-        val target = resolveBathTarget(bridge, petId)
-        if (target.startClean >= target.maxClean) {
-            onLog("✨ [沐浴检查] 当前清洁度已满 (${target.startClean}/${target.maxClean})，无需消耗${target.itemName} (库存: ${target.balance})")
+        val target = resolveBathTarget(bridge, petId, targetThreshold)
+        if (target.startClean > target.threshold || (target.maxClean > 0 && target.startClean >= target.maxClean)) {
+            onLog("✨ [沐浴检查] 当前清洁度已高于阈值 (${target.startClean}>${target.threshold})，无需消耗${target.itemName} (库存: ${target.balance})")
             return QQPetDirectBridge.BathResult(0, target.startClean, 0, target.balance, true, null)
         }
         val loopRes = executeBathLoop(bridge, petId, target, onLog)
@@ -290,7 +291,7 @@ object PetCareTask {
         }
         try { bathAwait(bridge, petId) } catch (_: Throwable) {}
         queryPetAttributesAwait(bridge, petId)
-        return QQPetDirectBridge.BathResult(0, loopRes.curClean, loopRes.totalAdded, loopRes.balance, loopRes.curClean >= target.maxClean, null)
+        return QQPetDirectBridge.BathResult(0, loopRes.curClean, loopRes.totalAdded, loopRes.balance, loopRes.curClean > target.threshold, null)
     }
 
     data class BathLoopResult(val success: Boolean, val code: Int, val curClean: Int, val totalAdded: Int, val balance: Int, val errorMsg: String?)
@@ -302,10 +303,10 @@ object PetCareTask {
         var totalAdded = 0
         var balance = target.balance
         var steps = 0
-        while (curClean < target.maxClean && steps < 12) {
+        while (curClean <= target.threshold && curClean < target.maxClean && steps < 12) {
             steps++
             if (balance <= 0) {
-                val (_, newBal, err) = purchaseSoapIfNeeded(bridge, petId, target.itemId, target.itemName, target.cleanPerSoap, target.defaultBuyCount, curClean, target.maxClean, onLog)
+                val (_, newBal, err) = purchaseSoapIfNeeded(bridge, petId, target.itemId, target.itemName, target.cleanPerSoap, target.defaultBuyCount, curClean, target.threshold + 1, onLog)
                 if (err != null) return BathLoopResult(false, -2, curClean, totalAdded, balance, err)
                 balance = newBal
             }
@@ -317,19 +318,19 @@ object PetCareTask {
             curClean = res.newClean
             totalAdded += res.addedClean
             balance = res.remainBalance
-            onLog("🧼 [搓澡进度] 消耗 1 份${target.itemName} (+${res.addedClean}) -> 清洁度 $curClean/${target.maxClean} (剩余库存: $balance)")
-            if (res.isFullClean || curClean >= target.maxClean) break
+            onLog("🧼 [搓澡进度] 消耗 1 份${target.itemName} (+${res.addedClean}) -> 清洁度 $curClean（阈值 ${target.threshold}）(剩余库存: $balance)")
+            if (curClean > target.threshold || res.isFullClean || curClean >= target.maxClean) break
             delay(450L)
         }
         return BathLoopResult(true, 0, curClean, totalAdded, balance, null)
     }
 
     data class BathTargetInfo(
-        val startClean: Int, val maxClean: Int, val itemId: String,
+        val startClean: Int, val maxClean: Int, val threshold: Int, val itemId: String,
         val itemName: String, val cleanPerSoap: Int, val defaultBuyCount: Int, val balance: Int
     )
 
-    private suspend fun resolveBathTarget(bridge: QQPetDirectBridge, petId: String): BathTargetInfo {
+    private suspend fun resolveBathTarget(bridge: QQPetDirectBridge, petId: String, threshold: Int): BathTargetInfo {
         val attrs = queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
         val startClean = attrs?.clean?.toInt() ?: -1
         val maxClean = attrs?.maxClean?.toInt()?.takeIf { it > 0 } ?: 100
@@ -341,7 +342,7 @@ object PetCareTask {
         val cleanPerSoap = chosenConfig?.cleanValue?.takeIf { it > 0 } ?: 10
         val defaultBuyCount = chosenConfig?.defaultPurchaseCount?.takeIf { it > 0 } ?: 5
         val balance = inventory[itemId] ?: 0
-        return BathTargetInfo(startClean, maxClean, itemId, itemName, cleanPerSoap, defaultBuyCount, balance)
+        return BathTargetInfo(startClean, maxClean, threshold, itemId, itemName, cleanPerSoap, defaultBuyCount, balance)
     }
 
     private suspend fun purchaseSoapIfNeeded(

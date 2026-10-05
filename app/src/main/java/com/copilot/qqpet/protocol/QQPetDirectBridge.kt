@@ -29,7 +29,17 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
     data class BathResult(val code: Int, val newClean: Int, val addedClean: Int, val remainBalance: Int, val isFullClean: Boolean, val errorMsg: String? = null)
     data class FriendCoinBagInfo(val friendUin: Long, val friendNick: String, val friendPetId: String, val petNick: String, val coinbagId: String, val isSelf: Boolean = false)
     data class SnatchCoinBagResult(val code: Int, val coinbagId: String, val gotGold: Long, val status: Int, val alreadyOpened: Boolean, val errorMsg: String? = null)
-    data class ProcessStoryFatigueResult(val code: Int, val isFatigued: Boolean, val tipText: String? = null, val eventType: Int = 0, val errorMsg: String? = null, val isHired: Boolean = false)
+    data class ProcessStoryFatigueResult(
+        val code: Int,
+        val isFatigued: Boolean,
+        val tipText: String? = null,
+        val eventType: Int = 0,
+        val errorMsg: String? = null,
+        val isHired: Boolean = false,
+        val employedUin: Long = 0L,
+        val bodyNote: String? = null,
+        val storyText: String? = null
+    )
     data class HireableFriend(val uin: Long, val friendNick: String, val petNick: String, val petId: String, val power: Long = 0L, val intel: Long = 0L, val charm: Long = 0L, val isIdle: Boolean = true, val remainingSec: Long = 0L) { val totalAttr: Long get() = power + intel + charm }
     data class FoodInventoryItem(val itemId: String, val name: String, val balance: Int, val energyValue: Int = 20)
     data class FeedDetailResult(val code: Int, val feedState: Int = 0, val tipText: String? = null, val errorMsg: String? = null)
@@ -233,7 +243,7 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
 
     fun queryStoryStatus(
         petId: String,
-        callback: (code: Int, remainingSec: Long?, totalSec: Long?, activeStoryId: String?) -> Unit
+        callback: (code: Int, remainingSec: Long?, totalSec: Long?, activeStoryId: String?, status: Long?, bodyNote: String?) -> Unit
     ) = careerClient.queryStoryStatus(petId, callback)
 
     fun queryProcessStoryInfo(

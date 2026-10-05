@@ -32,9 +32,6 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         const val EXTRA_WORK_PLACES_JSON = "extra_work_places_json"
         const val EXTRA_SCHOOL_DETAILS_JSON = "extra_school_details_json"
 
-        @Volatile var selfDispatchedWorkStoryId: String? = null
-        fun recordSelfDispatchedWork(context: Context, storyId: String?) { selfDispatchedWorkStoryId = storyId; AccountSessionStore.saveSelfDispatchedWorkStoryId(context, currentActiveUin, storyId) }
-        fun clearSelfDispatchedWork(context: Context) { selfDispatchedWorkStoryId = null; AccountSessionStore.saveSelfDispatchedWorkStoryId(context, currentActiveUin, null) }
         var cachedPetId: String? = null
         var lastActiveStoryId: String? = null
         @Volatile var lastReportedOngoingStoryId: String? = null
@@ -71,9 +68,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         fun resolveEffectiveTotalSec(totalSec: Long, remainingSec: Long): Long = PetPureCalculations.resolveEffectiveTotalSec(totalSec, remainingSec)
         fun calculateHiredRemainingToTarget(totalSec: Long, remainingSec: Long, targetThreshold: Int): Long = PetPureCalculations.calculateHiredRemainingToTarget(totalSec, remainingSec, targetThreshold)
         fun shouldTriggerHiredRecall(currentProgress: Double, targetThreshold: Int): Boolean = PetPureCalculations.shouldTriggerHiredRecall(currentProgress, targetThreshold)
-        fun isHiredTask(strings: Collection<String>): Boolean = PetPureCalculations.isHiredTask(strings)
-        fun isTrueHiredWork(isHiredFlag: Boolean, currentStoryId: String?, selfDispatchedStoryId: String?, rewardTip: String? = null, totalSec: Long = 0L): Boolean =
-            PetPureCalculations.isTrueHiredWork(isHiredFlag, currentStoryId, selfDispatchedStoryId, rewardTip, totalSec)
+        fun isEmployedByFriend(employedUin: Long, selfUin: Long): Boolean = PetPureCalculations.isEmployedByFriend(employedUin, selfUin)
 
         fun isPetAlreadyOutError(code: Int, errMsg: String?): Boolean = PetPureCalculations.isPetAlreadyOutError(code, errMsg)
         fun shouldUpdateCachedPetId(cachedPetId: String?, remotePetId: String?): Boolean = PetPureCalculations.shouldUpdateCachedPetId(cachedPetId, remotePetId)
@@ -137,7 +132,11 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         isLoopRunning = true
         loopJob = scope.launch {
             while (isActive && isLoopRunning) {
-                val delayMs = try { executeMasterCycle(context) } catch (t: Throwable) { Log.e(TAG, "主循环异常: ${t.message}"); 15000L }
+                val delayMs = try { executeMasterCycle(context) } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    Log.e(TAG, "主循环异常: ${t.message}")
+                    15000L
+                }
                 delay(delayMs)
             }
         }
@@ -155,7 +154,11 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         loopJob?.cancel()
         loopJob = scope.launch {
             while (isActive && isLoopRunning) {
-                val delayMs = try { executeMasterCycle(context) } catch (t: Throwable) { Log.e(TAG, "主循环异常: ${t.message}"); 15000L }
+                val delayMs = try { executeMasterCycle(context) } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    Log.e(TAG, "主循环异常: ${t.message}")
+                    15000L
+                }
                 delay(delayMs)
             }
         }
@@ -167,11 +170,27 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         checkStealthWindows(context)?.let { return it }
         ensureReadyBridge(context)?.let { return it }
         val petId = ensurePetId(context) ?: return 30 * 1000L
+        sendLog(context, "🔎 [主循环] 正在查询外出状态")
         val story = queryStoryStatusAwait(petId)
-        handleOngoingStory(context, petId, story)?.let { return it }
+        if (story.code != 0) {
+            sendLog(context, "🧭 [主循环] 外出状态没查完 code=${story.code} ${story.bodyNote ?: ""}")
+            performMaintenance(context, petId)
+            return sleepForMaintenance(context, 8_000L)
+        }
+        if ((story.remaining ?: 0L) <= 0L || story.storyId.isNullOrEmpty()) {
+            sendLog(context, "🧭 [主循环] 状态查询成功，当前没有进行中的外出 子状态=${story.status ?: "无"} 剩余=${story.remaining ?: "无"} story=${story.storyId ?: "无"}")
+            if (!story.bodyNote.isNullOrBlank()) sendLog(context, "🧭 [主循环回包] ${story.bodyNote}")
+        }
+        val hiredSleep = handleOngoingStory(context, petId, story)
         handleStorySettlement(context, petId, story)
         performMaintenance(context, petId)
-        if (story.code == 0 && (story.remaining ?: 0L) > 0L) return calculateTaskSleep(story)
+        val rem = story.remaining ?: 0L
+        if (story.code == 0 && rem > 0L) {
+            val kind = currentTaskTypeName.ifEmpty { "外出" }
+            sendLog(context, "⏳ [任务进行中] 仍在$kind，剩余 ${PetPureCalculations.formatDuration(rem)}，StoryID=${story.storyId ?: "无"}")
+            val outingSleep = if (hiredSleep != null && hiredSleep > 0L) hiredSleep else calculateTaskSleep(story)
+            return sleepForMaintenance(context, outingSleep)
+        }
         return dispatchNextTask(context, petId)
     }
 
@@ -232,15 +251,14 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             sendLog(context, "⏳ [任务进行中] 小宠正在 $currentTaskTypeName (剩余 ${PetPureCalculations.formatDuration(rem)})，到期后将自动结算")
         }
 
-        val selfWorkId = selfDispatchedWorkStoryId ?: AccountSessionStore.loadSelfDispatchedWorkStoryId(context, currentActiveUin)
+        val selfUin = currentActiveUin.toLongOrNull() ?: 0L
         val decision = PetHiredRecallTask.evaluateHiredMonitor(
             bridge, petId,
-            PetHiredRecallTask.RecallCheckParam(storyId, rem, total, selfWorkId, prefHiredRecallProgress)
+            PetHiredRecallTask.RecallCheckParam(storyId, rem, total, selfUin, prefHiredRecallProgress)
         ) { sendLog(context, it) }
         if (decision.isHired) {
             if (decision.hasRecalled) {
                 lastActiveStoryId = null
-                clearSelfDispatchedWork(context)
                 lastReportedOngoingStoryId = null
                 currentTaskEndTimeMillis = 0L
             }
@@ -256,7 +274,6 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, pendingId, petId)
             if (code == 0) sendLog(context, "✅ [结算] 收益结算成功！金币与经验已入账")
             lastActiveStoryId = null
-            clearSelfDispatchedWork(context)
             lastReportedOngoingStoryId = null
             currentTaskEndTimeMillis = 0L
             delay(1500L)
@@ -270,6 +287,12 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     private fun calculateTaskSleep(story: StoryStatusResult): Long {
         val rem = story.remaining ?: 30L
         return StealthScheduler.calculateTaskSleepSeconds(rem, prefHumanLikeSleep) * 1000L
+    }
+
+    /** 外出只推迟学业、打工和冒险。照料、结算、福袋、踩踩和 PK 按自己的间隔醒来。 */
+    private fun sleepForMaintenance(context: Context, outingSleep: Long): Long {
+        val maintenanceWait = com.copilot.qqpet.engine.task.PetMaintenanceCoordinator.millisUntilNextCheck(context)
+        return minOf(outingSleep, maintenanceWait).coerceAtLeast(1_000L)
     }
 
     private suspend fun dispatchNextTask(context: Context, petId: String): Long =
@@ -361,11 +384,40 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     fun reloadConfig(context: Context) {
         try {
             val p = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            enableStudy = p.getBoolean("key_study", true); enableWork = p.getBoolean("key_work", true); enableCare = p.getBoolean("key_care", true)
-            enableAdventure = p.getBoolean("key_adventure", false); enableSettle = p.getBoolean("key_settle", true)
-            enableLikeBack = p.getBoolean(PreferencesHelper.KEY_LIKE_BACK, true); enableClaimCoinBag = p.getBoolean(PreferencesHelper.KEY_CLAIM_COINBAG, true)
-            enableAutoPk = p.getBoolean(PreferencesHelper.KEY_AUTO_PK, false); prefHiredRecallProgress = p.getInt(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS, 72)
-            prefNightSleepMode = p.getBoolean(PreferencesHelper.KEY_NIGHT_SLEEP_MODE, true); prefScreenOffSilent = p.getBoolean(PreferencesHelper.KEY_SCREEN_OFF_SILENT, true)
+            enableStudy = p.getBoolean("key_study", true)
+            enableWork = p.getBoolean("key_work", true)
+            enableCare = p.getBoolean("key_care", true)
+            enableAdventure = p.getBoolean("key_adventure", false)
+            enableSettle = p.getBoolean("key_settle", true)
+            enableLikeBack = p.getBoolean(PreferencesHelper.KEY_LIKE_BACK, true)
+            enableClaimCoinBag = p.getBoolean(PreferencesHelper.KEY_CLAIM_COINBAG, true)
+            enableFatigueToAdventure = p.getBoolean(PreferencesHelper.KEY_FATIGUE_TO_ADVENTURE, true)
+            enableAutoPk = p.getBoolean(PreferencesHelper.KEY_AUTO_PK, false)
+            prefHiredRecallProgress = p.getInt(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS, 72)
+            prefNightSleepMode = p.getBoolean(PreferencesHelper.KEY_NIGHT_SLEEP_MODE, true)
+            prefScreenOffSilent = p.getBoolean(PreferencesHelper.KEY_SCREEN_OFF_SILENT, true)
+            prefHumanLikeSleep = p.getBoolean(PreferencesHelper.KEY_HUMAN_LIKE_SLEEP, true)
+            prefStudyMode = p.getInt("key_study_mode", 0)
+            prefWorkMode = p.getInt("key_work_mode", 0)
+            prefCustomSchoolStage = p.getInt(PreferencesHelper.KEY_SCHOOL_STAGE, 0)
+            prefCustomCourseSubject = p.getInt(PreferencesHelper.KEY_COURSE_SUBJECT, 0)
+            prefCustomCourseDuration = p.getInt(PreferencesHelper.KEY_COURSE_DURATION, 0)
+            prefCustomWorkType = p.getInt(PreferencesHelper.KEY_WORK_TYPE, 0)
+            prefCustomWorkDuration = p.getInt(PreferencesHelper.KEY_WORK_DURATION, 0)
+            prefCareEnergyThreshold = p.getInt(PreferencesHelper.KEY_CARE_ENERGY_THRESHOLD, 60)
+            prefCareCleanThreshold = p.getInt(PreferencesHelper.KEY_CARE_CLEAN_THRESHOLD, 60)
+            prefHideQQSettingEntry = p.getBoolean(PreferencesHelper.KEY_HIDE_QQ_SETTING_ENTRY, false)
+            prefDebugLog = p.getBoolean(PreferencesHelper.KEY_DEBUG_LOG, false)
+            enableHireFriend = p.getBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, true)
+            prefHireFriendUinsCsv = p.getString(PreferencesHelper.KEY_HIRE_FRIEND_UINS, "") ?: ""
+            enableFriendCare = p.getBoolean(PreferencesHelper.KEY_FRIEND_CARE_ENABLED, false)
+            prefFriendCareEnergyThreshold = p.getInt(PreferencesHelper.KEY_FRIEND_CARE_ENERGY_THRESHOLD, 60)
+            prefFriendCareCleanThreshold = p.getInt(PreferencesHelper.KEY_FRIEND_CARE_CLEAN_THRESHOLD, 60)
+            prefPkBlacklistUinsCsv = p.getString(PreferencesHelper.KEY_PK_BLACKLIST_UINS, "") ?: ""
+            enableActiveVisit = p.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_ENABLED, true)
+            prefActiveVisitFriends = p.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_FRIENDS, true)
+            prefActiveVisitStrangers = p.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_STRANGERS, true)
+            prefActiveVisitDailyLimit = p.getInt(PreferencesHelper.KEY_ACTIVE_VISIT_DAILY_LIMIT, 20)
         } catch (_: Throwable) {}
     }
 

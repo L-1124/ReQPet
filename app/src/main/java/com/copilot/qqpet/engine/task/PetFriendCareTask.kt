@@ -112,8 +112,8 @@ object PetFriendCareTask {
         val curClean = attrs.clean.toInt(); val maxClean = attrs.maxClean.toInt().coerceAtLeast(100)
         val friendName = friend.friendNick.ifEmpty { friend.uin.toString() }
         val petName = friend.petNick.ifEmpty { "小宠" }
-        val needFeed = curEnergy in 0 until params.energyThreshold
-        val needBath = curClean in 0 until params.cleanThreshold
+        val needFeed = curEnergy in 0..params.energyThreshold && curEnergy < maxEnergy
+        val needBath = curClean in 0..params.cleanThreshold && curClean < maxClean
 
         if (params.isManual || needFeed || needBath) {
             val suffix = if (!needFeed && !needBath) " (状态健康，无需照料)" else ""
@@ -151,7 +151,7 @@ object PetFriendCareTask {
         var foodItemId = ensureFoodInventory(req.bridge, req.ownPetId, petLabel, onLog)
         var curEnergy = req.startEnergy; var feedCount = 0
 
-        while (curEnergy < req.maxEnergy && feedCount < 4) {
+        while (curEnergy <= req.targetThreshold && curEnergy < req.maxEnergy && feedCount < 8) {
             var res = feedDetailedAwait(req.bridge, req.friend.petId, req.friend.uin.toString(), foodItemId)
             if (res.code == 1000210) {
                 onLog("🛒 [好友投喂采购] 背包食物耗尽，自动补购 5 份爱心饼干...")
@@ -170,16 +170,15 @@ object PetFriendCareTask {
                 if (res.feedState == 1) break
                 feedCount++
                 curEnergy = (curEnergy + 10).coerceAtMost(req.maxEnergy)
-                onLog("🥣 [好友投喂] 成功投喂 1 份爱心饼干 -> 预计体力 $curEnergy/${req.maxEnergy}")
-                if (curEnergy >= req.targetThreshold) break
+                onLog("🥣 [好友投喂] 成功投喂 1 份爱心饼干 -> 估计体力 $curEnergy（阈值 ${req.targetThreshold}）")
+                if (curEnergy > req.targetThreshold || curEnergy >= req.maxEnergy) break
                 delay(ThreadLocalRandom.current().nextLong(1200L, 2000L))
             } else {
                 onLog("ℹ️ [好友投喂] 投喂回包: code=${res.code} ${res.tipText ?: res.errorMsg ?: ""}")
                 break
             }
         }
-        val refreshed = if (feedCount > 0) PetCareTask.queryPetAttributesAwait(req.bridge, req.friend.petId, false) else null
-        return Pair(feedCount > 0, refreshed?.energy?.toInt() ?: curEnergy)
+        return Pair(feedCount > 0, curEnergy)
     }
 
     private suspend fun ensureFoodInventory(
@@ -218,7 +217,7 @@ object PetFriendCareTask {
         var curClean = req.startClean.coerceAtLeast(0)
         var totalAdded = 0; var steps = 0
 
-        while (curClean < req.maxClean && steps < 10) {
+        while (curClean <= req.targetThreshold && curClean < req.maxClean && steps < 10) {
             steps++
             if (balance <= 0) {
                 val buyRes = purchaseFriendSoap(req.bridge, req.ownPetId, itemId, itemName, petLabel, onLog)
@@ -235,7 +234,7 @@ object PetFriendCareTask {
             }
             curClean = res.newClean; totalAdded += res.addedClean; balance = res.remainBalance
             onLog("🧼 [好友搓澡] 帮$petLabel 消耗 1 份$itemName (+${res.addedClean}) -> 清洁度 $curClean/${req.maxClean}")
-            if (res.isFullClean || curClean >= req.maxClean || curClean >= req.targetThreshold) break
+            if (curClean > req.targetThreshold || res.isFullClean || curClean >= req.maxClean) break
             delay(ThreadLocalRandom.current().nextLong(1200L, 2000L))
         }
         if (totalAdded > 0) {

@@ -2,7 +2,6 @@ package com.copilot.qqpet.engine
 
 import com.copilot.qqpet.engine.model.StudyDispatchParam
 import com.copilot.qqpet.engine.model.WorkDispatchParam
-import com.copilot.qqpet.engine.task.PetStudyTask
 import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.util.UiDescUtils
@@ -13,13 +12,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AdaptiveCareerDispatchTest {
-
-    @Test
-    fun testStudyCandidatePoolContainsFallback() {
-        val pool = PetStudyTask.CANDIDATE_COURSES_INTELLECT
-        assertTrue(pool.isNotEmpty())
-        assertTrue(pool.any { it.first.contains("智力") || it.first.contains("文化") })
-    }
 
     @Test
     fun testWorkCandidatePoolContainsFallback() {

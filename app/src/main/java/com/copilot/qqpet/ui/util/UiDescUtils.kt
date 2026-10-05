@@ -102,7 +102,9 @@ object UiDescUtils {
             2 -> "迷雾侦探所"
             3 -> "星尘魔法塔"
             4 -> "咕噜厨房"
+            5 -> "竹影武馆"
             6 -> "云朵梦舍"
+            7 -> "闪耀星屋"
             8 -> "风铃旅社"
             else -> "职业场所#$careerId"
         }).replace("(锁)", "").trim()
@@ -126,12 +128,59 @@ object UiDescUtils {
             list.add(WorkPlaceOption(2, "迷雾侦探所", enabled = true))
             list.add(WorkPlaceOption(3, "星尘魔法塔", enabled = true))
             list.add(WorkPlaceOption(4, "咕噜厨房", enabled = true))
-            list.add(WorkPlaceOption(5, "隐藏工坊(锁)", enabled = false, disabledTip = "还没有解锁这个职业"))
+            list.add(WorkPlaceOption(5, "竹影武馆", enabled = true))
             list.add(WorkPlaceOption(6, "云朵梦舍", enabled = true))
-            list.add(WorkPlaceOption(7, "隐藏工坊(锁)", enabled = false, disabledTip = "还没有解锁这个职业"))
+            list.add(WorkPlaceOption(7, "闪耀星屋", enabled = true))
             list.add(WorkPlaceOption(8, "风铃旅社", enabled = true))
         }
         return list
+    }
+
+    fun schoolStageLabel(stage: Int): String = when (stage) {
+        0 -> "智能自适应"
+        1 -> "初级学园"
+        2 -> "中级学园"
+        3 -> "高级学园"
+        4 -> "进修学园"
+        else -> "阶段$stage"
+    }
+
+    fun courseSubjectLabel(subject: Int): String = when (subject) {
+        1 -> "智力"
+        2 -> "力量"
+        3 -> "魅力"
+        else -> "智能轮换"
+    }
+
+    fun courseDurationLabel(duration: Int): String = when (duration) {
+        1 -> "短课"
+        2 -> "长课"
+        else -> "任意课时"
+    }
+
+    fun workDurationLabel(duration: Int): String = when (duration) {
+        1 -> "10分钟"
+        2 -> "45分钟"
+        3 -> "2小时"
+        4 -> "4小时"
+        else -> "智能挂机"
+    }
+
+    fun workTypeLabel(careerId: Int, placeTitle: String? = null): String {
+        if (careerId <= 0) return "智能推荐"
+        val clean = placeTitle?.replace("(锁)", "")?.trim().orEmpty()
+        if (clean.isNotEmpty() && clean != "???" && clean != "隐藏职业") return clean
+        return when (careerId) {
+            1 -> "彩虹画室"
+            2 -> "迷雾侦探所"
+            3 -> "星尘魔法塔"
+            4 -> "咕噜厨房"
+            5 -> "竹影武馆"
+            6 -> "云朵梦舍"
+            7 -> "闪耀星屋"
+            8 -> "风铃旅社"
+            else -> "场所#$careerId"
+        }
     }
 
     fun getHiredRecallDesc(progress: Int): String = when (progress) {

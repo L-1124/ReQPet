@@ -2,30 +2,30 @@ package com.copilot.qqpet.ui.compose.dialog
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,8 +38,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.SettingsState
@@ -140,13 +140,17 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
                         .fillMaxWidth()
                         .padding(top = 12.dp),
                     singleLine = true,
-                    placeholder = { Text("输入好友名字、宠物名或 QQ 号搜索...") },
+                    placeholder = { Text("搜索昵称 / QQ 号") },
                     trailingIcon = if (query.isEmpty()) {
                         null
                     } else {
                         {
-                            TextButton(onClick = { query = "" }) {
-                                Text(text = "清空", style = MaterialTheme.typography.labelMedium)
+                            IconButton(onClick = { query = "" }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Clear,
+                                    contentDescription = "清空",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -275,20 +279,9 @@ private fun HireFriendRow(
             onClick = { onToggle() },
             label = {
                 Text(
-                    text = if (checked) "✓ 已选" else "未选",
+                    text = if (checked) "已选" else "未选",
                     style = MaterialTheme.typography.labelMedium
                 )
-            },
-            leadingIcon = if (checked) {
-                {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(FilterChipDefaults.IconSize)
-                    )
-                }
-            } else {
-                null
             }
         )
     }

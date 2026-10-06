@@ -1,0 +1,151 @@
+package com.copilot.qqpet.ui.compose
+
+import android.content.Context
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
+import com.copilot.qqpet.HookEntry
+import com.copilot.qqpet.engine.EngineLog
+import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.protocol.QQPetDirectBridge
+import com.copilot.qqpet.ui.util.SettingConfigSyncer
+
+/**
+ * 设置页唯一状态源：配置读 qqpet_inproc_prefs，运行状态读引擎缓存。
+ * 写入即落盘并触发引擎重读，读侧由 Compose 快照自动跟踪。
+ */
+@Stable
+class SettingsState(
+    private val context: Context,
+    private val engine: PetAdventureEngine?
+) {
+    private val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
+    private val values: SnapshotStateMap<String, Any?> = mutableStateMapOf()
+
+    var statusText by mutableStateOf("")
+        private set
+    var attributesText by mutableStateOf("")
+        private set
+    var schoolDetails by mutableStateOf<QQPetDirectBridge.SecondMapDetails?>(null)
+        private set
+    var workPlaces by mutableStateOf<QQPetDirectBridge.SecondMapDetails?>(null)
+        private set
+    var workJobs by mutableStateOf<List<QQPetDirectBridge.SelectEvent>?>(null)
+        private set
+    var hireableFriends by mutableStateOf<List<QQPetDirectBridge.HireableFriend>>(emptyList())
+        private set
+    var logLines by mutableStateOf<List<String>>(emptyList())
+        private set
+    var pkBlacklistSummary by mutableStateOf("")
+        private set
+
+    private val logListener: (String) -> Unit = { refreshLogs() }
+
+    init {
+        refresh()
+    }
+
+    fun attach() {
+        EngineLog.addListener(logListener)
+    }
+
+    fun detach() {
+        EngineLog.removeListener(logListener)
+    }
+
+    fun bool(key: String, def: Boolean = false): Boolean =
+        values[key] as? Boolean ?: prefs.getBoolean(key, def)
+
+    fun int(key: String, def: Int = 0): Int =
+        values[key] as? Int ?: prefs.getInt(key, def)
+
+    fun string(key: String, def: String = ""): String =
+        values[key] as? String ?: prefs.getString(key, def).orEmpty()
+
+    fun setBool(key: String, value: Boolean) {
+        prefs.edit().putBoolean(key, value).apply()
+        values[key] = value
+        syncConfig()
+    }
+
+    fun setInt(key: String, value: Int) {
+        prefs.edit().putInt(key, value).apply()
+        values[key] = value
+        syncConfig()
+    }
+
+    fun setString(key: String, value: String) {
+        prefs.edit().putString(key, value).apply()
+        values[key] = value
+        syncConfig()
+    }
+
+    /** 每秒 tick 与页面 resume 都会调用：外部改动、引擎状态都会跟着刷新 */
+    fun refresh() {
+        for ((key, value) in prefs.all) values[key] = value
+        statusText = PetAdventureEngine.formatLiveStatusText()
+        val details = PetAdventureEngine.cachedSchoolDetails
+        schoolDetails = details
+        workPlaces = PetAdventureEngine.cachedWorkPlaces
+        workJobs = PetAdventureEngine.cachedWorkJobs
+        hireableFriends = PetAdventureEngine.cachedHireableFriends
+
+        val petId = PetAdventureEngine.cachedPetId
+        val attrs = if (!petId.isNullOrEmpty()) {
+            QQPetDirectBridge.cachedPetAttributes ?: HookEntry.globalBridge?.getPetAttributes(petId)
+        } else {
+            null
+        }
+        val attrPrefix = if (details != null && details.code == 0) {
+            "力量 ${details.power}  智力 ${details.intel}  魅力 ${details.charm}"
+        } else {
+            "实时同步官方属性中"
+        }
+        val liveCare = if (attrs != null && attrs.energy >= 0f) {
+            " · 体力 ${attrs.energy.toInt()} 清洁 ${attrs.clean.toInt()}"
+        } else {
+            ""
+        }
+        attributesText = "$attrPrefix$liveCare"
+
+        pkBlacklistSummary = buildPkBlacklistSummary()
+        refreshLogs()
+    }
+
+    private fun buildPkBlacklistSummary(): String {
+        val blacklistUins = PetAdventureEngine.loadSavedPkBlacklistUins(context)
+        if (blacklistUins.isEmpty()) {
+            return "未设置免战名单 (全部碾压对手均可对决 · 点击管理黑名单)"
+        }
+        val cachedFriends = PetAdventureEngine.loadCachedHireableFriends(context)
+        val matchedNames = blacklistUins.map { uin ->
+            val friend = cachedFriends.find { it.uin == uin }
+            if (friend != null && friend.friendNick.isNotBlank()) friend.friendNick else uin.toString()
+        }
+        val preview = matchedNames.take(3).joinToString("、")
+        val more = if (matchedNames.size > 3) " 等" else ""
+        return "已拉黑 ${blacklistUins.size} 位对手 ($preview$more) · 自动跳过免战"
+    }
+
+    fun refreshLogs() {
+        logLines = EngineLog.snapshot()
+    }
+
+    fun clearLogs() {
+        EngineLog.clear()
+        refreshLogs()
+    }
+
+    /** 让引擎重读配置并唤醒主循环（SettingConfigSyncer 负责桥接自愈） */
+    fun syncConfig() {
+        SettingConfigSyncer.syncConfig(engine, context)
+    }
+
+    /** 触发一次具体动作（查询工作地点、账号状态等） */
+    fun action(name: String) {
+        SettingConfigSyncer.triggerAction(context, engine, name)
+    }
+}

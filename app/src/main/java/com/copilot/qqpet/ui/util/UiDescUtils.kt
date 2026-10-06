@@ -1,8 +1,8 @@
 package com.copilot.qqpet.ui.util
 
 import com.copilot.qqpet.protocol.QQPetDirectBridge
-import com.copilot.qqpet.ui.component.SegmentItem
-import com.copilot.qqpet.ui.component.WorkPlaceOption
+import com.copilot.qqpet.ui.model.SegmentItem
+import com.copilot.qqpet.ui.model.WorkPlaceOption
 
 object UiDescUtils {
 

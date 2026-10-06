@@ -11,27 +11,11 @@
 
     <application
         android:allowBackup="true"
+        android:description="@string/xposed_description"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.QQPetCopilot">
-
-        <!-- Xposed / LSPosed 核心元数据 (经典 API 82 全版本通用) -->
-        <meta-data
-            android:name="xposedmodule"
-            android:value="true" />
-        <meta-data
-            android:name="xposeddescription"
-            android:value="@string/xposed_description" />
-        <meta-data
-            android:name="xposedminversion"
-            android:value="82" />
-        <!-- LSPosed 推荐勾选的作用域列表 -->
-        <meta-data
-            android:name="xposedscope"
-            android:resource="@array/xposed_scope" />
-
-    </application>
+        android:theme="@style/Theme.QQPetCopilot" />
 
 </manifest>

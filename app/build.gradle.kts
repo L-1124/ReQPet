@@ -35,10 +35,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // META-INF/xposed/* 是 libxposed 的模块元数据，必须合并进 APK
+    packaging {
+        resources {
+            merges += "META-INF/xposed/*"
+            excludes += "**"
+        }
+    }
 }
 
 dependencies {
-    compileOnly("de.robv.android.xposed:api:82")
     compileOnly(libs.libxposed.api)
     compileOnly(project(":qqstub"))
     compileOnly(libs.androidx.annotation)

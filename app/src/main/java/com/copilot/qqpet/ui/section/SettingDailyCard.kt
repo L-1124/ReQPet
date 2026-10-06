@@ -190,7 +190,7 @@ class SettingDailyCard(
         card.addView(CardUiBuilder.createDivider(context, colors))
         CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "夜间防风控静默", "凌晨01:30~06:30暂停唤醒与轮转，完全符合人类作息时序", PreferencesHelper.KEY_NIGHT_SLEEP_MODE, true, false)
         CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "熄屏防风控静默", "手机熄屏锁屏时暂停主动发包调度，亮屏恢复，避免黑屏发包特征", PreferencesHelper.KEY_SCREEN_OFF_SILENT, true, false)
-        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "调试详细日志", "默认静默，开启后向 XposedBridge 打印详细发包日志", PreferencesHelper.KEY_DEBUG_LOG, false, false)
+        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "调试详细日志", "默认静默，开启后向 libxposed 打印详细发包日志", PreferencesHelper.KEY_DEBUG_LOG, false, false)
         card.addView(CardUiBuilder.createDivider(context, colors))
         CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "禁止 Tinker 热补丁", "默认关闭；开启后阻断 QQ 静默热更新，防止混淆变更导致模块失效，但会跳过官方 Bug 修复", PreferencesHelper.KEY_DISABLE_TINKER_PATCH, false, true)
     }

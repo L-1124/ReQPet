@@ -7,8 +7,6 @@ import android.os.Looper
 import android.util.Log
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.ui.QQSettingFragment
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
 
 object QQSettingInjector {
 
@@ -45,22 +43,21 @@ object QQSettingInjector {
             } ?: continue
 
             try {
-                XposedBridge.hookMethod(getListMethod, object : XC_MethodHook() {
+                HookApi.hook(getListMethod).intercept { chain ->
+                    val ctx = chain.getArg(0) as? Context
                     @Suppress("UNCHECKED_CAST")
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        val ctx = param.args[0] as? Context ?: return
-                        val groupList = param.result as? MutableList<Any> ?: return
-                        if (groupList.isEmpty()) return
-
+                    val groupList = chain.proceed() as? MutableList<Any>
+                    if (ctx != null && groupList != null && groupList.isNotEmpty()) {
                         try {
                             handleSettingListInjection(ctx, groupList, classLoader, providerCls)
                         } catch (t: Throwable) {
                             HookLog.log(TAG, "挂载异常: ${Log.getStackTraceString(t)}")
                         }
                     }
-                })
+                    groupList
+                }
                 isHooked = true
-                HookLog.log(TAG, "成功挂钩设置项提供者: $className (API 82)")
+                HookLog.log(TAG, "成功挂钩设置项提供者: $className (libxposed)")
                 break
             } catch (t: Throwable) {
                 HookLog.log(TAG, "挂钩 $className 异常: ${t.message}")

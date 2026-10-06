@@ -2,8 +2,6 @@ package com.copilot.qqpet.hook
 
 import android.app.Activity
 import com.copilot.qqpet.ui.QQSettingFragment
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
 
 /**
  * 宿主 QPublicFragmentActivity#createFragment() 用 Class.forName 实例化 public_fragment_class
@@ -25,17 +23,21 @@ object PublicFragmentHostHook {
         try {
             val hostClass = classLoader.loadClass(ACTIVITY_CLASS)
             val method = hostClass.getDeclaredMethod(METHOD_CREATE_FRAGMENT)
-            XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    val activity = param.thisObject as? Activity ?: return
-                    val className = activity.intent?.getStringExtra(KEY_FRAGMENT_CLASS)
-                    if (className == null || !className.startsWith(MODULE_CLASS_PREFIX)) return
+            HookApi.hook(method).intercept { chain ->
+                val activity = chain.thisObject as? Activity
+                val className = activity?.intent?.getStringExtra(KEY_FRAGMENT_CLASS)
+                if (activity == null || className == null || !className.startsWith(MODULE_CLASS_PREFIX)) {
+                    chain.proceed()
+                } else {
                     val fragment = buildFragment(activity)
-                    if (fragment == null) return
-                    param.result = fragment
-                    HookLog.trace(TAG, "已构造模块 Fragment: $className")
+                    if (fragment == null) {
+                        chain.proceed()
+                    } else {
+                        HookLog.trace(TAG, "已构造模块 Fragment: $className")
+                        fragment
+                    }
                 }
-            })
+            }
             installed = true
             HookLog.trace(TAG, "已挂钩 $ACTIVITY_CLASS#$METHOD_CREATE_FRAGMENT")
         } catch (t: Throwable) {

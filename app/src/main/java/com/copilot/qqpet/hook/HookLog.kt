@@ -1,11 +1,10 @@
 package com.copilot.qqpet.hook
 
 import android.util.Log
-import de.robv.android.xposed.XposedBridge
 
 /**
- * 统一日志输出控制器：默认对 LSPosed 框架日志和 logcat 保持完全静默，
- * 仅当用户主动在设置中开启「调试模式日志」时才向 XposedBridge / Logcat 打印。
+ * 统一日志输出控制器：默认对框架日志和 logcat 保持完全静默，
+ * 仅当用户主动在设置中开启「调试模式日志」时才向 libxposed 日志 / Logcat 打印。
  */
 object HookLog {
 
@@ -15,7 +14,7 @@ object HookLog {
     fun log(tag: String, msg: String) {
         if (isDebugEnabled) {
             try {
-                XposedBridge.log("[$tag] $msg")
+                HookApi.log(Log.INFO, tag, msg)
             } catch (_: Throwable) {
                 Log.i(tag, msg)
             }

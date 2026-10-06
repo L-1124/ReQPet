@@ -2,6 +2,7 @@ package com.copilot.qqpet.protocol.channel
 
 import android.content.Context
 import android.util.Base64
+import com.copilot.qqpet.DebugSwitches
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.hook.HookLog as Log
@@ -22,6 +23,9 @@ class OidbChannel(
         private const val INTERFACE_CLASS = "com.tencent.ergo.hostdelegate.pb.PetPbDelegate"
         private const val OBSERVER_CLASS = "com.tencent.ergo.hostdelegate.pb.PetPbDelegate\$a"
         private const val DELEGATE_PKG = "com.tencent.mobileqq.qqpet.delegate."
+
+        /** 安全模式拦截发包时的返回码 */
+        const val SAFE_MODE_CODE = -100
 
         @Volatile
         var resolvedDelegateClass: Class<*>? = null
@@ -265,6 +269,13 @@ class OidbChannel(
         val requestId = requestTracker.register(commandName)
         requestTracker.sweepExpired().forEach {
             Log.d(TAG, "请求 #${it.id} ${it.command} 超时未回包，配对已释放")
+        }
+
+        // 调试期兜底闸门：安全模式下任何包都不出模块，从根上避免风控面
+        if (DebugSwitches.SAFE_MODE) {
+            Log.w(TAG, "安全模式：拦截发包 $commandName")
+            deliverOnce(requestId, commandName, callback, SAFE_MODE_CODE, null, "安全模式：已拦截发包")
+            return requestId
         }
 
         val obsCls = observerClass

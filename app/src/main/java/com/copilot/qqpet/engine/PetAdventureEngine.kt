@@ -1,6 +1,7 @@
 package com.copilot.qqpet.engine
 
 import android.content.Context
+import com.copilot.qqpet.DebugSwitches
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.model.*
 import com.copilot.qqpet.engine.state.AccountSessionStore
@@ -117,6 +118,10 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     fun sendReadySignal(context: Context) { sendLog(context, "🟢 [内核连接] 发包引擎与代理已成功接驳就绪") }
 
     fun startBackgroundLoop(context: Context) {
+        if (DebugSwitches.SAFE_MODE) {
+            sendLog(context, "🛡️ [安全模式] 全部自动化已禁用：主循环不启动，仅界面与日志可用")
+            return
+        }
         if (isLoopRunning) return
         isLoopRunning = true
         loopJob = scope.launch {
@@ -139,6 +144,10 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
     fun wakeUpMasterCycle(context: Context) {
         reloadConfig(context)
+        if (DebugSwitches.SAFE_MODE) {
+            sendLog(context, "🛡️ [安全模式] 配置已读取并保存，但主循环保持禁用")
+            return
+        }
         isLoopRunning = true
         loopJob?.cancel()
         loopJob = scope.launch {

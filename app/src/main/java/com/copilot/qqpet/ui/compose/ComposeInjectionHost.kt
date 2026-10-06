@@ -17,10 +17,11 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 
 /**
- * 注入式 Compose 运行环境宿主。
+ * 注入式 Compose 运行环境宿主：提供模块闭环的 ViewTree*Owner。
  *
- * 为 Fragment 自身视图树提供模块闭环的 ViewTree*Owner，满足 Compose 向上遍历需求，
- * 绝不向外污染宿主 Activity 的 DecorView。
+ * WindowRecomposer 从 android.R.id.content 的直接子视图（宿主 Fragment 容器）向上查
+ * ViewTree*Owner，因此 attach 时沿祖先链把模块 owner 打满。模块与宿主 tag key 不同，
+ * 在 mKeyedTags 中共存互不覆盖。
  */
 class ComposeInjectionHost : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
@@ -46,12 +47,6 @@ class ComposeInjectionHost : LifecycleOwner, ViewModelStoreOwner, SavedStateRegi
             setContent(content)
         }
 
-    /**
-     * 页面根视图 attach 时沿祖先链挂载 Owner 标签：
-     * Compose 的 WindowRecomposer 会找到 contentChild（即宿主的 Fragment 容器 #ckj），
-     * 并从该容器向上查找 ViewTree*Owner。因模块与宿主使用不同的 tag key，两套标签在
-     * View 的 mKeyedTags 中独立共存，互不干扰覆盖。
-     */
     fun installOwnersOnAttach(root: View) {
         root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) {
@@ -65,7 +60,6 @@ class ComposeInjectionHost : LifecycleOwner, ViewModelStoreOwner, SavedStateRegi
             override fun onViewDetachedFromWindow(v: View) = Unit
         })
     }
-
 
     private fun tagOwners(view: View) {
         view.setViewTreeLifecycleOwner(this)

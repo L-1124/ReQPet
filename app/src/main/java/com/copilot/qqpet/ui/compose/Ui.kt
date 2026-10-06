@@ -12,22 +12,30 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -37,14 +45,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+
 import kotlin.math.roundToInt
 
 @Composable
 fun SectionHeader(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Medium,
+        style = MaterialTheme.typography.titleSmallEmphasized,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
     )
@@ -54,7 +62,7 @@ fun SectionHeader(text: String) {
 fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.largeIncreased,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -101,7 +109,22 @@ fun ToggleRow(
             }
         }
         Spacer(modifier = Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+        Switch(
+            checked = checked,
+            onCheckedChange = null,
+            enabled = enabled,
+            thumbContent = if (checked) {
+                {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                    )
+                }
+            } else {
+                null
+            }
+        )
     }
 }
 
@@ -143,7 +166,7 @@ fun ActionRow(
         }
         Spacer(modifier = Modifier.width(4.dp))
         Icon(
-            imageVector = Icons.Filled.KeyboardArrowRight,
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -172,6 +195,7 @@ fun InfoRow(title: String, value: String) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SliderRow(
     title: String,
@@ -183,7 +207,15 @@ fun SliderRow(
 ) {
     // 拖动中仅本地回显，松手才落盘提交，避免连续触发配置同步与日志刷屏
     var dragging by remember { mutableStateOf(false) }
-    var dragValue by remember(value) { mutableStateOf(value) }
+    var dragValue by remember(value) { mutableFloatStateOf(value.toFloat()) }
+    val sliderState = remember(value, range) {
+        SliderState(
+            value = value.toFloat(),
+            steps = (range.last - range.first - 1).coerceAtLeast(0),
+            trackRange = range.first.toFloat()..range.last.toFloat()
+        )
+    }
+    val interactionSource = remember { MutableInteractionSource() }
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -207,25 +239,35 @@ fun SliderRow(
             )
         }
         Slider(
-            value = (if (dragging) dragValue else value).toFloat(),
+            state = sliderState,
             onValueChange = {
                 dragging = true
-                dragValue = it.roundToInt()
+                dragValue = it
             },
+            interactionSource = interactionSource,
             onValueChangeFinished = {
                 if (dragging) {
                     dragging = false
-                    onValueChange(dragValue)
+                    onValueChange(dragValue.roundToInt())
                 }
             },
-            valueRange = range.first.toFloat()..range.last.toFloat(),
-            steps = (range.last - range.first - 1).coerceAtLeast(0)
+            track = { sliderState ->
+                SliderDefaults.Track(
+                    sliderState = sliderState,
+                    colors = SliderDefaults.colors()
+                )
+            },
+            thumb = { sliderState ->
+                SliderDefaults.Thumb(
+                    interactionSource = interactionSource,
+                    colors = SliderDefaults.colors()
+                )
+            }
         )
     }
 }
 
 /** 单选用 expressive ToggleButton 组；ButtonGroup 的 content 在这版不是 composable 上下文，故自行排布。 */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ChoiceToggleRow(
     title: String,

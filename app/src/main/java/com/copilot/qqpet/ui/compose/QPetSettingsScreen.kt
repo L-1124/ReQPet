@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -21,7 +20,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.compose.section.ActionSection
@@ -32,7 +30,6 @@ import com.copilot.qqpet.ui.compose.section.LogSection
 import com.copilot.qqpet.ui.compose.section.MoreSection
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
     LaunchedEffect(Unit) {
@@ -86,8 +83,7 @@ fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                         Text(
                             text = state.statusText,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMediumEmphasized,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(

@@ -303,8 +303,10 @@ object PetCycleDispatcher {
         PetAdventureEngine.currentStatusText = "森林探险启程中..."
         PetAdventureEngine.sendLog(context, "🌲 [探险启程] 正在前往神秘森林发起探险巡航...")
         val adventureRes: Pair<Int, String?>? = kotlinx.coroutines.withTimeoutOrNull(8000L) {
-            kotlin.coroutines.suspendCoroutine<Pair<Int, String?>> { cont ->
-                bridge.startAdventure(petId) { code, storyId, _, _ -> cont.resume(Pair(code, storyId)) }
+            kotlinx.coroutines.suspendCancellableCoroutine<Pair<Int, String?>> { cont ->
+                bridge.startAdventure(petId) { code, storyId, _, _ ->
+                    if (cont.isActive) cont.resume(Pair(code, storyId))
+                }
             }
         }
         val code = adventureRes?.first ?: -99

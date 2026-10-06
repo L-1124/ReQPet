@@ -44,17 +44,21 @@ object PetPkTask {
             list.add(CandidateItem(f.uin, f.petId, f.friendNick.ifEmpty { "好友_${f.uin}" }, f.petNick.ifEmpty { "小宠" }, f.power, f.intel, f.charm, true))
         }
         try {
-            val likeRes = suspendCancellableCoroutine<List<QQPetDirectBridge.LikeMember>> { cont ->
-                bridge.fetchLikeList("") { code, members, _, _, _, _ ->
-                    if (cont.isActive) cont.resume(if (code == 0) members else emptyList())
+            val likeRes = kotlinx.coroutines.withTimeoutOrNull(8000L) {
+                suspendCancellableCoroutine<List<QQPetDirectBridge.LikeMember>> { cont ->
+                    bridge.fetchLikeList("") { code, members, _, _, _, _ ->
+                        if (cont.isActive) cont.resume(if (code == 0) members else emptyList())
+                    }
                 }
-            }
+            } ?: emptyList()
             for (m in likeRes) {
                 if (m.uin <= 0L || m.uin == ownUin || seenUins.contains(m.uin) || m.petId.isBlank()) continue
                 seenUins.add(m.uin)
                 list.add(CandidateItem(m.uin, m.petId, m.nick.ifEmpty { "访客_${m.uin}" }, "小宠", 0L, 0L, 0L, false))
             }
-        } catch (_: Throwable) {}
+        } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
+        }
         return list
     }
 

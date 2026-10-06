@@ -20,5 +20,5 @@ android {
 
 // 仅供模块编译期引用宿主类型；不得打包进 APK（否则与宿主真实类形成两个 Class）
 dependencies {
-    compileOnly(libs.androidx.appcompat)
+    compileOnly(libs.androidx.fragment)
 }

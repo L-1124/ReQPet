@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- 模块自身已无界面，仅保留应用主题所需色值；注入 UI 的配色由 ThemeColors 提供 -->
-    <color name="primary">#007AFF</color>
-    <color name="background">#F2F2F7</color>
-    <color name="surface">#FFFFFF</color>
-</resources>

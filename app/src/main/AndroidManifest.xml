@@ -9,6 +9,7 @@
         <package android:name="com.tencent.mobileqq" />
     </queries>
 
+    <!-- 模块自身无界面（设置页注入在 QQ 内），主题用框架主题，不需要 Material/AppCompat -->
     <application
         android:allowBackup="true"
         android:description="@string/xposed_description"
@@ -16,6 +17,6 @@
         android:label="@string/app_name"
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.QQPetCopilot" />
+        android:theme="@android:style/Theme.DeviceDefault" />
 
 </manifest>

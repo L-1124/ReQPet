@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- LSPosed 识别此数组并默认推荐勾选以下目标 App -->
-    <string-array name="xposed_scope">
-        <item>com.tencent.mobileqq</item>
-    </string-array>
-</resources>

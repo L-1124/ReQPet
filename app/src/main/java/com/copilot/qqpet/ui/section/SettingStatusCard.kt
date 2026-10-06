@@ -8,6 +8,8 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.copilot.qqpet.HookEntry
@@ -46,23 +48,50 @@ class SettingStatusCard(
         return navBar
     }
 
-    /** 宿主 QUISecNavBar 里做这事的 `w(Activity)` 是混淆名，不能依赖，故自行处理状态栏 */
+    /**
+     * 自行处理状态栏：宿主 QUISecNavBar 里做这事的 `w(Activity)` 是混淆名，不能依赖。
+     * 用 WindowInsets 监听而不是"建视图时量一次"，旋转/分屏/手势条变化都会跟着更新。
+     */
     private fun applyStatusBarInset(activity: Activity, navBar: View) {
-        activity.window?.apply {
-            statusBarColor = Color.TRANSPARENT
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                @Suppress("DEPRECATION")
-                decorView.systemUiVisibility = if (colors.isNight) {
-                    decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
-                } else {
-                    decorView.systemUiVisibility or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                }
-            }
-        }
+        @Suppress("DEPRECATION")
+        activity.window?.statusBarColor = Color.TRANSPARENT
+        applyStatusBarIconMode(activity, darkIcons = !colors.isNight)
+
         val resId = activity.resources.getIdentifier("status_bar_height", "dimen", "android")
-        val inset = if (resId > 0) activity.resources.getDimensionPixelSize(resId) else 0
-        if (inset > 0) {
-            navBar.setPadding(navBar.paddingLeft, navBar.paddingTop + inset, navBar.paddingRight, navBar.paddingBottom)
+        val measuredTop = if (resId > 0) activity.resources.getDimensionPixelSize(resId) else 0
+        val basePaddingTop = navBar.paddingTop
+
+        navBar.setOnApplyWindowInsetsListener { v, insets ->
+            val dispatched = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                insets.getInsets(WindowInsets.Type.statusBars()).top
+            } else {
+                @Suppress("DEPRECATION")
+                insets.systemWindowInsetTop
+            }
+            // 宿主容器可能把 insets 消费掉，此时退回按资源量出的高度
+            val insetTop = if (dispatched > 0) dispatched else measuredTop
+            val target = basePaddingTop + insetTop
+            if (v.paddingTop != target) {
+                v.setPadding(v.paddingLeft, target, v.paddingRight, v.paddingBottom)
+            }
+            insets
+        }
+        navBar.requestApplyInsets()
+    }
+
+    private fun applyStatusBarIconMode(activity: Activity, darkIcons: Boolean) {
+        val window = activity.window ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val controller = window.insetsController ?: return
+            val mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+            controller.setSystemBarsAppearance(if (darkIcons) mask else 0, mask)
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = if (darkIcons) {
+                window.decorView.systemUiVisibility or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            } else {
+                window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+            }
         }
     }
 

@@ -32,10 +32,7 @@ class SettingStatusCard(
     private lateinit var statusActionText: TextView
     private lateinit var statusAttributesText: TextView
 
-    /**
-     * 顶栏直接使用宿主自己的 QUI 组件 [QUISecNavBar]（QQ 设置页同款）：
-     * 返回键、标题、右侧文案与状态栏让位都由它负责。
-     */
+    /** 顶栏用宿主 QUI 组件 [QUISecNavBar]（与 QQ 设置页同款） */
     fun buildTopBar(): View {
         val navBar = QUISecNavBar(context)
         navBar.setLeftType(NAV_LEFT_ICON)
@@ -43,7 +40,6 @@ class SettingStatusCard(
         navBar.setCenterText("Q宠后台伴侣")
         navBar.setBaseViewDescription(BaseAction.ACTION_LEFT_BUTTON, "返回")
         navBar.setBaseClickListener(BaseAction.ACTION_LEFT_BUTTON, View.OnClickListener { onBack() })
-        // 宿主窗口状态栏透明 + 导航栏自身让出状态栏高度（内部走 RFWImmersiveUtils）
         (context as? Activity)?.let { navBar.w(it) }
         return navBar
     }

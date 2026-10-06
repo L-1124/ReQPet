@@ -3,13 +3,9 @@ package com.copilot.qqpet.hook
 import java.net.URL
 
 /**
- * 让模块 ClassLoader 能解析宿主类。
- *
- * LSPosed 给模块的 ClassLoader，其 parent **不是**宿主 ClassLoader，因此模块里"直接继承宿主类"
- * 会在解析父类时抛 `NoClassDefFoundError`。这里把模块 loader 的 parent 换成一个按包名分流的 shim：
- * 宿主包名交给宿主 loader，其余仍走原来的 parent（模块自己的类、androidx、kotlin 不受影响）。
- *
- * 思路与 XAutoDaily 的 `XAClassLoader#injectClassLoader` 相同。
+ * LSPosed 给模块的 ClassLoader，其 parent 不是宿主 ClassLoader，模块类直接继承宿主类会
+ * NoClassDefFoundError；这里把 parent 换成按包名分流的 shim：宿主包名走宿主 loader，其余走原 parent。
+ * 思路同 XAutoDaily 的 XAClassLoader#injectClassLoader。
  */
 class HostAwareClassLoader(
     originalParent: ClassLoader,

@@ -86,7 +86,7 @@ class SettingCareerCard(
         }
         buildStudyControls(studyPanel, currentStagePref, studySubtitle)
 
-        val studyInitialChecked = prefs.getBoolean("key_study", true)
+        val studyInitialChecked = prefs.getBoolean("key_study", false)
         val studySwitch = AppleSwitchView(context, colors.isNight).apply {
             setCheckedImmediately(studyInitialChecked)
             onCheckedChangeListener = { isChecked ->
@@ -189,7 +189,7 @@ class SettingCareerCard(
         val workPanel = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, UiAnimUtils.dp(context, 12)) }
         buildWorkControls(workPanel, workSubtitle, initialWorkPlaceIndex)
 
-        val workInitialChecked = prefs.getBoolean("key_work", true)
+        val workInitialChecked = prefs.getBoolean("key_work", false)
         val workSwitch = AppleSwitchView(context, colors.isNight).apply {
             setCheckedImmediately(workInitialChecked)
             onCheckedChangeListener = { isChecked ->
@@ -247,7 +247,7 @@ class SettingCareerCard(
         col.addView(TextView(context).apply { text = "仅在已勾选的好友中，默认雇佣空闲且收益最高的好友"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 2), 0, 0) })
         row.addView(col)
         row.addView(AppleSwitchView(context, colors.isNight).apply {
-            setCheckedImmediately(prefs.getBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, true))
+            setCheckedImmediately(prefs.getBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, false))
             onCheckedChangeListener = { isChecked ->
                 prefs.edit().putBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, isChecked).commit()
                 SettingConfigSyncer.syncConfig(engine, context)

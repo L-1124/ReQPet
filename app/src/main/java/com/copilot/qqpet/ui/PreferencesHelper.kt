@@ -2,6 +2,7 @@ package com.copilot.qqpet.ui
 
 /** 仅保留配置键名常量；模块自身已无界面，不再持有任何 SharedPreferences 文件。 */
 object PreferencesHelper {
+   const val KEY_MASTER_ENABLED = "key_master_enabled"
    const val KEY_STUDY = "key_study"
    const val KEY_WORK = "key_work"
    const val KEY_CARE = "key_care"

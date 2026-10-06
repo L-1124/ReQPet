@@ -6,15 +6,8 @@ import android.view.View;
 import android.widget.RelativeLayout;
 
 /**
- * 编译期桩类：腾讯 QUI 的二级页导航栏（`com.tencent.biz.qui.quisecnavbar.QUISecNavBar`）。
- *
- * QQ 9.3.70 中的真实行为（反编译确认）：
- * - 构造器可在代码中直接用，无需宿主布局；
- * - [w] 会把宿主窗口状态栏设为透明，并把状态栏高度加到自己根布局的 padding 上
- *   （内部使用 RFWImmersiveUtils），因此调用方不必自己处理状态栏；
- * - setLeftType/setCenterType/setRightType：0=隐藏、1=文字、左/右 2 或 3=图标。
- *
- * 本桩类仅用于编译，不会打包进模块 APK。
+ * 编译期桩：宿主 QUI 导航栏。w(Activity) 内部会设透明状态栏并让出状态栏高度，
+ * 左/中/右类型 0=隐藏、1=文字、2 或 3=图标。
  */
 public class QUISecNavBar extends RelativeLayout {
 

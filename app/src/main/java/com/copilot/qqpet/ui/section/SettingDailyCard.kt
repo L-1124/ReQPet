@@ -35,10 +35,10 @@ class SettingDailyCard(
         val card = CardUiBuilder.createGroupCard(context, colors)
         buildCareSection(card)
         buildFriendCareSection(card)
-        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "自动回踩访客", "定时巡检并自动回赠所有造访小家的好友与陌生访客", PreferencesHelper.KEY_LIKE_BACK, true, false)
+        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "自动回踩访客", "定时巡检并自动回赠所有造访小家的好友与陌生访客", PreferencesHelper.KEY_LIKE_BACK, false, false)
         buildActiveVisitSection(card)
-        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "自动领取福袋", "自动扫描并拆取自己小窝及好友掉落的金币福袋", PreferencesHelper.KEY_CLAIM_COINBAG, true, false)
-        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "疲惫时自动转冒险", "检测到疲惫收益减少时，取消打工和学习转去冒险直至恢复", PreferencesHelper.KEY_FATIGUE_TO_ADVENTURE, true, false)
+        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "自动领取福袋", "自动扫描并拆取自己小窝及好友掉落的金币福袋", PreferencesHelper.KEY_CLAIM_COINBAG, false, false)
+        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "疲惫时自动转冒险", "检测到疲惫收益减少时，取消打工和学习转去冒险直至恢复", PreferencesHelper.KEY_FATIGUE_TO_ADVENTURE, false, false)
         buildPkSection(card)
         buildSafetySwitches(card)
         container.addView(card)
@@ -72,7 +72,7 @@ class SettingDailyCard(
             SettingConfigSyncer.syncConfig(engine, context)
         })
 
-        val initialChecked = prefs.getBoolean("key_care", true)
+        val initialChecked = prefs.getBoolean("key_care", false)
         row.addView(AppleSwitchView(context, colors.isNight).apply {
             setCheckedImmediately(initialChecked)
             onCheckedChangeListener = { isChecked ->
@@ -149,7 +149,7 @@ class SettingDailyCard(
             SettingConfigSyncer.syncConfig(engine, context)
         })
 
-        val initialChecked = prefs.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_ENABLED, true)
+        val initialChecked = prefs.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_ENABLED, false)
         row.addView(AppleSwitchView(context, colors.isNight).apply {
             setCheckedImmediately(initialChecked)
             onCheckedChangeListener = { isChecked ->
@@ -185,7 +185,7 @@ class SettingDailyCard(
 
     private fun buildSafetySwitches(card: LinearLayout) {
         CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "神秘森林冒险", "自动深入野外林区探秘与冒险", "key_adventure", false, false)
-        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "探险收益结算", "历练归来自动领取全部掉落收益", "key_settle", true, false)
+        CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "探险收益结算", "历练归来自动领取全部掉落收益", "key_settle", false, false)
         CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "动态拟人休眠", "随机1~3分钟非固定周期休眠，有效避免行为时序聚类识别", PreferencesHelper.KEY_HUMAN_LIKE_SLEEP, true, false)
         card.addView(CardUiBuilder.createDivider(context, colors))
         CardUiBuilder.addSimpleToggleRow(card, context, colors, prefs, engine, "夜间防风控静默", "凌晨01:30~06:30暂停唤醒与轮转，完全符合人类作息时序", PreferencesHelper.KEY_NIGHT_SLEEP_MODE, true, false)

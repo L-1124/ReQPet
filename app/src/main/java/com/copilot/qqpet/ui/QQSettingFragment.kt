@@ -8,12 +8,7 @@ import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.hook.HookLog
 import com.tencent.mobileqq.fragment.QPublicBaseFragment
 
-/**
- * 注入在 QQ 通用 Fragment 容器（QPublicFragmentActivity）中的设置页，
- * 与宿主原生设置页（MainSettingFragment）同形态：进宿主返回栈、沿用宿主窗口与转场。
- *
- * 注意：本类由模块 classloader 加载，super 类来自宿主 APK（compileOnly 桩提供编译期类型）。
- */
+/** 宿主 Fragment 容器里的设置页；super 类来自宿主 APK（compileOnly 桩只供编译期）。 */
 class QQSettingFragment : QPublicBaseFragment() {
 
     private var page: QQSettingPage? = null

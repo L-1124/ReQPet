@@ -17,15 +17,13 @@ import com.copilot.qqpet.ui.section.SettingLogCard
 import com.copilot.qqpet.ui.section.SettingMoreCard
 import com.copilot.qqpet.ui.section.SettingStatusCard
 import com.copilot.qqpet.ui.theme.ThemeColors
+import com.copilot.qqpet.ui.util.CardUiBuilder
 import com.copilot.qqpet.ui.util.UiAnimUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-/**
- * 设置页内容构建与生命周期：卡片组装、状态轮询、日志订阅、账号数据同步。
- * 页面容器由宿主通用 Fragment 容器提供（见 [QQSettingFragment]）。
- */
+/** 设置页内容与生命周期；容器由 [QQSettingFragment] 提供。 */
 class QQSettingPage(
     private val context: Context,
     private val engine: PetAdventureEngine?,
@@ -74,6 +72,18 @@ class QQSettingPage(
                 UiAnimUtils.dp(context, 16), UiAnimUtils.dp(context, 36)
             )
         }
+        CardUiBuilder.addSectionHeader(content, "总开关", colors)
+        val masterCard = CardUiBuilder.createGroupCard(context, colors)
+        CardUiBuilder.addSimpleToggleRow(
+            masterCard, context, colors, prefs, engine,
+            "全自动托管",
+            "默认关闭；关闭时模块不发起任何请求，下面的功能开关也不会生效",
+            PreferencesHelper.KEY_MASTER_ENABLED, false, true
+        )
+        masterCard.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { setMargins(0, 0, 0, UiAnimUtils.dp(context, 16)) }
+        content.addView(masterCard)
         content.addView(statusCardHelper.buildStatusCard())
         careerCard = SettingCareerCard(context, colors, prefs, engine)
         careerCard.build(content)

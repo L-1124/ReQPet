@@ -1,8 +1,8 @@
 package com.copilot.qqpet.engine
 
 import android.content.Context
-import com.copilot.qqpet.DebugSwitches
 import com.copilot.qqpet.HookEntry
+import com.copilot.qqpet.RuntimeSwitches
 import com.copilot.qqpet.engine.model.*
 import com.copilot.qqpet.engine.state.AccountSessionStore
 import com.copilot.qqpet.engine.task.*
@@ -29,15 +29,16 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         @Volatile var currentActiveUin: String = ""
         @Volatile var isLoopRunning = false
         @Volatile var lastFatigueSwitchTimeMillis = 0L
+        @Volatile var masterEnabled = false
 
-        @Volatile var enableStudy = true; @Volatile var enableWork = true; @Volatile var enableCare = true
-        @Volatile var enableAdventure = false; @Volatile var enableSettle = true; @Volatile var enableLikeBack = true
-        @Volatile var enableClaimCoinBag = true; @Volatile var enableFatigueToAdventure = true; @Volatile var enableAutoPk = false
+        @Volatile var enableStudy = false; @Volatile var enableWork = false; @Volatile var enableCare = false
+        @Volatile var enableAdventure = false; @Volatile var enableSettle = false; @Volatile var enableLikeBack = false
+        @Volatile var enableClaimCoinBag = false; @Volatile var enableFatigueToAdventure = false; @Volatile var enableAutoPk = false
         @Volatile var lastPkTimeMillis = 0L; @Volatile var pkCooldownMillis = 60 * 1000L
         @Volatile var prefHumanLikeSleep = true; @Volatile var prefNightSleepMode = true; @Volatile var prefScreenOffSilent = true
         @Volatile var prefHideQQSettingEntry = false; @Volatile var prefDebugLog = false
-        @Volatile var enableHireFriend = true; @Volatile var prefHireFriendUinsCsv = ""; @Volatile var prefPkBlacklistUinsCsv = ""
-        @Volatile var prefHiredRecallProgress = 72; @Volatile var enableActiveVisit = true
+        @Volatile var enableHireFriend = false; @Volatile var prefHireFriendUinsCsv = ""; @Volatile var prefPkBlacklistUinsCsv = ""
+        @Volatile var prefHiredRecallProgress = 72; @Volatile var enableActiveVisit = false
         @Volatile var prefActiveVisitFriends = true; @Volatile var prefActiveVisitStrangers = true
         @Volatile var prefActiveVisitDailyLimit = 20; @Volatile var lastActiveVisitTimeMillis = 0L
         @Volatile var cachedHireableFriends: List<QQPetDirectBridge.HireableFriend> = emptyList()
@@ -95,6 +96,8 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         fun sendLog(context: Context, message: String) = EngineLog.i(message)
 
         fun formatLiveStatusText(): String {
+
+            if (!masterEnabled) return "总开关未开启 · 模块待命中"
             val sec = getLiveRemainingSeconds()
             if (sec <= 0L) return if (currentTaskEndTimeMillis > 0L) { currentTaskEndTimeMillis = 0L; "任务已修毕 · 正在自动结算收益..." } else currentStatusText
             return "$currentTaskTypeName · 剩余 ${PetPureCalculations.formatDuration(sec)}"
@@ -118,8 +121,9 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     fun sendReadySignal(context: Context) { sendLog(context, "🟢 [内核连接] 发包引擎与代理已成功接驳就绪") }
 
     fun startBackgroundLoop(context: Context) {
-        if (DebugSwitches.SAFE_MODE) {
-            sendLog(context, "🛡️ [安全模式] 全部自动化已禁用：主循环不启动，仅界面与日志可用")
+        reloadConfig(context)
+        if (!masterEnabled) {
+            sendLog(context, "🛑 [总开关] 未开启，主循环不启动（默认关闭，请在设置页打开总开关）")
             return
         }
         if (isLoopRunning) return
@@ -144,8 +148,9 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
     fun wakeUpMasterCycle(context: Context) {
         reloadConfig(context)
-        if (DebugSwitches.SAFE_MODE) {
-            sendLog(context, "🛡️ [安全模式] 配置已读取并保存，但主循环保持禁用")
+        if (!masterEnabled) {
+            stopBackgroundLoop()
+            sendLog(context, "🛑 [总开关] 已关闭，调度已停止（配置已保存）")
             return
         }
         isLoopRunning = true
@@ -165,6 +170,10 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
     suspend fun executeMasterCycle(context: Context): Long {
         reloadConfig(context)
+        if (!masterEnabled) {
+            sendLog(context, "🛑 [总开关] 未开启，本轮巡检跳过")
+            return 60 * 1000L
+        }
         checkStealthWindows(context)?.let { return it }
         ensureReadyBridge(context)?.let { return it }
         val petId = ensurePetId(context) ?: return 30 * 1000L
@@ -308,6 +317,10 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         PetCycleDispatcher.dispatchNextAction(context, bridge, petId)
 
     fun runAction(context: Context, action: String) {
+        if (!masterEnabled) {
+            sendLog(context, "🛑 [总开关] 未开启，忽略手动指令：$action")
+            return
+        }
         scope.launch {
             val petId = ensurePetId(context) ?: return@launch
             if (action == "cycle") {
@@ -387,14 +400,16 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     fun reloadConfig(context: Context) {
         try {
             val p = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            enableStudy = p.getBoolean("key_study", true)
-            enableWork = p.getBoolean("key_work", true)
-            enableCare = p.getBoolean("key_care", true)
+            masterEnabled = p.getBoolean(PreferencesHelper.KEY_MASTER_ENABLED, false)
+            RuntimeSwitches.masterEnabled = masterEnabled
+            enableStudy = p.getBoolean("key_study", false)
+            enableWork = p.getBoolean("key_work", false)
+            enableCare = p.getBoolean("key_care", false)
             enableAdventure = p.getBoolean("key_adventure", false)
-            enableSettle = p.getBoolean("key_settle", true)
-            enableLikeBack = p.getBoolean(PreferencesHelper.KEY_LIKE_BACK, true)
-            enableClaimCoinBag = p.getBoolean(PreferencesHelper.KEY_CLAIM_COINBAG, true)
-            enableFatigueToAdventure = p.getBoolean(PreferencesHelper.KEY_FATIGUE_TO_ADVENTURE, true)
+            enableSettle = p.getBoolean("key_settle", false)
+            enableLikeBack = p.getBoolean(PreferencesHelper.KEY_LIKE_BACK, false)
+            enableClaimCoinBag = p.getBoolean(PreferencesHelper.KEY_CLAIM_COINBAG, false)
+            enableFatigueToAdventure = p.getBoolean(PreferencesHelper.KEY_FATIGUE_TO_ADVENTURE, false)
             enableAutoPk = p.getBoolean(PreferencesHelper.KEY_AUTO_PK, false)
             prefHiredRecallProgress = p.getInt(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS, 72)
             prefNightSleepMode = p.getBoolean(PreferencesHelper.KEY_NIGHT_SLEEP_MODE, true)
@@ -413,13 +428,13 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             prefDebugLog = p.getBoolean(PreferencesHelper.KEY_DEBUG_LOG, false)
             // 调试开关即刻生效（原先要等 QQ 进程重启才会重新读取）
             com.copilot.qqpet.hook.HookLog.isDebugEnabled = prefDebugLog
-            enableHireFriend = p.getBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, true)
+            enableHireFriend = p.getBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, false)
             prefHireFriendUinsCsv = p.getString(PreferencesHelper.KEY_HIRE_FRIEND_UINS, "") ?: ""
             enableFriendCare = p.getBoolean(PreferencesHelper.KEY_FRIEND_CARE_ENABLED, false)
             prefFriendCareEnergyThreshold = p.getInt(PreferencesHelper.KEY_FRIEND_CARE_ENERGY_THRESHOLD, 60)
             prefFriendCareCleanThreshold = p.getInt(PreferencesHelper.KEY_FRIEND_CARE_CLEAN_THRESHOLD, 60)
             prefPkBlacklistUinsCsv = p.getString(PreferencesHelper.KEY_PK_BLACKLIST_UINS, "") ?: ""
-            enableActiveVisit = p.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_ENABLED, true)
+            enableActiveVisit = p.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_ENABLED, false)
             prefActiveVisitFriends = p.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_FRIENDS, true)
             prefActiveVisitStrangers = p.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_STRANGERS, true)
             prefActiveVisitDailyLimit = p.getInt(PreferencesHelper.KEY_ACTIVE_VISIT_DAILY_LIMIT, 20)
@@ -428,6 +443,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
     /** 打印配置摘要 */
     fun logConfigSummary(context: Context) {
+        sendLog(context, "⚙️ 总开关:${onOff(masterEnabled)}（默认关闭；关闭时模块不发起任何请求）")
         val hireCount = prefHireFriendUinsCsv.split(',').count { it.isNotBlank() }
         sendLog(
             context,

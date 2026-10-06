@@ -13,3 +13,4 @@ build/
 *.apk
 *.aab
 AGENTS.md
+gradle/gradle-daemon-jvm.properties

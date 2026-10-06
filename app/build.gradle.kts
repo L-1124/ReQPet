@@ -1,24 +1,27 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    alias(libs.plugins.android.application)
 }
 
 android {
     namespace = "com.copilot.qqpet"
-    compileSdk = 34
+    compileSdk {
+        version = release(37)
+    }
 
-   defaultConfig {
-       // LSPosed 官方模块仓库要求包名归属可验证：io.github.<username> 前缀或自有域名反写
-       applicationId = "io.github.congsmile.qqpet"
-       minSdk = 26
-       targetSdk = 34
-       versionCode = 114
-       versionName = "1.0.113"
-   }
+    defaultConfig {
+        // LSPosed 官方模块仓库要求包名归属可验证：io.github.<username> 前缀或自有域名反写
+        applicationId = "io.github.congsmile.qqpet"
+        minSdk = 26
+        targetSdk = 37
+        versionCode = 114
+        versionName = "1.0.113"
+    }
 
-   buildTypes {
+    buildTypes {
         release {
-            isMinifyEnabled = false
+            optimization {
+                enable = false
+            }
             signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -32,20 +35,18 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
 }
 
 dependencies {
     compileOnly("de.robv.android.xposed:api:82")
+    compileOnly(libs.libxposed.api)
     compileOnly(project(":qqstub"))
-    compileOnly("androidx.annotation:annotation:1.5.0")
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("com.google.android.material:material:1.11.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation("androidx.preference:preference-ktx:1.2.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    testImplementation("junit:junit:4.13.2")
+    compileOnly(libs.androidx.annotation)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material)
+    implementation(libs.androidx.constraintlayout)
+    implementation(libs.androidx.preference.ktx)
+    implementation(libs.kotlinx.coroutines.android)
+    testImplementation(libs.junit)
 }

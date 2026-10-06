@@ -1,10 +1,12 @@
 plugins {
-    id("com.android.library")
+    alias(libs.plugins.android.library)
 }
 
 android {
     namespace = "com.copilot.qqstub"
-    compileSdk = 34
+    compileSdk {
+        version = release(37)
+    }
 
     defaultConfig {
         minSdk = 26
@@ -18,5 +20,5 @@ android {
 
 // 仅供模块编译期引用宿主类型；不得打包进 APK（否则与宿主真实类形成两个 Class）
 dependencies {
-    compileOnly("androidx.appcompat:appcompat:1.6.1")
+    compileOnly(libs.androidx.appcompat)
 }

@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.hook.HookLog
+import com.copilot.qqpet.hook.HostClassLoaderBridge
 import com.copilot.qqpet.hook.QQSettingInjector
 import com.copilot.qqpet.hook.TinkerBlocker
 import com.copilot.qqpet.protocol.PacketSniffer
@@ -61,6 +62,9 @@ class HookEntry : IXposedHookLoadPackage {
 
         instance = this
         latestClassLoader = lpparam.classLoader
+        // 必须在任何"模块类继承宿主类"的解析发生之前完成，否则 NoClassDefFoundError 会被缓存
+        val hostResolvable = HostClassLoaderBridge.install(javaClass.classLoader, lpparam.classLoader)
+        HookLog.trace(TAG, "已注入 QQ 主进程 pid=${android.os.Process.myPid()} 宿主类解析=${if (hostResolvable) "OK" else "失败"}")
         HookLog.log(TAG, "成功注入 QQ 主进程: ${lpparam.processName}, PID=${android.os.Process.myPid()} (API 82 经典引擎)")
         TinkerBlocker.install(lpparam.classLoader)
 

@@ -26,6 +26,19 @@ object HookLog {
         log("QQPetCopilot", msg)
     }
 
+    /**
+     * 注入链路诊断：**不受调试开关门控**，直接写 logcat。
+     * 只用在"入口/钩子是否生效"这类极低频且无法靠界面观察的路径上。
+     */
+    fun trace(tag: String, msg: String, t: Throwable? = null) {
+        try {
+            val suffix = if (t != null) " -> ${t.javaClass.name}: ${t.message}" else ""
+            Log.i(TRACE_TAG, "[$tag] $msg$suffix")
+        } catch (_: Throwable) {}
+    }
+
+    private const val TRACE_TAG = "QQPetTrace"
+
     fun d(tag: String, msg: String) = log(tag, msg)
     fun i(tag: String, msg: String) = log(tag, msg)
     fun w(tag: String, msg: String) = log(tag, msg)

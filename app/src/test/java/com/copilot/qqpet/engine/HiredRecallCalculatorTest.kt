@@ -56,7 +56,7 @@ class HiredRecallCalculatorTest {
         assertEquals("被小福猪拉来一起", PetPureCalculations.hiredByFriendEvidence(json))
         assertEquals("被Tom拉来一起", PetPureCalculations.hiredByFriendEvidence("被Tom拉来一起打工"))
         assertEquals("被🐱拉来一起", PetPureCalculations.hiredByFriendEvidence("被🐱拉来一起"))
-        assertEquals("现在召回，可获得（金币）1968", PetPureCalculations.hiredByFriendEvidence("现在召回，可获得（金币）1968"))
+        assertEquals(null, PetPureCalculations.hiredByFriendEvidence("现在召回，可获得（金币）1968"))
         assertEquals(null, PetPureCalculations.hiredByFriendEvidence("拉来一起做实验"))
         assertEquals(null, PetPureCalculations.hiredByFriendEvidence("最高额外+42%"))
     }
@@ -141,17 +141,14 @@ class HiredRecallCalculatorTest {
     }
 
     @Test
-    fun `calculateHiredMonitorSleepMillis prevents deep sleep and handles precision countdown`() {
-        // 1. 较远距离 (还需要 3000 秒)，休眠必须被钳位在 45~75 秒内，绝不能睡死数小时
+    fun `calculateHiredMonitorSleepMillis waits until the recall threshold`() {
         val sleepFar = StealthScheduler.calculateHiredMonitorSleepMillis(3000L, hasReachedTarget = false)
-        assertTrue("较远休眠必须在 45~76 秒之间: $sleepFar", sleepFar in 45000L..76000L)
+        assertEquals(3_002_000L, sleepFar)
 
-        // 2. 临近窗口 (还需要 30 秒)，倒计时唤醒并在越过阈值时醒来 (31~34秒)
         val sleepNear = StealthScheduler.calculateHiredMonitorSleepMillis(30L, hasReachedTarget = false)
-        assertTrue("临近休眠必须在 31~34 秒之间: $sleepNear", sleepNear in 31000L..35000L)
+        assertEquals(32_000L, sleepNear)
 
-        // 3. 已达到或正在重试 (neededSec <= 0)，以短频 10~15 秒快速唤醒
         val sleepRetry = StealthScheduler.calculateHiredMonitorSleepMillis(0L, hasReachedTarget = true)
-        assertTrue("重试或达标休眠必须在 10~16 秒之间: $sleepRetry", sleepRetry in 10000L..16000L)
+        assertEquals(60_000L, sleepRetry)
     }
 }

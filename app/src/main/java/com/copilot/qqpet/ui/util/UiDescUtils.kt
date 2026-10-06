@@ -184,6 +184,7 @@ object UiDescUtils {
     }
 
     fun getHiredRecallDesc(progress: Int): String = when (progress) {
+        0 -> "关闭被好友雇佣时的提前召回"
         12 -> "12% 早期保底档 (收益起跑即撤，极速刷新)"
         42 -> "42% 中期平衡档 (兼顾打工收益与体力回流)"
         72 -> "72% 收益最大档 (默认推荐 · 斩获大额金币稳妥结算)"
@@ -191,10 +192,10 @@ object UiDescUtils {
     }
 
     fun getCareSubtitle(energy: Int, clean: Int): String {
-        return "自身体力低于 ${energy} / 清洁度低于 ${clean} 立即照料"
+        return "自身体力低于 $energy 或清洁低于 $clean 时，补到不低于该值"
     }
 
     fun getFriendCareSubtitle(energy: Int, clean: Int): String {
-        return "好友体力低于 ${energy} / 清洁度低于 ${clean} 立即照料"
+        return "只在雇佣成功后检查一次：体力低于 $energy 或清洁低于 $clean 时，补到不低于该值"
     }
 }

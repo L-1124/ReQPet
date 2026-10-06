@@ -45,8 +45,6 @@ class ProtoWire {
     fun toByteArray(): ByteArray = output.toByteArray()
 
     companion object {
-        private val HEX = "0123456789abcdef".toCharArray()
-
         fun message(): ProtoWire = ProtoWire()
 
         fun firstString(data: ByteArray?, targetField: Int): String? {
@@ -265,147 +263,12 @@ class ProtoWire {
             }
         }
 
-        /**
-         * 按顶层字段拆开，并把解析不了的二进制、64 位数字和像 QQ 号的数字单独列出来。
-         * 每一行控制在调用方的单行上限之内。
-         */
-        fun suspiciousLines(data: ByteArray?): List<String> {
-            if (data == null) return listOf("null")
-            if (data.isEmpty()) return listOf("空包")
-            val lines = mutableListOf<String>()
-            val pos = intArrayOf(0)
-            try {
-                while (pos[0] < data.size && lines.size < 80) {
-                    val tag = readVarint(data, pos)
-                    val field = (tag ushr 3).toInt()
-                    val wire = (tag and 7L).toInt()
-                    when (wire) {
-                        0 -> {
-                            val value = readVarint(data, pos)
-                            lines.add("f$field=$value${uinMark(value)}")
-                        }
-                        1 -> {
-                            val start = pos[0]
-                            pos[0] += 8
-                            if (start + 8 > data.size) break
-                            val value = littleEndianLong(data, start)
-                            lines.add("f$field=i64:$value${uinMark(value)} hex=${hexHead(data, start, 8)}")
-                        }
-                        5 -> {
-                            val start = pos[0]
-                            pos[0] += 4
-                            if (start + 4 > data.size) break
-                            lines.add("f$field=i32 hex=${hexHead(data, start, 4)}")
-                        }
-                        2 -> {
-                            val len = readVarint(data, pos).toInt()
-                            if (len < 0 || pos[0] + len > data.size) {
-                                lines.add("f$field 长度异常")
-                                break
-                            }
-                            val slice = data.copyOfRange(pos[0], pos[0] + len)
-                            pos[0] += len
-                            lines.add(describeSlice("f$field", slice))
-                            collectOpaque("f$field", slice, lines, 1)
-                        }
-                        else -> {
-                            lines.add("f$field wire=$wire 停止")
-                            break
-                        }
-                    }
-                }
-            } catch (t: Throwable) {
-                lines.add("解析中断 ${t.message ?: t.javaClass.simpleName}")
-            }
-            val ascii = asciiDigitRuns(data).filter { looksLikeUin(it.toLongOrNull() ?: 0L) }.distinct()
-            lines.add("整包${data.size}字节 原文数字=${ascii.joinToString(",")}")
-            return lines
-        }
-
-        private fun describeSlice(path: String, slice: ByteArray): String {
-            if (slice.isEmpty()) return "$path 空"
-            val digits = asciiDigitRuns(slice).filter { looksLikeUin(it.toLongOrNull() ?: 0L) }.distinct()
-            val text = try { String(slice, Charsets.UTF_8) } catch (_: Throwable) { "" }
-            val readable = text.isNotEmpty() && text.none { it < ' ' }
-            val body = when {
-                readable && text.length <= 500 -> "\"$text\""
-                readable -> "文本${text.length}字 \"${text.take(220)}\" 数字=${digits.joinToString(",")}"
-                else -> {
-                    val tree = outline(slice, 3200, 4, 40)
-                    val opaque = tree.contains("=b") || tree.contains("{}") || tree.length < 12
-                    val hex = if (opaque) " hex=${hexHead(slice, 0, 96)}" else ""
-                    "$tree$hex 数字=${digits.joinToString(",")}"
-                }
-            }
-            return "$path b${slice.size} $body"
-        }
-
-        private fun collectOpaque(path: String, data: ByteArray, lines: MutableList<String>, depth: Int) {
-            if (depth > 4 || lines.size >= 80) return
-            val pos = intArrayOf(0)
-            try {
-                while (pos[0] < data.size && lines.size < 80) {
-                    val tag = readVarint(data, pos)
-                    val field = (tag ushr 3).toInt()
-                    val wire = (tag and 7L).toInt()
-                    val here = "$path.$field"
-                    when (wire) {
-                        0 -> {
-                            val value = readVarint(data, pos)
-                            if (looksLikeUin(value)) lines.add("$here=$value 疑似号码")
-                        }
-                        1 -> {
-                            val start = pos[0]
-                            pos[0] += 8
-                            if (start + 8 > data.size) return
-                            val value = littleEndianLong(data, start)
-                            lines.add("$here=i64:$value${uinMark(value)} hex=${hexHead(data, start, 8)}")
-                        }
-                        5 -> pos[0] += 4
-                        2 -> {
-                            val len = readVarint(data, pos).toInt()
-                            if (len < 0 || pos[0] + len > data.size) return
-                            val start = pos[0]
-                            pos[0] += len
-                            if (len == 0) continue
-                            val slice = data.copyOfRange(start, start + len)
-                            val text = try { String(slice, Charsets.UTF_8) } catch (_: Throwable) { "" }
-                            val readable = text.isNotEmpty() && text.none { it < ' ' }
-                            val tree = if (readable) "" else outline(slice, 400, 2, 12)
-                            val opaque = !readable && (tree.isEmpty() || tree.contains("=b") || tree.contains("{}") || tree.startsWith(" err"))
-                            if (opaque || (!readable && len >= 24)) {
-                                val digits = asciiDigitRuns(slice).filter { (it.toLongOrNull() ?: 0L).let { n -> n in 100_000L..9_999_999_999L } }.distinct()
-                                lines.add("$here 可疑 b$len hex=${hexHead(slice, 0, 96)} 数字=${digits.joinToString(",")} 树=${tree.take(180)}")
-                            } else if (readable && text.length <= 80 && (text.any { it.code > 127 } || text.any { it.isDigit() })) {
-                                lines.add("$here \"$text\"")
-                            }
-                            if (!readable) collectOpaque(here, slice, lines, depth + 1)
-                        }
-                        else -> return
-                    }
-                }
-            } catch (_: Throwable) {
-            }
-        }
-
-        private fun uinMark(value: Long): String = if (looksLikeUin(value)) " 疑似号码" else ""
-
         private fun littleEndianLong(data: ByteArray, start: Int): Long {
             var value = 0L
             for (i in 0 until 8) {
                 value = value or ((data[start + i].toLong() and 0xFF) shl (8 * i))
             }
             return value
-        }
-
-        private fun hexHead(data: ByteArray, start: Int, count: Int): String {
-            val end = minOf(data.size, start + count)
-            val sb = StringBuilder((end - start) * 2)
-            for (i in start until end) {
-                val v = data[i].toInt() and 0xFF
-                sb.append(HEX[v ushr 4]).append(HEX[v and 0x0F])
-            }
-            return sb.toString()
         }
 
         /**

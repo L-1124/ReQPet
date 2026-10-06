@@ -27,8 +27,8 @@ class SettingDailyCard(
     private val engine: PetAdventureEngine?
 ) {
 
-    private val thresholdValues = listOf(40, 60, 80, 90)
-    private val thresholdLabels = listOf("低于40", "低于60 (推荐)", "低于80", "低于90")
+    private val thresholdValues = listOf(40, 50, 60, 70, 80, 90, 100)
+    private val thresholdLabels = listOf("40", "50", "60", "70", "80", "90", "100")
 
     fun build(container: LinearLayout): View {
         CardUiBuilder.addSectionHeader(container, "日常起居与历练", colors)
@@ -56,7 +56,7 @@ class SettingDailyCard(
 
         val panel = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, UiAnimUtils.dp(context, 12)) }
         panel.addView(TextView(context).apply { text = "进食体力阈值 (缺粮时自动采购爱心饼干)"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 4), 0, UiAnimUtils.dp(context, 4)) })
-        val energyIdx = thresholdValues.indexOf(curEnergy).let { if (it >= 0) it else 1 }
+        val energyIdx = thresholdValues.indexOf(curEnergy).let { if (it >= 0) it else 2 }
         panel.addView(AppleSegmentedControl(context, thresholdLabels, energyIdx, isNight = colors.isNight) { sel ->
             curEnergy = thresholdValues.getOrElse(sel) { 60 }
             prefs.edit().putInt(PreferencesHelper.KEY_CARE_ENERGY_THRESHOLD, curEnergy).commit()
@@ -64,7 +64,7 @@ class SettingDailyCard(
             SettingConfigSyncer.syncConfig(prefs, engine, context)
         })
         panel.addView(TextView(context).apply { text = "洗澡清洁阈值 (零消耗温水香皂触控洗护)"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 8), 0, UiAnimUtils.dp(context, 4)) })
-        val cleanIdx = thresholdValues.indexOf(curClean).let { if (it >= 0) it else 1 }
+        val cleanIdx = thresholdValues.indexOf(curClean).let { if (it >= 0) it else 2 }
         panel.addView(AppleSegmentedControl(context, thresholdLabels, cleanIdx, isNight = colors.isNight) { sel ->
             curClean = thresholdValues.getOrElse(sel) { 60 }
             prefs.edit().putInt(PreferencesHelper.KEY_CARE_CLEAN_THRESHOLD, curClean).commit()
@@ -97,16 +97,16 @@ class SettingDailyCard(
         col.addView(subTv); row.addView(col)
 
         val panel = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, UiAnimUtils.dp(context, 12)) }
-        panel.addView(TextView(context).apply { text = "好友体力喂食阈值 (低于设定值自动帮好友喂食)"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 4), 0, UiAnimUtils.dp(context, 4)) })
-        val energyIdx = thresholdValues.indexOf(curEnergy).let { if (it >= 0) it else 1 }
+        panel.addView(TextView(context).apply { text = "体力阈值（雇佣后低于该值才喂，喂到不低于该值）"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 4), 0, UiAnimUtils.dp(context, 4)) })
+        val energyIdx = thresholdValues.indexOf(curEnergy).let { if (it >= 0) it else 2 }
         panel.addView(AppleSegmentedControl(context, thresholdLabels, energyIdx, isNight = colors.isNight) { sel ->
             curEnergy = thresholdValues.getOrElse(sel) { 60 }
             prefs.edit().putInt(PreferencesHelper.KEY_FRIEND_CARE_ENERGY_THRESHOLD, curEnergy).commit()
             subTv.text = UiDescUtils.getFriendCareSubtitle(curEnergy, curClean)
             SettingConfigSyncer.syncConfig(prefs, engine, context)
         })
-        panel.addView(TextView(context).apply { text = "好友清洁洗澡阈值 (低于设定值自动帮好友搓澡)"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 8), 0, UiAnimUtils.dp(context, 4)) })
-        val cleanIdx = thresholdValues.indexOf(curClean).let { if (it >= 0) it else 1 }
+        panel.addView(TextView(context).apply { text = "清洁阈值（雇佣后低于该值才洗，洗到不低于该值）"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 8), 0, UiAnimUtils.dp(context, 4)) })
+        val cleanIdx = thresholdValues.indexOf(curClean).let { if (it >= 0) it else 2 }
         panel.addView(AppleSegmentedControl(context, thresholdLabels, cleanIdx, isNight = colors.isNight) { sel ->
             curClean = thresholdValues.getOrElse(sel) { 60 }
             prefs.edit().putInt(PreferencesHelper.KEY_FRIEND_CARE_CLEAN_THRESHOLD, curClean).commit()

@@ -58,7 +58,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         @Volatile var prefCustomCourseSubject = 0; @Volatile var prefCustomCourseDuration = 0; @Volatile var prefCustomWorkType = 0
         @Volatile var prefCustomWorkDuration = 0; @Volatile var prefCareEnergyThreshold = 60; @Volatile var prefCareCleanThreshold = 60
         @Volatile var lastCareTimeMillis = 0L; @Volatile var lastLikeBackTimeMillis = 0L; @Volatile var lastCoinBagTimeMillis = 0L
-        @Volatile var lastFriendCareTimeMillis = 0L; @Volatile var lastOwnPetCheckMillis = 0L
+        @Volatile var lastOwnPetCheckMillis = 0L
         @Volatile var cachedSchoolDetails: QQPetDirectBridge.SecondMapDetails? = null; @Volatile var cachedSchoolCourses: List<QQPetDirectBridge.SelectEvent>? = null
         @Volatile var cachedWorkPlaces: QQPetDirectBridge.SecondMapDetails? = null; @Volatile var cachedWorkJobs: List<QQPetDirectBridge.SelectEvent>? = null
         @Volatile var learnedStudySubEvent: Long? = null; @Volatile var learnedStudyName: String? = null
@@ -187,9 +187,15 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         val rem = story.remaining ?: 0L
         if (story.code == 0 && rem > 0L) {
             val kind = currentTaskTypeName.ifEmpty { "外出" }
-            sendLog(context, "⏳ [任务进行中] 仍在$kind，剩余 ${PetPureCalculations.formatDuration(rem)}，StoryID=${story.storyId ?: "无"}")
-            val outingSleep = if (hiredSleep != null && hiredSleep > 0L) hiredSleep else calculateTaskSleep(story)
-            return sleepForMaintenance(context, outingSleep)
+            val outingSleep = if (hiredSleep != null && hiredSleep > 0L) {
+                hiredSleep
+            } else {
+                StealthScheduler.calculateTaskSleepSeconds(rem, prefHumanLikeSleep) * 1000L
+            }
+            val waitMs = sleepForMaintenance(context, outingSleep)
+            val waitNote = if (waitMs < outingSleep) "按照料提前到 ${waitMs / 1000L} 秒后再查" else "${waitMs / 1000L} 秒后再查"
+            sendLog(context, "⏳ [任务进行中] 仍在$kind，剩余 ${PetPureCalculations.formatDuration(rem)}，$waitNote，StoryID=${story.storyId ?: "无"}")
+            return waitMs
         }
         return dispatchNextTask(context, petId)
     }
@@ -262,6 +268,11 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
                 lastReportedOngoingStoryId = null
                 currentTaskEndTimeMillis = 0L
             }
+            if (decision.settled) {
+                PetSocialTask.claimOnceAfterSettle(
+                    context, bridge, petId, currentActiveUin, enableClaimCoinBag
+                ) { sendLog(context, it) }
+            }
             return decision.nextSleepMillis
         }
         return null
@@ -272,7 +283,12 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         if ((story.remaining ?: 0L) <= 0L && enableSettle && !pendingId.isNullOrEmpty()) {
             sendLog(context, "🎁 [结算] 自动发起收益结算 (StoryID: $pendingId)...")
             val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, pendingId, petId)
-            if (code == 0) sendLog(context, "✅ [结算] 收益结算成功！金币与经验已入账")
+            if (code == 0) {
+                sendLog(context, "✅ [结算] 收益结算成功！金币与经验已入账")
+                PetSocialTask.claimOnceAfterSettle(
+                    context, bridge, petId, currentActiveUin, enableClaimCoinBag
+                ) { sendLog(context, it) }
+            }
             lastActiveStoryId = null
             lastReportedOngoingStoryId = null
             currentTaskEndTimeMillis = 0L
@@ -282,11 +298,6 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
     private suspend fun performMaintenance(context: Context, petId: String) {
         com.copilot.qqpet.engine.task.PetMaintenanceCoordinator.performMaintenance(context, bridge, petId)
-    }
-
-    private fun calculateTaskSleep(story: StoryStatusResult): Long {
-        val rem = story.remaining ?: 30L
-        return StealthScheduler.calculateTaskSleepSeconds(rem, prefHumanLikeSleep) * 1000L
     }
 
     /** 外出只推迟学业、打工和冒险。照料、结算、福袋、踩踩和 PK 按自己的间隔醒来。 */

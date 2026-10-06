@@ -37,8 +37,7 @@ object PetPureCalculations {
     /**
      * 开工请求的雇佣位记下的是被雇佣的那一方。
      * 该号码等于当前账号时，才是被好友雇佣；等于别人时，是自己雇了好友。
-     * 进行中的 0x975f 详情回包没有这个号码。详情剧情里的「被…拉来一起」，
-     * 或「现在召回，可获得」，也表示被好友雇佣。
+     * 进行中的 0x975f 详情回包没有这个号码。详情剧情里的「被…拉来一起」表示被好友雇佣。
      */
     fun isEmployedByFriend(employedUin: Long, selfUin: Long): Boolean {
         return employedUin > 0L && selfUin > 0L && employedUin == selfUin
@@ -46,7 +45,6 @@ object PetPureCalculations {
 
     private val storyTextValue = Regex("\"text\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
     private val pulledInByFriend = Regex("被.{1,60}?拉来一起")
-    private val recallRewardCopy = Regex("现在召回\\s*[，,]?\\s*可获得[^\\n]{0,32}")
 
     /**
      * 从详情文案里认出被好友雇佣。命中时返回短摘录，没有则返回 null。
@@ -57,8 +55,6 @@ object PetPureCalculations {
         for (part in text.split('\n')) {
             val narrative = narrativeOf(part).replace(Regex("\\s+"), "")
             pulledInByFriend.find(narrative)?.let { return it.value.take(48) }
-            val reward = recallRewardCopy.find(part)?.value?.replace(Regex("\\s+"), "")
-            if (!reward.isNullOrEmpty()) return reward.take(48)
         }
         return null
     }
@@ -129,15 +125,15 @@ object PetPureCalculations {
         maxValue: Int = 100
     ): Int {
         if (currentEnergy < 0 || energyPerFeed <= 0) return 0
-        if (currentEnergy > targetThreshold) return 0
+        if (currentEnergy >= targetThreshold) return 0
         if (maxValue > 0 && currentEnergy >= maxValue) return 0
         var energy = currentEnergy
         var rounds = 0
-        while (energy <= targetThreshold && rounds < maxRoundsPerSession) {
+        while (energy < targetThreshold && rounds < maxRoundsPerSession) {
             energy += energyPerFeed
             if (maxValue > 0 && energy > maxValue) energy = maxValue
             rounds++
-            if (energy > targetThreshold) break
+            if (energy >= targetThreshold) break
             if (maxValue > 0 && energy >= maxValue) break
         }
         return rounds

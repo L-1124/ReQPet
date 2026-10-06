@@ -65,7 +65,12 @@ object PetCycleDispatcher {
             }
             "settle" -> {
                 PetAdventureEngine.lastActiveStoryId?.let { sId ->
-                    PetHiredRecallTask.settleStoryAwait(bridge, sId, petId)
+                    val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, sId, petId)
+                    if (code == 0) {
+                        PetSocialTask.claimOnceAfterSettle(
+                            context, bridge, petId, PetAdventureEngine.currentActiveUin, PetAdventureEngine.enableClaimCoinBag
+                        ) { PetAdventureEngine.sendLog(context, it) }
+                    }
                     showToast(context, "已发起探险收益结算")
                 } ?: showToast(context, "当前暂无待结算任务")
                 true
@@ -256,7 +261,21 @@ object PetCycleDispatcher {
             PetAdventureEngine.currentTaskEndTimeMillis = System.currentTimeMillis() + 3600 * 1000L
             PetAdventureEngine.currentStatusText = "正在 ${res.placeName ?: "小镇"} 进行 ${res.jobName ?: "兼职"}$hireSuffix"
             if (res.hiredFriend != null) {
-                PetAdventureEngine.sendLog(context, "🎉 [雇佣打工成功] 顺利雇佣好友「${res.hiredFriend.friendNick.ifEmpty { res.hiredFriend.uin.toString() }}」协同开工 ${res.placeName} - ${res.jobName}！StoryID: ${res.storyId}")
+                val hiredName = res.hiredFriend.friendNick.ifEmpty { res.hiredFriend.uin.toString() }
+                PetAdventureEngine.sendLog(context, "🎉 [雇佣打工成功] 顺利雇佣好友「$hiredName」协同开工 ${res.placeName} - ${res.jobName}！StoryID: ${res.storyId}")
+                if (PetAdventureEngine.enableFriendCare) {
+                    PetFriendCareTask.careJustHiredFriend(
+                        PetFriendCareTask.FriendCareParams(
+                            context = context,
+                            bridge = bridge,
+                            ownPetId = petId,
+                            energyThreshold = PetAdventureEngine.prefFriendCareEnergyThreshold,
+                            cleanThreshold = PetAdventureEngine.prefFriendCareCleanThreshold,
+                            isManual = false
+                        ),
+                        res.hiredFriend
+                    ) { PetAdventureEngine.sendLog(context, it) }
+                }
             } else {
                 PetAdventureEngine.sendLog(context, "🎉 [打工成功] 顺利开工 ${res.placeName} - ${res.jobName}！StoryID: ${res.storyId}，勤劳致富中")
             }

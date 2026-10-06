@@ -3,7 +3,6 @@ package com.copilot.qqpet.protocol.client
 import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.hook.HookLog as Log
-import com.copilot.qqpet.protocol.DeviceTrace
 import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.protocol.QQPetDirectBridge.SecondMapDetails
@@ -35,7 +34,6 @@ class PetCareerProtocolClient(
             .writeVarint(100, 2L)
             .toByteArray()
         channel.sendOidb("OidbSvcTrpcTcp.0x975a_1", 38746, 1, body) { code, data, err ->
-            traceSuspicious("STAT975a code=$code err=${err ?: "无"}", data)
             var remaining: Long? = null
             var total: Long? = null
             var storyId: String? = null
@@ -73,7 +71,6 @@ class PetCareerProtocolClient(
             .writeVarint(100, 2L)
             .toByteArray()
         channel.sendOidb("OidbSvcTrpcTcp.0x975f_1", 38751, 1, body) { code, data, errorMsg ->
-            traceSuspicious("HIRE975f code=$code err=${errorMsg ?: "无"}", data)
             if (code == 0 && data != null) {
                 val eventType = (ProtoWire.firstVarint(data, 5) ?: 0L).toInt()
                 val (fatigued, displayTip) = extractFatigueFromStoryData(data)
@@ -96,10 +93,6 @@ class PetCareerProtocolClient(
     }
 
     private fun describeHireBody(data: ByteArray): String = ProtoWire.hireScan(data)
-
-    private fun traceSuspicious(tag: String, data: ByteArray?) {
-        ProtoWire.suspiciousLines(data).forEach { DeviceTrace.i("$tag $it") }
-    }
 
     private fun parseEmployedUin(data: ByteArray): Long {
         // 0x975f 实测整包没有 QQ 号。字段 4 是「最高额外+42%」这类加成文案，不能当成开工请求里的用户信息。

@@ -12,8 +12,8 @@ android {
        applicationId = "io.github.congsmile.qqpet"
        minSdk = 26
        targetSdk = 34
-       versionCode = 107
-       versionName = "1.0.106"
+       versionCode = 114
+       versionName = "1.0.113"
    }
 
    buildTypes {

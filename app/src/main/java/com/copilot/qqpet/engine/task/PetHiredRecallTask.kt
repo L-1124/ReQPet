@@ -84,7 +84,8 @@ object PetHiredRecallTask {
     data class HiredMonitorDecision(
         val isHired: Boolean,
         val hasRecalled: Boolean,
-        val nextSleepMillis: Long
+        val nextSleepMillis: Long,
+        val settled: Boolean = false
     )
 
     suspend fun evaluateHiredMonitor(
@@ -115,7 +116,7 @@ object PetHiredRecallTask {
             val role = if (isHiredByUin) "被好友雇佣" else "自己派出并雇佣了好友"
             onLog("💼 [雇佣关系] 被雇佣号码=$employedUin，当前账号=${param.selfUin}，$role")
         } else {
-            onLog("🧭 [召回跳过] 详情里没有「被…拉来一起」或「现在召回，可获得」，本次不召回")
+            onLog("🧭 [召回跳过] 详情里没有「被…拉来一起」，本次不召回")
             return HiredMonitorDecision(isHired = false, hasRecalled = false, nextSleepMillis = 0L)
         }
         if (copyHit == null && !isHiredByUin) {
@@ -142,10 +143,10 @@ object PetHiredRecallTask {
             delay(800L)
             val (sCode, _) = settleStoryAwait(bridge, param.currentStoryId, petId)
             if (sCode == 0) onLog("✅ [雇佣收益入账] 基础工资与最高加成奖金已全额入账！")
-            return HiredMonitorDecision(isHired = true, hasRecalled = true, nextSleepMillis = 4000L)
+            return HiredMonitorDecision(isHired = true, hasRecalled = true, nextSleepMillis = 4000L, settled = sCode == 0)
         } else {
-            onLog("⚠️ [提前召回重试] 召回指令返回 code=$rCode, 说明: ${rErr ?: "未知"}，将在 15 秒后重试")
             val retrySleepMs = StealthScheduler.calculateHiredMonitorSleepMillis(0L, hasReachedTarget = true)
+            onLog("⚠️ [提前召回重试] 召回指令返回 code=$rCode, 说明: ${rErr ?: "未知"}，将在 ${retrySleepMs / 1000L} 秒后重试")
             return HiredMonitorDecision(isHired = true, hasRecalled = false, nextSleepMillis = retrySleepMs)
         }
     }

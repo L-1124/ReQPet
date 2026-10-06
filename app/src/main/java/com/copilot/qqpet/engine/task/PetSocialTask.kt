@@ -333,4 +333,18 @@ object PetSocialTask {
         isManual: Boolean,
         onLog: (String) -> Unit
     ): Boolean = executeAutoClaimCoinBags(context, bridge, ownPetId, currentUin, isManual, onLog) > 0
+
+    /** 收益结算成功后，若开启了捡福袋，再执行一轮领取。不改变福袋的定时巡检。 */
+    suspend fun claimOnceAfterSettle(
+        context: Context,
+        bridge: QQPetDirectBridge,
+        ownPetId: String,
+        currentUin: String,
+        enabled: Boolean,
+        onLog: (String) -> Unit
+    ) {
+        if (!enabled) return
+        onLog("🧧 [结算福袋] 收益已结算，按设置再捡一次福袋")
+        executeAutoClaimCoinBags(context, bridge, ownPetId, currentUin, false, onLog)
+    }
 }

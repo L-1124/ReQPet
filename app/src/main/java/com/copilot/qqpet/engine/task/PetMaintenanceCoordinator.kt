@@ -8,21 +8,19 @@ import kotlinx.coroutines.delay
 import java.util.concurrent.ThreadLocalRandom
 
 /**
- * 负责后台周期性日常维护任务协调（自理、好友照料、福袋、回踩、主动串门与自动PK）
+ * 负责后台周期性日常维护任务协调（自理、福袋、回踩、主动串门与自动PK）
  */
 object PetMaintenanceCoordinator {
 
     private const val CARE_CHECK_INTERVAL_MS = 3 * 60 * 1000L
-    private const val FRIEND_CARE_INTERVAL_MS = 10 * 60 * 1000L
     private const val COIN_BAG_INTERVAL_MS = 5 * 60 * 1000L
     private const val LIKE_BACK_INTERVAL_MS = 6 * 60 * 1000L
     private const val ACTIVE_VISIT_INTERVAL_MS = 8 * 60 * 1000L
 
-    /** 距离下一次喂食、洗澡、好友照料、福袋、回踩、串门或 PK 到点还有多久。外出不会拉长这个等待。 */
+    /** 距离下一次喂食、洗澡、福袋、回踩、串门或 PK 到点还有多久。外出不会拉长这个等待。 */
     fun millisUntilNextCheck(context: Context, now: Long = System.currentTimeMillis()): Long {
-        val due = ArrayList<Long>(6)
+        val due = ArrayList<Long>(5)
         if (PetAdventureEngine.enableCare) due += waitAfter(PetAdventureEngine.lastCareTimeMillis, CARE_CHECK_INTERVAL_MS, now)
-        if (PetAdventureEngine.enableFriendCare) due += waitAfter(PetAdventureEngine.lastFriendCareTimeMillis, FRIEND_CARE_INTERVAL_MS, now)
         if (PetAdventureEngine.enableClaimCoinBag) due += waitAfter(PetAdventureEngine.lastCoinBagTimeMillis, COIN_BAG_INTERVAL_MS, now)
         if (PetAdventureEngine.enableLikeBack) due += waitAfter(PetAdventureEngine.lastLikeBackTimeMillis, LIKE_BACK_INTERVAL_MS, now)
         if (PetAdventureEngine.enableActiveVisit) due += waitAfter(PetAdventureEngine.lastActiveVisitTimeMillis, ACTIVE_VISIT_INTERVAL_MS, now)
@@ -40,25 +38,10 @@ object PetMaintenanceCoordinator {
     suspend fun performMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String) {
         val now = System.currentTimeMillis()
         checkCareMaintenance(context, bridge, petId, now)
-        checkFriendCareMaintenance(context, bridge, petId, now)
         checkCoinBagMaintenance(context, bridge, petId, now)
         checkLikeBackMaintenance(context, bridge, now)
         checkActiveVisitMaintenance(context, bridge, now)
         checkAutoPkMaintenance(context, bridge, petId, now)
-    }
-
-    private suspend fun checkFriendCareMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String, now: Long) {
-        if (!PetAdventureEngine.enableFriendCare || (now - PetAdventureEngine.lastFriendCareTimeMillis <= FRIEND_CARE_INTERVAL_MS)) return
-        PetAdventureEngine.lastFriendCareTimeMillis = now
-        val params = PetFriendCareTask.FriendCareParams(
-            context = context,
-            bridge = bridge,
-            ownPetId = petId,
-            energyThreshold = PetAdventureEngine.prefFriendCareEnergyThreshold,
-            cleanThreshold = PetAdventureEngine.prefFriendCareCleanThreshold,
-            isManual = false
-        )
-        PetFriendCareTask.executeAutoFriendCare(params) { PetAdventureEngine.sendLog(context, it) }
     }
 
     private suspend fun checkCareMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String, now: Long) {
@@ -66,11 +49,11 @@ object PetMaintenanceCoordinator {
         PetAdventureEngine.lastCareTimeMillis = now
         bridge.refreshProfile()
         val attrs = PetCareTask.queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
-        if (attrs != null && (attrs.energy <= PetAdventureEngine.prefCareEnergyThreshold || attrs.clean <= PetAdventureEngine.prefCareCleanThreshold)) {
-            if (attrs.energy <= PetAdventureEngine.prefCareEnergyThreshold) {
+        if (attrs != null && (attrs.energy < PetAdventureEngine.prefCareEnergyThreshold || attrs.clean < PetAdventureEngine.prefCareCleanThreshold)) {
+            if (attrs.energy < PetAdventureEngine.prefCareEnergyThreshold) {
                 PetCareTask.feedWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareEnergyThreshold) { PetAdventureEngine.sendLog(context, it) }
             }
-            if (attrs.clean <= PetAdventureEngine.prefCareCleanThreshold) {
+            if (attrs.clean < PetAdventureEngine.prefCareCleanThreshold) {
                 PetCareTask.bathWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareCleanThreshold) { PetAdventureEngine.sendLog(context, it) }
             }
             delay(1200L)

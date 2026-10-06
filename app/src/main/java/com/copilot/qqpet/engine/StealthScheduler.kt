@@ -62,8 +62,8 @@ object StealthScheduler {
         }
 
         if (!humanLikeEnabled) {
-            // 关闭拟人休眠时的常规保底
-            return minOf(remainingSeconds + 2, 60L)
+            // 未开拟人：剩余不足 1 分钟就睡到结束，否则最多 1 分钟
+            return if (remainingSeconds < 60L) remainingSeconds + 2L else 60L
         }
 
         // 拟人休眠开启：当长任务剩余时间大于切片阈值时，拆分成 3~5 分钟随机抖动切片守护巡检
@@ -92,18 +92,14 @@ object StealthScheduler {
     }
 
     /**
-     * 计算被雇佣监控期间的下一次唤醒毫秒数，防止长任务休眠睡死
+     * 被雇佣召回：能算出距阈值还有多久，就睡到那个时间点（多留 2 秒，避免卡在阈值前）。
+     * 已经到点或召回失败时无法再向前推算，改为 1 分钟后重试。
      */
     fun calculateHiredMonitorSleepMillis(neededSec: Long, hasReachedTarget: Boolean): Long {
-        if (hasReachedTarget || neededSec <= 0L) {
-            return Random.nextLong(10, 16) * 1000L
+        if (!hasReachedTarget && neededSec > 0L) {
+            return (neededSec + 2L) * 1000L
         }
-        val safeSleepSec = if (neededSec <= 60L) {
-            maxOf(neededSec + Random.nextLong(1, 4), 10L)
-        } else {
-            minOf(neededSec, Random.nextLong(45, 76))
-        }
-        return safeSleepSec * 1000L
+        return 60_000L
     }
 
    fun isLogAllowed(debugEnabled: Boolean): Boolean = debugEnabled

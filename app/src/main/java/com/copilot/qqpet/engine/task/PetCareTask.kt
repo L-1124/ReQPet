@@ -195,8 +195,8 @@ object PetCareTask {
         val attrs = queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
         val curEnergy = attrs?.energy?.toInt() ?: -1
         val maxEnergy = attrs?.maxEnergy?.toInt()?.takeIf { it > 0 } ?: 100
-        if (targetThreshold > 0 && curEnergy > targetThreshold) {
-            onLog("✨ [进食检查] 当前体力已高于阈值 ($curEnergy>$targetThreshold)，无需补充爱心饼干")
+        if (targetThreshold > 0 && curEnergy >= 0 && curEnergy >= targetThreshold) {
+            onLog("✨ [进食检查] 当前体力已不低于阈值 ($curEnergy>=$targetThreshold)，无需补充爱心饼干")
             return Pair(0, null)
         }
         val maxRounds = if (curEnergy >= 0) {
@@ -240,7 +240,7 @@ object PetCareTask {
             if (curEnergy >= 0) curEnergy = minOf(param.maxEnergy, curEnergy + ENERGY_PER_FEED)
             val curStr = if (curEnergy >= 0) " -> 估计+${ENERGY_PER_FEED}: $curEnergy（阈值 ${param.targetThreshold}）" else ""
             onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干$curStr")
-            if (param.targetThreshold > 0 && curEnergy > param.targetThreshold) break
+            if (param.targetThreshold > 0 && curEnergy >= param.targetThreshold) break
             if (curEnergy >= param.maxEnergy) break
             delay(500L)
         }
@@ -281,8 +281,8 @@ object PetCareTask {
         onLog: (String) -> Unit
     ): QQPetDirectBridge.BathResult {
         val target = resolveBathTarget(bridge, petId, targetThreshold)
-        if (target.startClean > target.threshold || (target.maxClean > 0 && target.startClean >= target.maxClean)) {
-            onLog("✨ [沐浴检查] 当前清洁度已高于阈值 (${target.startClean}>${target.threshold})，无需消耗${target.itemName} (库存: ${target.balance})")
+        if (target.startClean >= target.threshold || (target.maxClean > 0 && target.startClean >= target.maxClean)) {
+            onLog("✨ [沐浴检查] 当前清洁度已不低于阈值 (${target.startClean}>=${target.threshold})，无需消耗${target.itemName} (库存: ${target.balance})")
             return QQPetDirectBridge.BathResult(0, target.startClean, 0, target.balance, true, null)
         }
         val loopRes = executeBathLoop(bridge, petId, target, onLog)
@@ -291,7 +291,7 @@ object PetCareTask {
         }
         try { bathAwait(bridge, petId) } catch (_: Throwable) {}
         queryPetAttributesAwait(bridge, petId)
-        return QQPetDirectBridge.BathResult(0, loopRes.curClean, loopRes.totalAdded, loopRes.balance, loopRes.curClean > target.threshold, null)
+        return QQPetDirectBridge.BathResult(0, loopRes.curClean, loopRes.totalAdded, loopRes.balance, loopRes.curClean >= target.maxClean, null)
     }
 
     data class BathLoopResult(val success: Boolean, val code: Int, val curClean: Int, val totalAdded: Int, val balance: Int, val errorMsg: String?)
@@ -303,10 +303,10 @@ object PetCareTask {
         var totalAdded = 0
         var balance = target.balance
         var steps = 0
-        while (curClean <= target.threshold && curClean < target.maxClean && steps < 12) {
+        while (curClean < target.threshold && curClean < target.maxClean && steps < 12) {
             steps++
             if (balance <= 0) {
-                val (_, newBal, err) = purchaseSoapIfNeeded(bridge, petId, target.itemId, target.itemName, target.cleanPerSoap, target.defaultBuyCount, curClean, target.threshold + 1, onLog)
+                val (_, newBal, err) = purchaseSoapIfNeeded(bridge, petId, target.itemId, target.itemName, target.cleanPerSoap, target.defaultBuyCount, curClean, target.threshold, onLog)
                 if (err != null) return BathLoopResult(false, -2, curClean, totalAdded, balance, err)
                 balance = newBal
             }
@@ -319,7 +319,7 @@ object PetCareTask {
             totalAdded += res.addedClean
             balance = res.remainBalance
             onLog("🧼 [搓澡进度] 消耗 1 份${target.itemName} (+${res.addedClean}) -> 清洁度 $curClean（阈值 ${target.threshold}）(剩余库存: $balance)")
-            if (curClean > target.threshold || res.isFullClean || curClean >= target.maxClean) break
+            if (curClean >= target.threshold || res.isFullClean || curClean >= target.maxClean) break
             delay(450L)
         }
         return BathLoopResult(true, 0, curClean, totalAdded, balance, null)

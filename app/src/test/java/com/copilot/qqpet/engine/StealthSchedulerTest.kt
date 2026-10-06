@@ -34,9 +34,10 @@ class StealthSchedulerTest {
 
     @Test
     fun testTaskSleepSecondsWhenDisabled() {
-        // 关闭拟人休眠时，采用传统保底
         val sleepSec = StealthScheduler.calculateTaskSleepSeconds(3600L, humanLikeEnabled = false)
         assertEquals(60L, sleepSec)
+        val short = StealthScheduler.calculateTaskSleepSeconds(20L, humanLikeEnabled = false)
+        assertEquals(22L, short)
     }
 
     @Test

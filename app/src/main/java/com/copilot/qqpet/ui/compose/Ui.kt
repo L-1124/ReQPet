@@ -27,6 +27,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -177,6 +181,9 @@ fun SliderRow(
     onValueChange: (Int) -> Unit,
     subtitle: String? = null
 ) {
+    // 拖动中仅本地回显，松手才落盘提交，避免连续触发配置同步与日志刷屏
+    var dragging by remember { mutableStateOf(false) }
+    var dragValue by remember(value) { mutableStateOf(value) }
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -200,8 +207,17 @@ fun SliderRow(
             )
         }
         Slider(
-            value = value.toFloat(),
-            onValueChange = { onValueChange(it.roundToInt()) },
+            value = (if (dragging) dragValue else value).toFloat(),
+            onValueChange = {
+                dragging = true
+                dragValue = it.roundToInt()
+            },
+            onValueChangeFinished = {
+                if (dragging) {
+                    dragging = false
+                    onValueChange(dragValue)
+                }
+            },
             valueRange = range.first.toFloat()..range.last.toFloat(),
             steps = (range.last - range.first - 1).coerceAtLeast(0)
         )

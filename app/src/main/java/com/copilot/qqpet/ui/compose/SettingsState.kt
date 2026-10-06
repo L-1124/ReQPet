@@ -11,11 +11,12 @@ import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.protocol.QQPetDirectBridge
+import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.util.SettingConfigSyncer
 
 /**
  * 设置页唯一状态源：配置读 qqpet_inproc_prefs，运行状态读引擎缓存。
- * 写入即落盘并触发引擎重读，读侧由 Compose 快照自动跟踪。
+ * 写入落盘后仅重读引擎配置；只有总开关翻转会唤醒/停掉主循环，读侧由 Compose 快照自动跟踪。
  */
 @Stable
 class SettingsState(
@@ -44,6 +45,10 @@ class SettingsState(
 
     private val logListener: (String) -> Unit = { refreshLogs() }
 
+    private var lastPrefsVersion: Long = Long.MIN_VALUE
+    private var lastPkSummaryKey: Pair<String, String>? = null
+    private var lastPkSummaryFriends: List<QQPetDirectBridge.HireableFriend>? = null
+
     init {
         refresh()
     }
@@ -68,24 +73,33 @@ class SettingsState(
     fun setBool(key: String, value: Boolean) {
         prefs.edit().putBoolean(key, value).apply()
         values[key] = value
-        syncConfig()
+        syncOrWake(key)
     }
 
     fun setInt(key: String, value: Int) {
         prefs.edit().putInt(key, value).apply()
         values[key] = value
-        syncConfig()
+        syncOrWake(key)
     }
 
     fun setString(key: String, value: String) {
         prefs.edit().putString(key, value).apply()
         values[key] = value
-        syncConfig()
+        syncOrWake(key)
     }
 
-    /** 每秒 tick 与页面 resume 都会调用：外部改动、引擎状态都会跟着刷新 */
+    /** 总开关翻转决定主循环生死，必须唤醒；其余开关引擎每轮巡检前 reloadConfig 即可生效 */
+    private fun syncOrWake(key: String) {
+        if (key == PreferencesHelper.KEY_MASTER_ENABLED) {
+            SettingConfigSyncer.onMasterSwitchChanged(engine, context)
+        } else {
+            SettingConfigSyncer.syncConfig(engine, context)
+        }
+    }
+
+    /** 每秒 tick 与页面 resume 都会调用：引擎状态、日志每秒刷新；prefs 仅在外部变化时重读 */
     fun refresh() {
-        for ((key, value) in prefs.all) values[key] = value
+        syncExternalPrefsIfNeeded()
         statusText = PetAdventureEngine.formatLiveStatusText()
         val details = PetAdventureEngine.cachedSchoolDetails
         schoolDetails = details
@@ -111,8 +125,31 @@ class SettingsState(
         }
         attributesText = "$attrPrefix$liveCare"
 
-        pkBlacklistSummary = buildPkBlacklistSummary()
+        // PK 黑名单仅在名单/好友缓存实际变化时重算（避免每秒读 prefs + CSV 解析）
+        val blKey = PetAdventureEngine.currentActiveUin to PetAdventureEngine.prefPkBlacklistUinsCsv
+        val friendCacheStamp = PetAdventureEngine.cachedHireableFriends
+        if (blKey != lastPkSummaryKey || friendCacheStamp !== lastPkSummaryFriends) {
+            lastPkSummaryKey = blKey
+            lastPkSummaryFriends = friendCacheStamp
+            pkBlacklistSummary = buildPkBlacklistSummary()
+        }
         refreshLogs()
+    }
+
+    /**
+     * 外部改动检测：本类写入会同步更新 values 快照，无需重读；
+     * 外部写入（多入口/账号切换清库）通过 all 快照哈希变化发现，每秒仅一次浅读。
+     */
+    private fun syncExternalPrefsIfNeeded() {
+        val current = try {
+            prefs.all.hashCode().toLong()
+        } catch (_: Throwable) {
+            0L
+        }
+        if (current != lastPrefsVersion) {
+            lastPrefsVersion = current
+            for ((key, value) in prefs.all) values[key] = value
+        }
     }
 
     private fun buildPkBlacklistSummary(): String {
@@ -139,7 +176,7 @@ class SettingsState(
         refreshLogs()
     }
 
-    /** 让引擎重读配置并唤醒主循环（SettingConfigSyncer 负责桥接自愈） */
+    /** 让引擎重读配置（不唤醒主循环；总开关翻转走 syncOrWake 专用通道） */
     fun syncConfig() {
         SettingConfigSyncer.syncConfig(engine, context)
     }

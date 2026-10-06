@@ -72,17 +72,18 @@
 - [ ] `SettingsState.refresh()` 每秒全量重读 prefs 并写入 Compose 快照，改为只更新变化项或事件驱动。
 - [ ] `SettingsState.pkBlacklistSummary` 每秒重算（读 prefs + 缓存好友），必要时改为按需刷新。
 - [ ] 被锁的分段项现在仅置灰 + 文案提示，旧实现是点击 Toast 说明原因，按需补回。
-- [ ] `ComposeInjectionHost` 目前无条件自建 `ViewTree*Owner`；若宿主将来提供，应优先使用宿主的，避免覆盖。
+- [x] 查清 owner 归属：宿主 `ComponentActivity` 确实在 DecorView 设了 `ViewTree*Owner`，但用的是**它那份类与它的资源 id**（`2131399375/76/77` vs 我们 `0x7f050068/6a/6b`），两套互不可见。
+- [ ] （结论：保持自建 owner）`LspModuleClassLoader` 是**自己 dex 优先**，父 shim 无法覆盖模块 dex 里已有的类，所以"路由给宿主共用"这条路无效（已实测并回滚）。若将来仍想用宿主的 owner，唯一途径是把 `lifecycle-runtime`/`lifecycle-common`/`lifecycle-viewmodel`/`savedstate` 改成 `compileOnly` 并 exclude 出 APK，代价是直接跑在 QQ 自带 lifecycle 版本上。
 - [ ] `QPetExpressiveTheme` 关闭了动态取色（宿主进程里 `dynamicLightColorScheme` 解析出全 0 导致整页变黑）；若后续 androidx 修复可重新评估。
 - [ ] 更新 README，使其与当前调度周期、任务限制和新 UI 一致；并统一仓库地址（`congsmile/qpet-companion` 与 `orz12/qpet-companion`）。
 
 ## P2：可维护性与清理
 
 - [ ] material3 目前钉在 `1.5.0-alpha29`（expressive API 只在 alpha 线），等 1.5.0 稳定后切回稳定版。
-- [ ] `gradlew wrapper --gradle-version 9.8.0` 重新生成 wrapper jar（当前仍是 8.6 版，只换了 distributionUrl）。
+- [x] 已用 `gradlew wrapper --gradle-version 9.8.0` 重建 wrapper jar 与启动脚本（`fcb57ca`）。
 - [ ] release 打开 R8（现在 `optimization { enable = false }`，APK 约 12.9 MB），补 libxposed 入口与 Compose 的 keep 规则并实测。
 - [ ] 增加 `.gitattributes` 统一换行，消除 git 反复提示的 LF→CRLF 警告。
-- [ ] `HostClassLoaderBridge.HOST_PREFIXES` 仍含 `com.tencent.biz.`、`com.tencent.widget`（QUI 桩已删），确认无用后清理。
+- [x] `HOST_PREFIXES` 已补 `androidx.fragment.`（`requireActivity()` 返回类型此前会 NoClassDefFoundError，`06faad6`）；`com.tencent.biz.`/`com.tencent.widget` 前缀保留（分流宿主包，无副作用）。
 - [ ] 统一配置存储，避免普通 key、账号作用域 key 与多份 Preferences 互相覆盖。
 - [ ] 清理 UI 中存在但后台未完整使用的学习模式、打工模式等配置。
 - [ ] 统一重复的 `8000 ms` 网络超时常量，合并结构相同的 `xxxAwait` 包装代码。

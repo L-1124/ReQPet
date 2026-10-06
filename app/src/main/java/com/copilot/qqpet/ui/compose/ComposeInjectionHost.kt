@@ -7,20 +7,20 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 
 /**
- * 注入式 Compose 的宿主环境。
+ * 注入式 Compose 运行环境宿主。
  *
- * 宿主 Activity 的 ViewTree*Owner 是宿主那份 androidx 打的标记，我们模块里的副本读不到，
- * 所以这里自建一套 Owner 挂在 ComposeView 自己身上，生命周期由承载它的 Fragment 驱动。
+ * 为 Fragment 自身视图树提供模块闭环的 ViewTree*Owner，满足 Compose 向上遍历需求，
+ * 绝不向外污染宿主 Activity 的 DecorView。
  */
 class ComposeInjectionHost : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
@@ -47,22 +47,25 @@ class ComposeInjectionHost : LifecycleOwner, ViewModelStoreOwner, SavedStateRegi
         }
 
     /**
-     * 页面根视图 attach 时，沿祖先链把 owner 打满：
-     * 宿主 Activity 不提供 ViewTree*Owner，而 Compose 是拿 rootView 去找的，
-     * 只挂在 ComposeView 自己身上不够。根视图比 ComposeView 先收到 attach，来得及。
+     * 页面根视图 attach 时沿祖先链挂载 Owner 标签：
+     * Compose 的 WindowRecomposer 会找到 contentChild（即宿主的 Fragment 容器 #ckj），
+     * 并从该容器向上查找 ViewTree*Owner。因模块与宿主使用不同的 tag key，两套标签在
+     * View 的 mKeyedTags 中独立共存，互不干扰覆盖。
      */
     fun installOwnersOnAttach(root: View) {
         root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) {
-                // 只标到宿主 fragment 容器为止：Compose 会从 rootView 找 owner，容器那一层必须有；
-                // 再往上打到 Activity/DecorView 没有意义，且会污染宿主的视图链。
-                tagOwners(v)
-                (v.parent as? View)?.let { tagOwners(it) }
+                var node: View? = v
+                while (node != null) {
+                    tagOwners(node)
+                    node = node.parent as? View
+                }
             }
 
             override fun onViewDetachedFromWindow(v: View) = Unit
         })
     }
+
 
     private fun tagOwners(view: View) {
         view.setViewTreeLifecycleOwner(this)

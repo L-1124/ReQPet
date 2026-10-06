@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.compose.ui.platform.ComposeView
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.hook.HookLog
@@ -37,7 +38,6 @@ class QQSettingFragment : QPublicBaseFragment() {
                 QPetSettingsScreen(state = settings) { requireActivity().finish() }
             }
         }
-        // 外层容器只为了让 owner 标记比 ComposeView 更早打到祖先链上（宿主不提供 ViewTree*Owner）
         return FrameLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,

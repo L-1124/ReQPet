@@ -24,6 +24,7 @@ import com.copilot.qqpet.ui.component.WorkPlaceOption
 import com.copilot.qqpet.ui.section.SettingActionCard
 import com.copilot.qqpet.ui.section.SettingCareerCard
 import com.copilot.qqpet.ui.section.SettingDailyCard
+import com.copilot.qqpet.ui.section.SettingLogCard
 import com.copilot.qqpet.ui.section.SettingMoreCard
 import com.copilot.qqpet.ui.section.SettingStatusCard
 import com.copilot.qqpet.ui.theme.ThemeColors
@@ -74,6 +75,8 @@ object QQSettingDialog {
         careerCard.build(contentLayout)
         SettingDailyCard(context, colors, prefs, engine).build(contentLayout)
         SettingActionCard(context, colors, engine) { statusCardHelper.refreshLiveStatus() }.build(contentLayout)
+        val logCard = SettingLogCard(context, colors)
+        logCard.build(contentLayout)
         SettingMoreCard(context, colors).build(contentLayout)
 
         val scrollView = ScrollView(context).apply {
@@ -91,11 +94,15 @@ object QQSettingDialog {
             }
         }
         mainHandler.post(tickerRunnable)
-        dialogInstance.setOnDismissListener { mainHandler.removeCallbacks(tickerRunnable) }
+        dialogInstance.setOnDismissListener {
+            mainHandler.removeCallbacks(tickerRunnable)
+            logCard.detach()
+        }
 
         asyncSyncAccountData(context, engine, careerCard) { statusCardHelper.refreshLiveStatus() }
 
         dialogInstance.show()
+        logCard.attach()
         playSlideInAnimation(fullRoot, context)
     }
 

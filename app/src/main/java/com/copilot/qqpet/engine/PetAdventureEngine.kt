@@ -1,7 +1,6 @@
 package com.copilot.qqpet.engine
 
 import android.content.Context
-import android.content.Intent
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.model.*
 import com.copilot.qqpet.engine.state.AccountSessionStore
@@ -10,6 +9,7 @@ import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.hook.HookLog as Log
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
+import com.copilot.qqpet.ui.util.UiDescUtils
 import kotlinx.coroutines.*
 import kotlin.coroutines.resume
 
@@ -22,16 +22,6 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     companion object {
         private const val TAG = "PetAdventureEngine"
         private const val NETWORK_TIMEOUT_MS = 8000L
-        const val ACTION_ENGINE_LOG = "io.github.congsmile.qqpet.ACTION_ENGINE_LOG"
-        const val ACTION_TRIGGER_ACTION = "io.github.congsmile.qqpet.ACTION_TRIGGER_ACTION"
-        const val ACTION_UPDATE_CONFIG = "io.github.congsmile.qqpet.ACTION_UPDATE_CONFIG"
-        const val ACTION_SYNC_WORK_PLACES = "io.github.congsmile.qqpet.ACTION_SYNC_WORK_PLACES"
-        const val ACTION_SYNC_ACCOUNT_STATUS = "io.github.congsmile.qqpet.ACTION_SYNC_ACCOUNT_STATUS"
-        const val EXTRA_LOG_TEXT = "extra_log_text"
-        const val EXTRA_ACTION = "extra_action"
-        const val EXTRA_WORK_PLACES_JSON = "extra_work_places_json"
-        const val EXTRA_SCHOOL_DETAILS_JSON = "extra_school_details_json"
-
         var cachedPetId: String? = null
         var lastActiveStoryId: String? = null
         @Volatile var lastReportedOngoingStoryId: String? = null
@@ -99,10 +89,9 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
         fun getLiveRemainingSeconds(): Long = (currentTaskEndTimeMillis - System.currentTimeMillis()).coerceAtLeast(0L) / 1000L
 
-        fun sendLog(context: Context, message: String) {
-            Log.i(TAG, message)
-            try { context.sendBroadcast(Intent(ACTION_ENGINE_LOG).apply { setPackage("io.github.congsmile.qqpet"); putExtra(EXTRA_LOG_TEXT, message) }) } catch (_: Throwable) {}
-        }
+        /** 日志统一出口；context 为历史参数，已无用 */
+        @Suppress("UNUSED_PARAMETER")
+        fun sendLog(context: Context, message: String) = EngineLog.i(message)
 
         fun formatLiveStatusText(): String {
             val sec = getLiveRemainingSeconds()
@@ -315,7 +304,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             if (action == "cycle") {
                 executeMasterCycle(context)
             } else if (action == "query_work_places" || action == "query_account_status") {
-                preloadAndBroadcastAccountStatus(context)
+                preloadAccountData(context)
             } else {
                 PetCycleDispatcher.executeAction(context, bridge, petId, action)
             }
@@ -341,18 +330,12 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
 
 
-    fun broadcastAccountStatus(context: Context) =
-        PetWorkTask.broadcastAccountStatus(context, cachedWorkPlaces, cachedSchoolDetails)
-
-    fun preloadAndBroadcastAccountStatus(context: Context) {
-        if (cachedWorkPlaces != null && cachedSchoolDetails != null) {
-            broadcastAccountStatus(context)
-            return
-        }
+    /** 预加载学园 / 职业小镇数据到进程内缓存 */
+    fun preloadAccountData(context: Context) {
+        if (cachedWorkPlaces != null && cachedSchoolDetails != null) return
         scope.launch {
             val petId = ensurePetId(context) ?: return@launch
             preloadAccountDataAwait(petId)
-            broadcastAccountStatus(context)
         }
     }
 
@@ -419,6 +402,8 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             prefCareCleanThreshold = p.getInt(PreferencesHelper.KEY_CARE_CLEAN_THRESHOLD, 60)
             prefHideQQSettingEntry = p.getBoolean(PreferencesHelper.KEY_HIDE_QQ_SETTING_ENTRY, false)
             prefDebugLog = p.getBoolean(PreferencesHelper.KEY_DEBUG_LOG, false)
+            // 调试开关即刻生效（原先要等 QQ 进程重启才会重新读取）
+            com.copilot.qqpet.hook.HookLog.isDebugEnabled = prefDebugLog
             enableHireFriend = p.getBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, true)
             prefHireFriendUinsCsv = p.getString(PreferencesHelper.KEY_HIRE_FRIEND_UINS, "") ?: ""
             enableFriendCare = p.getBoolean(PreferencesHelper.KEY_FRIEND_CARE_ENABLED, false)
@@ -432,27 +417,31 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         } catch (_: Throwable) {}
     }
 
-    fun updateConfig(
-        study: Boolean, work: Boolean, care: Boolean, adventure: Boolean, settle: Boolean,
-        likeBack: Boolean = enableLikeBack, claimCoinBag: Boolean = enableClaimCoinBag, fatigueToAdventure: Boolean = enableFatigueToAdventure,
-        studyMode: Int = prefStudyMode, workMode: Int = prefWorkMode, schoolStage: Int = prefCustomSchoolStage,
-        courseSubject: Int = prefCustomCourseSubject, courseDuration: Int = prefCustomCourseDuration, workType: Int = prefCustomWorkType,
-        workDuration: Int = prefCustomWorkDuration, careEnergyThreshold: Int = prefCareEnergyThreshold, careCleanThreshold: Int = prefCareCleanThreshold,
-        humanLikeSleep: Boolean = prefHumanLikeSleep, nightSleepMode: Boolean = prefNightSleepMode, screenOffSilent: Boolean = prefScreenOffSilent,
-        hideQQSettingEntry: Boolean = prefHideQQSettingEntry, debugLog: Boolean = prefDebugLog, hireFriend: Boolean = enableHireFriend,
-        hireFriendUinsCsv: String = prefHireFriendUinsCsv, friendCareEnabled: Boolean = enableFriendCare,
-        friendCareEnergyThreshold: Int = prefFriendCareEnergyThreshold, friendCareCleanThreshold: Int = prefFriendCareCleanThreshold,
-        autoPk: Boolean = enableAutoPk, pkBlacklistUinsCsv: String = prefPkBlacklistUinsCsv, hiredRecallProgress: Int = prefHiredRecallProgress,
-        activeVisit: Boolean = enableActiveVisit, activeVisitFriends: Boolean = prefActiveVisitFriends,
-        activeVisitStrangers: Boolean = prefActiveVisitStrangers, activeVisitDailyLimit: Int = prefActiveVisitDailyLimit
-    ) {
-        enableStudy = study; enableWork = work; enableCare = care; enableAdventure = adventure; enableSettle = settle; enableLikeBack = likeBack
-        enableClaimCoinBag = claimCoinBag; enableFatigueToAdventure = fatigueToAdventure; enableAutoPk = autoPk; prefStudyMode = studyMode
-        prefWorkMode = workMode; prefCustomSchoolStage = schoolStage; prefCustomCourseSubject = courseSubject; prefCustomCourseDuration = courseDuration
-        prefCustomWorkType = workType; prefCustomWorkDuration = workDuration; prefCareEnergyThreshold = careEnergyThreshold; prefCareCleanThreshold = careCleanThreshold
-        prefHumanLikeSleep = humanLikeSleep; prefNightSleepMode = nightSleepMode; prefScreenOffSilent = screenOffSilent; prefHideQQSettingEntry = hideQQSettingEntry
-        prefDebugLog = debugLog; enableHireFriend = hireFriend; prefHireFriendUinsCsv = hireFriendUinsCsv; enableFriendCare = friendCareEnabled
-        prefFriendCareEnergyThreshold = friendCareEnergyThreshold; prefFriendCareCleanThreshold = friendCareCleanThreshold; prefPkBlacklistUinsCsv = pkBlacklistUinsCsv
-        prefHiredRecallProgress = hiredRecallProgress; enableActiveVisit = activeVisit; prefActiveVisitFriends = activeVisitFriends; prefActiveVisitStrangers = activeVisitStrangers; prefActiveVisitDailyLimit = activeVisitDailyLimit
+    /** 打印配置摘要 */
+    fun logConfigSummary(context: Context) {
+        val hireCount = prefHireFriendUinsCsv.split(',').count { it.isNotBlank() }
+        sendLog(
+            context,
+            "⚙️ 配置生效 学习:${onOff(enableStudy)} 打工:${onOff(enableWork)} 照顾:${onOff(enableCare)} 冒险:${onOff(enableAdventure)} " +
+                "结算:${onOff(enableSettle)} 雇佣:${onOff(enableHireFriend)}(${hireCount}人) 好友照料:${onOff(enableFriendCare)} " +
+                "回踩:${onOff(enableLikeBack)} 福袋:${onOff(enableClaimCoinBag)} 串门:${onOff(enableActiveVisit)} " +
+                "PK:${onOff(enableAutoPk)} 疲惫转探险:${onOff(enableFatigueToAdventure)}"
+        )
+        val placeTitle = cachedWorkPlaces?.stages?.find { it.stage == prefCustomWorkType }?.title
+        sendLog(
+            context,
+            "⚙️ 调度明细 学园:${UiDescUtils.schoolStageLabel(prefCustomSchoolStage)} " +
+                "科目:${UiDescUtils.courseSubjectLabel(prefCustomCourseSubject)} " +
+                "课时:${UiDescUtils.courseDurationLabel(prefCustomCourseDuration)} " +
+                "场所:${UiDescUtils.workTypeLabel(prefCustomWorkType, placeTitle)} " +
+                "工时:${UiDescUtils.workDurationLabel(prefCustomWorkDuration)} " +
+                "体力≤$prefCareEnergyThreshold 清洁≤$prefCareCleanThreshold " +
+                "好友体力≤$prefFriendCareEnergyThreshold 好友清洁≤$prefFriendCareCleanThreshold " +
+                "召回:${if (prefHiredRecallProgress > 0) "${prefHiredRecallProgress}%" else "关"} " +
+                "拟人:${onOff(prefHumanLikeSleep)} 夜间静默:${onOff(prefNightSleepMode)} 熄屏静默:${onOff(prefScreenOffSilent)}"
+        )
     }
+
+    private fun onOff(enabled: Boolean): String = if (enabled) "开" else "关"
+
 }

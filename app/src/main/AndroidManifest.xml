@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- 仅需震动反馈权限；调度依赖 QQ 主进程自身的存活，不使用唤醒锁与闹钟 -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Android 11+ 包可见性声明，允许直接与 QQ 进程跨进程通信 -->
@@ -34,14 +32,6 @@
             android:name="xposedscope"
             android:resource="@array/xposed_scope" />
 
-        <activity
-            android:name=".ui.MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
     </application>
 
 </manifest>

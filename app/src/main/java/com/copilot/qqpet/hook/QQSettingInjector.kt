@@ -2,7 +2,6 @@ package com.copilot.qqpet.hook
 
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.util.Log
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.ui.QQSettingDialog
@@ -265,11 +264,7 @@ object QQSettingInjector {
                     QQSettingDialog.show(context, HookEntry.globalEngine)
                 }
             } else {
-                val intent = Intent().apply {
-                    setClassName(HookEntry.MODULE_PACKAGE, "com.copilot.qqpet.ui.MainActivity")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
+                HookLog.log(TAG, "设置入口宿主不是 Activity，无法打开设置弹窗")
             }
         } catch (t: Throwable) {
             HookLog.log(TAG, "调起伴侣控制弹窗失败: ${t.message}")

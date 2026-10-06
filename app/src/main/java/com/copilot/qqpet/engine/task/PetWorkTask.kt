@@ -293,37 +293,4 @@ object PetWorkTask {
         return sortedList
     }
 
-    fun broadcastAccountStatus(
-        context: Context,
-        workPlaces: QQPetDirectBridge.SecondMapDetails?,
-        schoolDetails: QQPetDirectBridge.SecondMapDetails?
-    ) {
-        try {
-            val intent = Intent(PetAdventureEngine.ACTION_SYNC_ACCOUNT_STATUS).apply {
-                setPackage("io.github.congsmile.qqpet")
-            }
-            workPlaces?.let { places ->
-                val arr = org.json.JSONArray()
-                for (s in places.stages) {
-                    arr.put(org.json.JSONObject().apply {
-                        put("stage", s.stage); put("title", s.title); put("limitStatus", s.limitStatus)
-                        put("isGraduated", s.isGraduated); put("lockReason", s.lockReason)
-                    })
-                }
-                intent.putExtra(PetAdventureEngine.EXTRA_WORK_PLACES_JSON, arr.toString())
-            }
-            schoolDetails?.let { school ->
-                val arr = org.json.JSONArray()
-                for (s in school.stages) {
-                    arr.put(org.json.JSONObject().apply {
-                        put("stage", s.stage); put("title", s.title); put("limitStatus", s.limitStatus)
-                        put("isGraduated", s.isGraduated); put("lockReason", s.lockReason)
-                    })
-                }
-                intent.putExtra(PetAdventureEngine.EXTRA_SCHOOL_DETAILS_JSON, arr.toString())
-            }
-            context.sendBroadcast(intent)
-        } catch (_: Throwable) {}
-    }
-
 }

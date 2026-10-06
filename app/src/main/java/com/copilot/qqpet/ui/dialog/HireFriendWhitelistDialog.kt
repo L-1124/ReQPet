@@ -3,7 +3,6 @@ package com.copilot.qqpet.ui.dialog
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -56,7 +55,6 @@ object HireFriendWhitelistDialog {
     fun showHireFriendWhitelistDialog(
         context: Context,
         colors: ThemeColors,
-        prefs: SharedPreferences,
         engine: PetAdventureEngine?,
         onUpdated: () -> Unit
     ) {
@@ -129,7 +127,7 @@ object HireFriendWhitelistDialog {
 
         fun persistSelection() {
             PetAdventureEngine.saveHireFriendUins(context, selectedUins)
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
             onUpdated()
         }
 

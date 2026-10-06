@@ -61,7 +61,7 @@ class SettingDailyCard(
             curEnergy = thresholdValues.getOrElse(sel) { 60 }
             prefs.edit().putInt(PreferencesHelper.KEY_CARE_ENERGY_THRESHOLD, curEnergy).commit()
             subTv.text = UiDescUtils.getCareSubtitle(curEnergy, curClean)
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         })
         panel.addView(TextView(context).apply { text = "洗澡清洁阈值 (零消耗温水香皂触控洗护)"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 8), 0, UiAnimUtils.dp(context, 4)) })
         val cleanIdx = thresholdValues.indexOf(curClean).let { if (it >= 0) it else 2 }
@@ -69,7 +69,7 @@ class SettingDailyCard(
             curClean = thresholdValues.getOrElse(sel) { 60 }
             prefs.edit().putInt(PreferencesHelper.KEY_CARE_CLEAN_THRESHOLD, curClean).commit()
             subTv.text = UiDescUtils.getCareSubtitle(curEnergy, curClean)
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         })
 
         val initialChecked = prefs.getBoolean("key_care", true)
@@ -78,7 +78,7 @@ class SettingDailyCard(
             onCheckedChangeListener = { isChecked ->
                 prefs.edit().putBoolean("key_care", isChecked).commit()
                 UiAnimUtils.animateExpandCollapse(panel, isChecked)
-                SettingConfigSyncer.syncConfig(prefs, engine, context)
+                SettingConfigSyncer.syncConfig(engine, context)
             }
         })
         card.addView(row)
@@ -103,7 +103,7 @@ class SettingDailyCard(
             curEnergy = thresholdValues.getOrElse(sel) { 60 }
             prefs.edit().putInt(PreferencesHelper.KEY_FRIEND_CARE_ENERGY_THRESHOLD, curEnergy).commit()
             subTv.text = UiDescUtils.getFriendCareSubtitle(curEnergy, curClean)
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         })
         panel.addView(TextView(context).apply { text = "清洁阈值（雇佣后低于该值才洗，洗到不低于该值）"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 8), 0, UiAnimUtils.dp(context, 4)) })
         val cleanIdx = thresholdValues.indexOf(curClean).let { if (it >= 0) it else 2 }
@@ -111,7 +111,7 @@ class SettingDailyCard(
             curClean = thresholdValues.getOrElse(sel) { 60 }
             prefs.edit().putInt(PreferencesHelper.KEY_FRIEND_CARE_CLEAN_THRESHOLD, curClean).commit()
             subTv.text = UiDescUtils.getFriendCareSubtitle(curEnergy, curClean)
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         })
 
         val initialChecked = prefs.getBoolean(PreferencesHelper.KEY_FRIEND_CARE_ENABLED, false)
@@ -120,7 +120,7 @@ class SettingDailyCard(
             onCheckedChangeListener = { isChecked ->
                 prefs.edit().putBoolean(PreferencesHelper.KEY_FRIEND_CARE_ENABLED, isChecked).commit()
                 UiAnimUtils.animateExpandCollapse(panel, isChecked)
-                SettingConfigSyncer.syncConfig(prefs, engine, context)
+                SettingConfigSyncer.syncConfig(engine, context)
             }
         })
         card.addView(row)
@@ -146,7 +146,7 @@ class SettingDailyCard(
         val limitIdx = limitValues.indexOf(curLimit).let { if (it >= 0) it else 1 }
         panel.addView(AppleSegmentedControl(context, limitLabels, limitIdx, isNight = colors.isNight) { sel ->
             prefs.edit().putInt(PreferencesHelper.KEY_ACTIVE_VISIT_DAILY_LIMIT, limitValues.getOrElse(sel) { 20 }).commit()
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         })
 
         val initialChecked = prefs.getBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_ENABLED, true)
@@ -155,7 +155,7 @@ class SettingDailyCard(
             onCheckedChangeListener = { isChecked ->
                 prefs.edit().putBoolean(PreferencesHelper.KEY_ACTIVE_VISIT_ENABLED, isChecked).commit()
                 UiAnimUtils.animateExpandCollapse(panel, isChecked)
-                SettingConfigSyncer.syncConfig(prefs, engine, context)
+                SettingConfigSyncer.syncConfig(engine, context)
             }
         })
         card.addView(row)
@@ -173,7 +173,7 @@ class SettingDailyCard(
             setPadding(UiAnimUtils.dp(context, 12), UiAnimUtils.dp(context, 10), UiAnimUtils.dp(context, 12), UiAnimUtils.dp(context, 10))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, UiAnimUtils.dp(context, 4), 0, UiAnimUtils.dp(context, 4)) }
             UiAnimUtils.applyTouchSpringEffect(this)
-            setOnClickListener { PkBlacklistDialog.showPkBlacklistDialog(context, colors, prefs, engine) { summaryTv.text = PkBlacklistDialog.formatPkBlacklistSummary(context) } }
+            setOnClickListener { PkBlacklistDialog.showPkBlacklistDialog(context, colors, engine) { summaryTv.text = PkBlacklistDialog.formatPkBlacklistSummary(context) } }
         }
         val btnCol = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f).apply { setMargins(0, 0, UiAnimUtils.dp(context, 8), 0) } }
         btnCol.addView(TextView(context).apply { text = "PK 免战黑名单 (支持搜索与好友/访客勾选)"; textSize = 13.5f; typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); setTextColor(colors.actionBlueText) })

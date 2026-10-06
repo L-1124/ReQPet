@@ -1,16 +1,10 @@
 package com.copilot.qqpet
 
 import android.app.Activity
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import com.copilot.qqpet.hook.ipc.EngineActionReceiver
 import com.copilot.qqpet.engine.PetAdventureEngine
-import com.copilot.qqpet.engine.WakeLockHelper
 import com.copilot.qqpet.hook.HookLog
 import com.copilot.qqpet.hook.QQSettingInjector
 import com.copilot.qqpet.hook.TinkerBlocker
@@ -19,7 +13,6 @@ import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XC_MethodReplacement
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
@@ -31,13 +24,6 @@ class HookEntry : IXposedHookLoadPackage {
         const val TAG = "QQPetCopilot"
         const val TARGET_PACKAGE = "com.tencent.mobileqq"
         const val MODULE_PACKAGE = "io.github.congsmile.qqpet"
-        const val MAIN_ACTIVITY_CLASS = "com.copilot.qqpet.ui.MainActivity"
-
-        const val ACTION_TRIGGER_ADVENTURE = "io.github.congsmile.qqpet.ACTION_TRIGGER_ADVENTURE"
-        const val ACTION_TRIGGER_ACTION = "io.github.congsmile.qqpet.ACTION_TRIGGER_ACTION"
-        const val ACTION_UPDATE_CONFIG = "io.github.congsmile.qqpet.ACTION_UPDATE_CONFIG"
-        const val ACTION_PING = "io.github.congsmile.qqpet.ACTION_PING"
-        const val ACTION_PONG = "io.github.congsmile.qqpet.ACTION_PONG"
 
         @Volatile
         var instance: HookEntry? = null
@@ -45,7 +31,7 @@ class HookEntry : IXposedHookLoadPackage {
 
         @Volatile
         private var isSplashHooked = false
-        private var isReceiverRegistered = false
+        private var isReadySignalled = false
         @Volatile
         private var loginPollJob: Job? = null
         @Volatile
@@ -63,23 +49,8 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
-        // 1. 本模块自身激活自检 Hook (针对支持模块自身作用域的框架)
-        if (lpparam.packageName == MODULE_PACKAGE) {
-            try {
-                XposedHelpers.findAndHookMethod(
-                    MAIN_ACTIVITY_CLASS,
-                    lpparam.classLoader,
-                    "isModuleActive",
-                    XC_MethodReplacement.returnConstant(true)
-                )
-                HookLog.log(TAG, "已成功挂钩自身 isModuleActive 返回 true (API 82)")
-            } catch (t: Throwable) {
-                HookLog.log(TAG, "Hook isModuleActive 异常: ${t.message}")
-            }
-            return
-        }
-
-        // 2. 仅拦截目标应用 QQ 并且仅拦截 QQ 主进程，坚决杜绝 MSF/tool/peak 等子进程干扰发包和注册重复广播
+        // 仅拦截目标应用 QQ 主进程，模块自身不启动任何界面或逻辑。
+        if (lpparam.packageName == MODULE_PACKAGE) return
         if (lpparam.packageName != TARGET_PACKAGE) {
             return
         }
@@ -253,12 +224,9 @@ class HookEntry : IXposedHookLoadPackage {
 
         TinkerBlocker.install(classLoader, appContext)
 
-        if (!isReceiverRegistered) {
-            EngineActionReceiver.register(appContext)
-            isReceiverRegistered = true
-            HookLog.log(TAG, "跨进程广播接收器注册就绪 (来源: $from)")
+        if (!isReadySignalled) {
+            isReadySignalled = true
             globalEngine?.sendReadySignal(appContext)
-            EngineActionReceiver.sendPong(appContext, "内核启动")
         }
 
         checkLoginAndStartLoop(appContext, classLoader, from)
@@ -303,7 +271,4 @@ class HookEntry : IXposedHookLoadPackage {
         }
         return false
     }
-
-    fun sendPong(context: Context, reason: String) = EngineActionReceiver.sendPong(context, reason)
-    private fun unregisterAdventureReceiver() = EngineActionReceiver.unregister()
 }

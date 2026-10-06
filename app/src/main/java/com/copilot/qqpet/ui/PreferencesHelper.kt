@@ -1,10 +1,7 @@
 package com.copilot.qqpet.ui
 
-import android.content.Context
-import android.content.SharedPreferences
-
+/** 仅保留配置键名常量；模块自身已无界面，不再持有任何 SharedPreferences 文件。 */
 object PreferencesHelper {
-    private const val PREF_NAME = "qqpet_copilot_config"
    const val KEY_STUDY = "key_study"
    const val KEY_WORK = "key_work"
    const val KEY_CARE = "key_care"
@@ -44,9 +41,4 @@ object PreferencesHelper {
   const val KEY_ACTIVE_VISIT_DAILY_LIMIT = "key_active_visit_daily_limit"
   const val KEY_STRANGER_UIN_POOL = "key_stranger_uin_pool"
   const val KEY_DISABLE_TINKER_PATCH = "key_disable_tinker_patch"
-
-
-  fun getPrefs(context: Context): SharedPreferences {
-        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-    }
 }

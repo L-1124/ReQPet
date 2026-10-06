@@ -92,7 +92,7 @@ class SettingCareerCard(
             onCheckedChangeListener = { isChecked ->
                 prefs.edit().putBoolean("key_study", isChecked).commit()
                 UiAnimUtils.animateExpandCollapse(studyPanel, isChecked)
-                SettingConfigSyncer.syncConfig(prefs, engine, context)
+                SettingConfigSyncer.syncConfig(engine, context)
             }
         }
         row.addView(studySwitch); card.addView(row)
@@ -109,7 +109,7 @@ class SettingCareerCard(
             prefs.edit().putInt(PreferencesHelper.KEY_SCHOOL_STAGE, sel).commit()
             val highest = PetAdventureEngine.cachedSchoolDetails?.currentStage ?: 0
             subtitleTv.text = UiDescUtils.getSchoolStageDesc(sel, highest)
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         }
         studyStageSeg = stageSeg
         panel.addView(stageSeg)
@@ -118,13 +118,13 @@ class SettingCareerCard(
         val currentSubjPref = prefs.getInt(PreferencesHelper.KEY_COURSE_SUBJECT, 0)
         panel.addView(AppleSegmentedControl(context, listOf("智能轮换", "智力(文科)", "力量(体育)", "魅力(艺术)"), currentSubjPref, isNight = colors.isNight) { sel ->
             prefs.edit().putInt(PreferencesHelper.KEY_COURSE_SUBJECT, sel).commit()
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         })
         panel.addView(TextView(context).apply { text = "课时时长偏好"; textSize = 12f; setTextColor(colors.secondaryText); setPadding(0, UiAnimUtils.dp(context, 8), 0, UiAnimUtils.dp(context, 4)) })
         val currentDurPref = prefs.getInt(PreferencesHelper.KEY_COURSE_DURATION, 0)
         panel.addView(AppleSegmentedControl(context, listOf("任意课时", "基础短课(10-45m)", "进阶长课(1-2.25h)"), currentDurPref, isNight = colors.isNight) { sel ->
             prefs.edit().putInt(PreferencesHelper.KEY_COURSE_DURATION, sel).commit()
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         })
     }
 
@@ -195,7 +195,7 @@ class SettingCareerCard(
             onCheckedChangeListener = { isChecked ->
                 prefs.edit().putBoolean("key_work", isChecked).commit()
                 UiAnimUtils.animateExpandCollapse(workPanel, isChecked)
-                SettingConfigSyncer.syncConfig(prefs, engine, context)
+                SettingConfigSyncer.syncConfig(engine, context)
             }
         }
         row.addView(workSwitch); card.addView(row)
@@ -216,7 +216,7 @@ class SettingCareerCard(
             val opt = workPlaceOptions.getOrNull(sel) ?: return@AppleSegmentedControl
             prefs.edit().putInt(PreferencesHelper.KEY_WORK_TYPE, opt.careerId).commit()
             subtitleTv.text = UiDescUtils.getWorkTypeDesc(opt.careerId, opt.title, PetAdventureEngine.cachedWorkPlaces)
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
             asyncRefreshWorkJobs(opt.careerId) { jobs -> updateWorkDurSeg(workDurSeg, jobs) }
         }
         workTypeSeg = typeSeg
@@ -227,7 +227,7 @@ class SettingCareerCard(
         val durPref = prefs.getInt(PreferencesHelper.KEY_WORK_DURATION, 0)
         val durSeg = AppleSegmentedControl(context, listOf("智能挂机", "10分钟", "45分钟", "2小时", "4小时"), durPref, isNight = colors.isNight) { sel ->
             prefs.edit().putInt(PreferencesHelper.KEY_WORK_DURATION, sel).commit()
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         }
         workDurSeg = durSeg
         updateWorkDurSeg(durSeg, PetAdventureEngine.cachedWorkJobs)
@@ -250,7 +250,7 @@ class SettingCareerCard(
             setCheckedImmediately(prefs.getBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, true))
             onCheckedChangeListener = { isChecked ->
                 prefs.edit().putBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, isChecked).commit()
-                SettingConfigSyncer.syncConfig(prefs, engine, context)
+                SettingConfigSyncer.syncConfig(engine, context)
             }
         })
         panel.addView(row)
@@ -262,7 +262,7 @@ class SettingCareerCard(
             setPadding(UiAnimUtils.dp(context, 12), UiAnimUtils.dp(context, 10), UiAnimUtils.dp(context, 12), UiAnimUtils.dp(context, 10))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, UiAnimUtils.dp(context, 4), 0, UiAnimUtils.dp(context, 2)) }
             UiAnimUtils.applyTouchSpringEffect(this)
-            setOnClickListener { HireFriendWhitelistDialog.showHireFriendWhitelistDialog(context, colors, prefs, engine) { summaryTv.text = HireFriendWhitelistDialog.formatHireWhitelistSummary(context) } }
+            setOnClickListener { HireFriendWhitelistDialog.showHireFriendWhitelistDialog(context, colors, engine) { summaryTv.text = HireFriendWhitelistDialog.formatHireWhitelistSummary(context) } }
         }
         val btnCol = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f).apply { setMargins(0, 0, UiAnimUtils.dp(context, 8), 0) } }
         btnCol.addView(TextView(context).apply { text = "选择雇佣好友白名单 (支持名字/QQ号搜索)"; textSize = 13.5f; typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); setTextColor(colors.actionBlueText) })
@@ -288,7 +288,7 @@ class SettingCareerCard(
             curHiredRecall = v
             prefs.edit().putInt(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS, v).commit()
             descTv.text = UiDescUtils.getHiredRecallDesc(curHiredRecall)
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
         })
         card.addView(row)
     }

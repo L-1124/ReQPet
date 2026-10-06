@@ -97,7 +97,7 @@ object CardUiBuilder {
             setCheckedImmediately(initialChecked)
             onCheckedChangeListener = { isChecked ->
                 prefs.edit().putBoolean(prefKey, isChecked).commit()
-                SettingConfigSyncer.syncConfig(prefs, engine, context)
+                SettingConfigSyncer.syncConfig(engine, context)
             }
         }
         row.addView(sw)

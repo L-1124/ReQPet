@@ -3,7 +3,6 @@ package com.copilot.qqpet.ui.dialog
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -57,7 +56,6 @@ object PkBlacklistDialog {
     fun showPkBlacklistDialog(
         context: Context,
         colors: ThemeColors,
-        prefs: SharedPreferences,
         engine: PetAdventureEngine?,
         onUpdated: () -> Unit
     ) {
@@ -130,7 +128,7 @@ object PkBlacklistDialog {
 
         fun persistSelection() {
             PetAdventureEngine.savePkBlacklistUins(context, blacklistUins)
-            SettingConfigSyncer.syncConfig(prefs, engine, context)
+            SettingConfigSyncer.syncConfig(engine, context)
             onUpdated()
         }
 

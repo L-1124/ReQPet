@@ -150,6 +150,7 @@ class OidbChannel(
     private var delegateInstance: Any? = null
     private var sendOidbMethod: Method? = null
     private var observerClass: Class<*>? = null
+    private val requestTracker = RequestTracker()
 
     @Volatile
     var isInternalSending = false
@@ -260,13 +261,18 @@ class OidbChannel(
         subCommand: Int,
         request: ByteArray,
         callback: (code: Int, data: ByteArray?, errorMsg: String?) -> Unit
-    ) {
+    ): Int {
+        val requestId = requestTracker.register(commandName)
+        requestTracker.sweepExpired().forEach {
+            Log.d(TAG, "请求 #${it.id} ${it.command} 超时未回包，配对已释放")
+        }
+
         val obsCls = observerClass
         val method = sendOidbMethod
         val instance = delegateInstance
         if (!isReady || instance == null || method == null || obsCls == null) {
-            callback(-1, null, "发包代理未就绪")
-            return
+            deliverOnce(requestId, commandName, callback, -1, null, "发包代理未就绪")
+            return requestId
         }
         try {
             isInternalSending = true
@@ -279,20 +285,57 @@ class OidbChannel(
                 if (invokedMethod.name == "hashCode") return@newProxyInstance System.identityHashCode(proxy)
                 if (invokedMethod.name == "equals") return@newProxyInstance args?.getOrNull(0) === proxy
                 if (args != null && args.isNotEmpty()) {
+                    if (!requestTracker.tryDeliver(requestId)) {
+                        Log.w(TAG, "丢弃重复或迟到的回包 #$requestId $commandName")
+                        return@newProxyInstance null
+                    }
                     val code = (args[0] as? Number)?.toInt() ?: -1
                     val data = args.getOrNull(1) as? ByteArray
                     val bundle = args.getOrNull(2) as? android.os.Bundle
                     val errorMsg = bundle?.getString("data_error_msg") ?: bundle?.getString("error_msg")
-                    callback(code, data, errorMsg)
+                    invokeCallback(commandName, requestId, callback, code, data, errorMsg)
                 }
                 null
             }
             method.invoke(instance, request, commandName, command, subCommand, observer)
         } catch (t: Throwable) {
             Log.e(TAG, "sendOidb 执行反射调用异常: ${t.message}", t)
-            callback(-2, null, t.message)
+            deliverOnce(requestId, commandName, callback, -2, null, t.message)
         } finally {
             isInternalSending = false
+        }
+        return requestId
+    }
+
+    /** 未进入回调阶段时的单次投递（代理未就绪 / 反射异常） */
+    private fun deliverOnce(
+        requestId: Int,
+        commandName: String,
+        callback: (code: Int, data: ByteArray?, errorMsg: String?) -> Unit,
+        code: Int,
+        data: ByteArray?,
+        errorMsg: String?
+    ) {
+        if (!requestTracker.tryDeliver(requestId)) {
+            Log.w(TAG, "丢弃重复或迟到的结果 #$requestId $commandName")
+            return
+        }
+        invokeCallback(commandName, requestId, callback, code, data, errorMsg)
+    }
+
+    /** 回调执行边界：异常不得冒泡到宿主线程 */
+    private fun invokeCallback(
+        commandName: String,
+        requestId: Int,
+        callback: (code: Int, data: ByteArray?, errorMsg: String?) -> Unit,
+        code: Int,
+        data: ByteArray?,
+        errorMsg: String?
+    ) {
+        try {
+            callback(code, data, errorMsg)
+        } catch (t: Throwable) {
+            Log.e(TAG, "回包处理异常 #$requestId $commandName: ${t.message}", t)
         }
     }
 }

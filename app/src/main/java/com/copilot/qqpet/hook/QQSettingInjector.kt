@@ -1,10 +1,12 @@
 package com.copilot.qqpet.hook
 
-import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.copilot.qqpet.HookEntry
-import com.copilot.qqpet.ui.QQSettingDialog
+import com.copilot.qqpet.ui.QQSettingFragment
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 
@@ -12,6 +14,9 @@ object QQSettingInjector {
 
     private const val TAG = "QQSettingInjector"
     private const val DEFAULT_ITEM_INDEX = 2
+
+    // 延迟创建：纯 JVM 单测里 Looper 不可用，object 初始化阶段不能触碰
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
     @Volatile
     var isHooked = false
@@ -22,6 +27,7 @@ object QQSettingInjector {
     }
 
     fun inject(classLoader: ClassLoader) {
+        PublicFragmentHostHook.install(classLoader)
         if (isHooked) return
 
         val providerClassNames = resolveProviderClassNames()
@@ -256,18 +262,26 @@ object QQSettingInjector {
     }
 
     private fun onSettingEntryClick(context: Context) {
+        HookLog.trace(TAG, "入口被点击 context=${context.javaClass.name}")
         HookLog.log(TAG, "⚡ 用户在 QQ 设置中点击了「Q宠后台伴侣」！")
         try {
             HookEntry.globalEngine?.startBackgroundLoop(context.applicationContext)
-            if (context is Activity) {
-                context.runOnUiThread {
-                    QQSettingDialog.show(context, HookEntry.globalEngine)
-                }
-            } else {
-                HookLog.log(TAG, "设置入口宿主不是 Activity，无法打开设置弹窗")
-            }
+            mainHandler.post { openSettingPage(context) }
         } catch (t: Throwable) {
-            HookLog.log(TAG, "调起伴侣控制弹窗失败: ${t.message}")
+            HookLog.trace(TAG, "调起设置页异常", t)
+        }
+    }
+
+    /** 用宿主自己的通用 Fragment 容器打开设置页，形态与 QQ 原生设置页一致 */
+    private fun openSettingPage(context: Context) {
+        try {
+            val loader = HookEntry.latestClassLoader ?: context.classLoader
+            val hostClass = loader.loadClass("com.tencent.mobileqq.activity.QPublicFragmentActivity")
+            val start = hostClass.getMethod("start", Context::class.java, Intent::class.java, Class::class.java)
+            start.invoke(null, context, null, QQSettingFragment::class.java)
+            HookLog.trace(TAG, "已请求宿主容器打开设置页")
+        } catch (t: Throwable) {
+            HookLog.trace(TAG, "打开设置页失败", t)
         }
     }
 }

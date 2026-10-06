@@ -1,11 +1,9 @@
 package com.copilot.qqpet.ui.section
 
-import android.app.Dialog
+import android.app.Activity
 import android.content.Context
-import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -15,73 +13,39 @@ import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.theme.ThemeColors
 import com.copilot.qqpet.ui.util.UiAnimUtils
+import com.tencent.biz.qui.quisecnavbar.BaseAction
+import com.tencent.biz.qui.quisecnavbar.QUISecNavBar
 
 class SettingStatusCard(
     private val context: Context,
     private val colors: ThemeColors,
     private val engine: PetAdventureEngine?,
-    private val fullRoot: View,
-    private val dialogProvider: () -> Dialog?
+    private val onBack: () -> Unit
 ) {
+
+    private companion object {
+        /** QUISecNavBar 的 setXxxType 语义：0=隐藏、1=文字、左/右 2 或 3=图标 */
+        const val NAV_LEFT_ICON = 2
+        const val NAV_CENTER_TEXT = 1
+    }
 
     private lateinit var statusActionText: TextView
     private lateinit var statusAttributesText: TextView
 
+    /**
+     * 顶栏直接使用宿主自己的 QUI 组件 [QUISecNavBar]（QQ 设置页同款）：
+     * 返回键、标题、右侧文案与状态栏让位都由它负责。
+     */
     fun buildTopBar(): View {
-        val topBar = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(colors.pageBg)
-            setPadding(UiAnimUtils.dp(context, 12), UiAnimUtils.dp(context, 8), UiAnimUtils.dp(context, 16), UiAnimUtils.dp(context, 10))
-        }
-
-        val backBtn = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(UiAnimUtils.dp(context, 4), UiAnimUtils.dp(context, 4), UiAnimUtils.dp(context, 10), UiAnimUtils.dp(context, 4))
-            UiAnimUtils.applyTouchSpringEffect(this)
-            setOnClickListener {
-                UiAnimUtils.dismissWithAnimation(fullRoot, dialogProvider())
-            }
-        }
-        backBtn.addView(TextView(context).apply {
-            text = "‹"
-            textSize = 24f
-            typeface = Typeface.create("sans-serif-light", Typeface.BOLD)
-            setTextColor(if (colors.isNight) Color.parseColor("#0A84FF") else Color.parseColor("#007AFF"))
-            setPadding(0, 0, UiAnimUtils.dp(context, 2), UiAnimUtils.dp(context, 2))
-        })
-        backBtn.addView(TextView(context).apply {
-            text = "设置"
-            textSize = 17f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setTextColor(if (colors.isNight) Color.parseColor("#0A84FF") else Color.parseColor("#007AFF"))
-        })
-        topBar.addView(backBtn)
-
-        val navTitle = TextView(context).apply {
-            text = "Q宠后台伴侣"
-            textSize = 17f
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            setTextColor(colors.primaryText)
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f)
-        }
-        topBar.addView(navTitle)
-
-        val statusPill = TextView(context).apply {
-            text = "● 运行中"
-            textSize = 11.5f
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            setTextColor(colors.badgeText)
-            setPadding(UiAnimUtils.dp(context, 8), UiAnimUtils.dp(context, 3), UiAnimUtils.dp(context, 8), UiAnimUtils.dp(context, 3))
-            background = GradientDrawable().apply {
-                setColor(this@SettingStatusCard.colors.badgeBg)
-                cornerRadius = UiAnimUtils.dp(context, 10).toFloat()
-            }
-        }
-        topBar.addView(statusPill)
-        return topBar
+        val navBar = QUISecNavBar(context)
+        navBar.setLeftType(NAV_LEFT_ICON)
+        navBar.setCenterType(NAV_CENTER_TEXT)
+        navBar.setCenterText("Q宠后台伴侣")
+        navBar.setBaseViewDescription(BaseAction.ACTION_LEFT_BUTTON, "返回")
+        navBar.setBaseClickListener(BaseAction.ACTION_LEFT_BUTTON, View.OnClickListener { onBack() })
+        // 宿主窗口状态栏透明 + 导航栏自身让出状态栏高度（内部走 RFWImmersiveUtils）
+        (context as? Activity)?.let { navBar.w(it) }
+        return navBar
     }
 
     fun buildStatusCard(): View {

@@ -2,7 +2,6 @@ package com.copilot.qqpet.ui.util
 
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
-import android.app.Dialog
 import android.content.Context
 import android.util.TypedValue
 import android.view.HapticFeedbackConstants
@@ -27,20 +26,6 @@ object UiAnimUtils {
             value,
             context.resources.displayMetrics
         )
-    }
-
-    fun dismissWithAnimation(rootView: View, dialog: Dialog?) {
-        val screenWidth = rootView.context.resources.displayMetrics.widthPixels.toFloat()
-        rootView.animate()
-            .translationX(screenWidth)
-            .setDuration(220)
-            .setInterpolator(DecelerateInterpolator(2.0f))
-            .withEndAction {
-                try {
-                    dialog?.dismiss()
-                } catch (_: Throwable) {}
-            }
-            .start()
     }
 
     @SuppressLint("ClickableViewAccessibility")

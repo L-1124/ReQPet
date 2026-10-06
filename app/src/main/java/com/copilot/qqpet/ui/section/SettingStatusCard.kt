@@ -2,6 +2,8 @@ package com.copilot.qqpet.ui.section
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.Color
+import android.os.Build
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.View
@@ -40,8 +42,28 @@ class SettingStatusCard(
         navBar.setCenterText("Q宠后台伴侣")
         navBar.setBaseViewDescription(BaseAction.ACTION_LEFT_BUTTON, "返回")
         navBar.setBaseClickListener(BaseAction.ACTION_LEFT_BUTTON, View.OnClickListener { onBack() })
-        (context as? Activity)?.let { navBar.w(it) }
+        if (context is Activity) applyStatusBarInset(context, navBar)
         return navBar
+    }
+
+    /** 宿主 QUISecNavBar 里做这事的 `w(Activity)` 是混淆名，不能依赖，故自行处理状态栏 */
+    private fun applyStatusBarInset(activity: Activity, navBar: View) {
+        activity.window?.apply {
+            statusBarColor = Color.TRANSPARENT
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                @Suppress("DEPRECATION")
+                decorView.systemUiVisibility = if (colors.isNight) {
+                    decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                } else {
+                    decorView.systemUiVisibility or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                }
+            }
+        }
+        val resId = activity.resources.getIdentifier("status_bar_height", "dimen", "android")
+        val inset = if (resId > 0) activity.resources.getDimensionPixelSize(resId) else 0
+        if (inset > 0) {
+            navBar.setPadding(navBar.paddingLeft, navBar.paddingTop + inset, navBar.paddingRight, navBar.paddingBottom)
+        }
     }
 
     fun buildStatusCard(): View {

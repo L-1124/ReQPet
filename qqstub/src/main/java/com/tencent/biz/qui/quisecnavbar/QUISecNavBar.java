@@ -1,6 +1,5 @@
 package com.tencent.biz.qui.quisecnavbar;
 
-import android.app.Activity;
 import android.content.Context;
 import android.view.View;
 import android.widget.RelativeLayout;
@@ -42,7 +41,4 @@ public class QUISecNavBar extends RelativeLayout {
     public void setBaseViewVisible(BaseAction action, boolean visible) {
     }
 
-    /** 绑定宿主窗口：透明状态栏 + 自身让出状态栏高度 */
-    public void w(Activity activity) {
-    }
 }

@@ -26,6 +26,7 @@ class HostAwareClassLoader(
             "com.tencent.widget.",
             "com.tencent.qqnt.",
             "com.tencent.biz.",
+            "com.tencent.qui.",
             "com.tencent.richframework.",
             "com.tencent.qqmini.",
             "cooperation.",

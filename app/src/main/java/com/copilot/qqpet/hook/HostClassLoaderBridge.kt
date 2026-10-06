@@ -20,6 +20,7 @@ class HostAwareClassLoader(
 
     companion object {
         private val HOST_PREFIXES = arrayOf(
+            "androidx.fragment.",
             "com.tencent.mobileqq.",
             "com.tencent.common.app.",
             "com.tencent.qphone.base.",

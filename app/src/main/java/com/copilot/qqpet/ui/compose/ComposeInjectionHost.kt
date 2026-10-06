@@ -54,11 +54,10 @@ class ComposeInjectionHost : LifecycleOwner, ViewModelStoreOwner, SavedStateRegi
     fun installOwnersOnAttach(root: View) {
         root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) {
-                var node: View? = v
-                while (node != null) {
-                    tagOwners(node)
-                    node = node.parent as? View
-                }
+                // 只标到宿主 fragment 容器为止：Compose 会从 rootView 找 owner，容器那一层必须有；
+                // 再往上打到 Activity/DecorView 没有意义，且会污染宿主的视图链。
+                tagOwners(v)
+                (v.parent as? View)?.let { tagOwners(it) }
             }
 
             override fun onViewDetachedFromWindow(v: View) = Unit

@@ -24,7 +24,7 @@ class OidbChannel(
         private const val OBSERVER_CLASS = "com.tencent.ergo.hostdelegate.pb.PetPbDelegate\$a"
         private const val DELEGATE_PKG = "com.tencent.mobileqq.qqpet.delegate."
 
-                const val MASTER_OFF_CODE = -101
+        const val MASTER_OFF_CODE = -101
 
         @Volatile
         var resolvedDelegateClass: Class<*>? = null
@@ -40,15 +40,21 @@ class OidbChannel(
             context?.classLoader?.let { if (!loaders.contains(it)) loaders.add(it) }
             try {
                 Thread.currentThread().contextClassLoader?.let { if (!loaders.contains(it)) loaders.add(it) }
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+            }
             try {
                 HookEntry.latestClassLoader?.let { if (!loaders.contains(it)) loaders.add(it) }
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+            }
             appendMobileQQLoaders(primaryLoader, context, loaders)
             return loaders
         }
 
-        private fun appendMobileQQLoaders(primaryLoader: ClassLoader, context: Context?, loaders: MutableList<ClassLoader>) {
+        private fun appendMobileQQLoaders(
+            primaryLoader: ClassLoader,
+            context: Context?,
+            loaders: MutableList<ClassLoader>
+        ) {
             try {
                 val candidateLoaders = listOfNotNull(primaryLoader, context?.classLoader, HookEntry.latestClassLoader)
                 for (l in candidateLoaders) {
@@ -63,9 +69,11 @@ class OidbChannel(
                             if (cl != null && !loaders.contains(cl)) loaders.add(cl)
                         }
                         break
-                    } catch (_: Throwable) {}
+                    } catch (_: Throwable) {
+                    }
                 }
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+            }
         }
 
         fun tryLoadClass(name: String, loader: ClassLoader): Class<*>? {
@@ -111,7 +119,10 @@ class OidbChannel(
                         if (observerCls == null) {
                             observerCls = targetMethod.parameterTypes[4]
                         }
-                        Log.i(TAG, "🎯 动态多源自适应命中 QQ 宠物原生发包代理类: $className, 发包方法: ${targetMethod.name}")
+                        Log.i(
+                            TAG,
+                            "🎯 动态多源自适应命中 QQ 宠物原生发包代理类: $className, 发包方法: ${targetMethod.name}"
+                        )
                         return Triple(cls, targetMethod, observerCls)
                     }
                 }
@@ -196,13 +207,15 @@ class OidbChannel(
                     field.isAccessible = true
                     val inst = field.get(null)
                     if (inst != null) return inst
-                } catch (_: Throwable) {}
+                } catch (_: Throwable) {
+                }
             }
         }
         try {
             val noArg = cls.getDeclaredConstructor().apply { isAccessible = true }
             return noArg.newInstance()
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
         for (cons in cls.declaredConstructors) {
             try {
                 cons.isAccessible = true
@@ -215,7 +228,8 @@ class OidbChannel(
                 }
                 val inst = cons.newInstance(*args)
                 if (inst != null) return inst
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+            }
         }
         return null
     }
@@ -238,7 +252,8 @@ class OidbChannel(
                         }
                     }
                 }
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+            }
         }
         return ""
     }
@@ -254,7 +269,8 @@ class OidbChannel(
             if (uinPart.isNotEmpty() && uinPart.all { it.isDigit() }) {
                 return uinPart
             }
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
         return ""
     }
 
@@ -272,6 +288,13 @@ class OidbChannel(
         if (!RuntimeSwitches.masterEnabled) {
             Log.w(TAG, "总开关未开启：拦截发包 $commandName")
             deliverOnce(requestId, commandName, callback, MASTER_OFF_CODE, null, "总开关未开启")
+            return requestId
+        }
+
+        // 熔断器打开时快速失败，不发反射包，避免持续冲击故障域
+        if (!ProtocolBreakers.allowSend(commandName)) {
+            Log.w(TAG, "熔断器打开：快速失败 $commandName")
+            deliverOnce(requestId, commandName, callback, ProtocolBreakers.FAST_FAIL_CODE, null, "协议域熔断中")
             return requestId
         }
 
@@ -340,6 +363,11 @@ class OidbChannel(
         data: ByteArray?,
         errorMsg: String?
     ) {
+        // 真实回包才参与熔断统计；本地快速失败码不计入
+        if (code != MASTER_OFF_CODE && code != ProtocolBreakers.FAST_FAIL_CODE) {
+            ProtocolBreakers.recordOutcome(commandName, code)
+            ProtocolBreakers.recordRequest(commandName, code)
+        }
         try {
             callback(code, data, errorMsg)
         } catch (t: Throwable) {

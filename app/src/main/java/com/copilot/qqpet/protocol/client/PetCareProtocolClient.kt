@@ -2,6 +2,7 @@ package com.copilot.qqpet.protocol.client
 
 import com.copilot.qqpet.hook.HookLog as Log
 import com.copilot.qqpet.protocol.ProtoWire
+import com.copilot.qqpet.protocol.ProtoWireText
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.protocol.QQPetDirectBridge.PetAttributes
 import com.copilot.qqpet.protocol.channel.OidbChannel
@@ -25,7 +26,7 @@ class PetCareProtocolClient(
         channel.sendOidb("OidbSvcTrpcTcp.0x95e1_0", 38369, 0, ByteArray(0)) { code, data, _ ->
             var petId: String? = null
             if (code == 0 && data != null) {
-                val allStrings = ProtoWire.extractAllStrings(data)
+                val allStrings = ProtoWireText.extractAllStrings(data)
                 Log.i(TAG, "0x95e1_0 回包所有字符串: $allStrings")
                 val petBytes = ProtoWire.firstBytes(data, 1)
                 petId = ProtoWire.firstString(petBytes, 101)

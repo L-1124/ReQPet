@@ -3,6 +3,7 @@ package com.copilot.qqpet.protocol.client
 import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.hook.HookLog as Log
 import com.copilot.qqpet.protocol.ProtoWire
+import com.copilot.qqpet.protocol.ProtoWireText
 import com.copilot.qqpet.protocol.QQPetDirectBridge.HireableFriend
 import com.copilot.qqpet.protocol.QQPetDirectBridge.LikeMember
 import com.copilot.qqpet.protocol.channel.OidbChannel
@@ -192,7 +193,7 @@ class PetSocialProtocolClient(
             var friendPetId = ProtoWire.firstString(profileBytes, 8)?.trim()
                 ?: ProtoWire.firstString(profileBytes, 101)?.trim() ?: ""
             if (friendPetId.isEmpty() && profileBytes != null) {
-                val candidates = ProtoWire.extractAllStrings(profileBytes)
+                val candidates = ProtoWireText.extractAllStrings(profileBytes)
                 friendPetId = candidates.firstOrNull { str: String ->
                     AccountSessionGuard.extractOwnerUinFromPetId(str) == friendUin.toString()
                 }.orEmpty()

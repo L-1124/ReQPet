@@ -4,6 +4,7 @@ import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.hook.HookLog as Log
 import com.copilot.qqpet.protocol.ProtoWire
+import com.copilot.qqpet.protocol.ProtoWireText
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.protocol.QQPetDirectBridge.SecondMapDetails
 import com.copilot.qqpet.protocol.QQPetDirectBridge.SelectEvent
@@ -78,7 +79,7 @@ class PetCareerProtocolClient(
                 onFatigueDetected(fatigued, effectiveTip)
                 val employedUin = parseEmployedUin(data)
                 val selfUin = AccountSessionGuard.extractOwnerUinFromPetId(petId).toLongOrNull() ?: 0L
-                val storyText = ProtoWire.extractAllStrings(data).joinToString("\n")
+                val storyText = ProtoWireText.extractAllStrings(data).joinToString("\n")
                 val hiredByCopy = PetPureCalculations.hiredByFriendEvidence(storyText) != null
                 val isHired = hiredByCopy || PetPureCalculations.isEmployedByFriend(employedUin, selfUin)
                 val note = describeHireBody(data)
@@ -92,7 +93,7 @@ class PetCareerProtocolClient(
         }
     }
 
-    private fun describeHireBody(data: ByteArray): String = ProtoWire.hireScan(data)
+    private fun describeHireBody(data: ByteArray): String = ProtoWireText.hireScan(data)
 
     private fun parseEmployedUin(data: ByteArray): Long {
         // 0x975f 实测整包没有 QQ 号。字段 4 是「最高额外+42%」这类加成文案，不能当成开工请求里的用户信息。
@@ -105,7 +106,7 @@ class PetCareerProtocolClient(
         val tipContent = ProtoWire.firstString(tipBytes, 2)?.trim() ?: ""
         val tipExtra = ProtoWire.firstString(tipBytes, 3)?.trim() ?: ""
         val tipMarkdown = ProtoWire.firstString(tipBytes, 4)?.trim() ?: ""
-        val allStrings = ProtoWire.extractAllStrings(data)
+        val allStrings = ProtoWireText.extractAllStrings(data)
         val matchedStr = listOf(tipContent, tipMarkdown, tipExtra).firstOrNull { s: String ->
             QQPetDirectBridge.containsFatigueKeyword(s)
         } ?: allStrings.firstOrNull { s: String ->
@@ -329,7 +330,7 @@ class PetCareerProtocolClient(
             }
         }
         if (foundFatigueTip == null) {
-            val rawTip = ProtoWire.extractAllStrings(data).firstOrNull { s: String -> QQPetDirectBridge.containsFatigueKeyword(s) }
+            val rawTip = ProtoWireText.extractAllStrings(data).firstOrNull { s: String -> QQPetDirectBridge.containsFatigueKeyword(s) }
             if (rawTip != null) {
                 foundFatigueTip = rawTip.replace(Regex("!\\[[^\\]]*\\]\\([^)]*\\)"), "")
                     .replace(Regex("\\[[^\\]]*\\]\\([^)]*\\)"), "").replace(Regex("\\s+"), " ").trim()

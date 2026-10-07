@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import com.copilot.qqpet.engine.StealthScheduler
 import com.copilot.qqpet.engine.utils.PetPureCalculations
@@ -140,7 +141,7 @@ object PetHiredRecallTask {
         val (rCode, rErr) = recallStoryAwait(bridge, param.currentStoryId, petId)
         if (rCode == 0) {
             onLog("🎉 [提前召回成功] 宠物已提前回家，正在领取雇佣收益...")
-            delay(800L)
+            delay(randomJitter(480L, 1120L))
             val (sCode, _) = settleStoryAwait(bridge, param.currentStoryId, petId)
             if (sCode == 0) onLog("✅ [雇佣收益入账] 基础工资与最高加成奖金已全额入账！")
             return HiredMonitorDecision(isHired = true, hasRecalled = true, nextSleepMillis = 4000L, settled = sCode == 0)

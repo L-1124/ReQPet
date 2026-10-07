@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.utils.randomJitter
 import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
 import com.copilot.qqpet.engine.ActiveVisitHelper
@@ -109,14 +110,14 @@ object PetSocialTask {
                 if (lCode == 0) {
                     successCount++
                     onLog("✅ [自动回踩] 成功回赠$typeDesc $name！")
-                    delay(2500L)
+                    delay(randomJitter(1500L, 3500L))
                 } else {
                     if (isManual) onLog("ℹ️ [访客回踩] $name 今日已回赠过 (code=136202)")
-                    delay(1800L)
+                    delay(randomJitter(1080L, 2520L))
                 }
             } else {
                 if (isManual) onLog("⚠️ [访客回踩] 回赠 $name 失败 (code=$lCode)")
-                delay(1200L)
+                delay(randomJitter(720L, 1680L))
             }
         }
         if (successCount > 0) {
@@ -197,7 +198,7 @@ object PetSocialTask {
                 break
             }
             cookie = page.nextCookie
-            delay(150L)
+            delay(randomJitter(90L, 210L))
         }
         return discoveredBags.values.toList()
     }
@@ -317,7 +318,7 @@ object PetSocialTask {
             } else if (isManual) {
                 onLog("⚠️ [自家福袋] 拆领地面福袋失败 (code=${res.code}, err=${res.errorMsg})")
             }
-            delay(1500L)
+            delay(randomJitter(900L, 2100L))
         }
     }
 
@@ -339,7 +340,7 @@ object PetSocialTask {
                 if (isSelfBag) QQPetDirectBridge.cachedOwnCoinBagId = null
                 val goldStr = if (res.gotGold > 0L) "，斩获 +${res.gotGold} 金币" else ""
                 onLog("🎉 [$tagPrefix] 成功拆开 $label 的福袋$goldStr！")
-                delay(1800L)
+                delay(randomJitter(1080L, 2520L))
                 SnatchOutcome.SUCCESS
             }
 
@@ -355,12 +356,12 @@ object PetSocialTask {
             135091, 135092, 135096 -> {
                 AccountSessionStore.markCoinBagHandledToday(context, currentUin, bag.coinbagId)
                 if (isSelfBag) QQPetDirectBridge.cachedOwnCoinBagId = null
-                delay(800L)
+                delay(randomJitter(480L, 1120L))
                 SnatchOutcome.SKIP
             }
 
             else -> {
-                delay(1000L)
+                delay(randomJitter(600L, 1400L))
                 SnatchOutcome.FAIL
             }
         }

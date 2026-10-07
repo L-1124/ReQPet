@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.utils.randomJitter
 import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
 import com.copilot.qqpet.engine.PetAccountGateway
@@ -128,7 +129,7 @@ object PetFriendCareTask {
         for (friend in friends) {
             val attrs = PetCareTask.queryPetAttributesAwait(params.bridge, friend.petId, isSelf = false)
             if (attrs == null) {
-                delay(1200L)
+                delay(randomJitter(720L, 1680L))
                 continue
             }
             checked++
@@ -195,7 +196,7 @@ object PetFriendCareTask {
                 onLog("🛒 [好友投喂采购] 背包食物耗尽，自动补购 5 份爱心饼干...")
                 val (buyCode, buyErr) = PetCareTask.buyFoodAwait(req.bridge, req.ownPetId, 5L, "1")
                 if (buyCode == 0) {
-                    delay(1200L)
+                    delay(randomJitter(720L, 1680L))
                     val (_, _, items) = fetchFoodInventoryAwait(req.bridge)
                     foodItemId = items.firstOrNull { it.balance > 0 }?.itemId ?: foodItemId
                     res = feedDetailedAwait(req.bridge, req.friend.petId, req.friend.uin.toString(), foodItemId)
@@ -234,7 +235,7 @@ object PetFriendCareTask {
             val (buyCode, _) = PetCareTask.buyFoodAwait(bridge, ownPetId, 5L, "1")
             if (buyCode == 0) {
                 onLog("✅ [好友投喂采购] 成功采购 5 份爱心饼干！")
-                delay(1200L)
+                delay(randomJitter(720L, 1680L))
             }
         }
         return itemId
@@ -293,7 +294,7 @@ object PetFriendCareTask {
         val (buyCode, orderResult, buyErr) = PetCareTask.buyBathItemAwait(bridge, ownPetId, itemId, 5, scene = 21L)
         return if (buyCode == 0 && (orderResult == 1 || orderResult == 0)) {
             onLog("✅ [好友洗护采购] 成功购入 5 份${itemName}！")
-            delay(1200L)
+            delay(randomJitter(720L, 1680L))
             Pair(true, null)
         } else {
             val reason = if (orderResult == 2) "金币不足" else (buyErr ?: "code=$buyCode, orderResult=$orderResult")

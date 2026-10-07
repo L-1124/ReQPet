@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import android.content.Intent
 import com.copilot.qqpet.engine.PetAdventureEngine
@@ -123,7 +124,7 @@ object PetWorkTask {
                     return WorkStartWithHireResult(code, storyId, errMsg, null)
                 }
                 onLog("ℹ️ [雇佣顺延] 雇佣好友「$friendLabel」未能生效 (code=$code ${errMsg ?: ""})，尝试下一候选或回退单人打工...")
-                delay(350L)
+                delay(randomJitter(210L, 489L))
             }
         }
         val (soloCode, soloStoryId, soloErr) = startWorkAwait(
@@ -298,14 +299,14 @@ object PetWorkTask {
             }
             if (!page.hasMore || page.nextCookie.isEmpty() || page.nextCookie == cookie) break
             cookie = page.nextCookie
-            delay(1000L)
+            delay(randomJitter(600L, 1400L))
         }
         if (mergedMap.isEmpty() && existingMap.isNotEmpty()) mergedMap.putAll(existingMap)
         val selectedUins = RosterStore.loadSavedHireFriendUins(context, currentUin)
         if (enrichSelectedAndTop && mergedMap.isNotEmpty()) {
             val toEnrich = selectedUins.filter { mergedMap.containsKey(it) }.take(5)
             for (u in toEnrich) {
-                mergedMap[u]?.let { mergedMap[u] = enrichFriendDetailsAwait(bridge, it); delay(1000L) }
+                mergedMap[u]?.let { mergedMap[u] = enrichFriendDetailsAwait(bridge, it); delay(randomJitter(600L, 1400L)) }
             }
         }
         val sortedList = mergedMap.values.sortedWith(

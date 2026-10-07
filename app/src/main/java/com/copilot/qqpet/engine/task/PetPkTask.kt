@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
@@ -112,7 +113,7 @@ object PetPkTask {
             if (sRes?.code == 0) {
                 onLog("🎉 [自动PK] 历史对决结算完成！斩获金币: +${sRes.goldEarned}")
             }
-            delay(1200L)
+            delay(randomJitter(720L, 1680L))
         }
         if (!pkStatus.canPk && pkStatus.rawStatus != 100 && pkStatus.rawStatus != 300) {
             onLog("ℹ️ [自动PK] 对手「${cand.userNick}」当前不可对决 (rawStatus=${pkStatus.rawStatus})，寻找下一位...")

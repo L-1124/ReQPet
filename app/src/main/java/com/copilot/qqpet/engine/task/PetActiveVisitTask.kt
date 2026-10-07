@@ -4,6 +4,7 @@ import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
 import com.copilot.qqpet.engine.ActiveVisitHelper
 import com.copilot.qqpet.engine.state.AccountSessionStore
+import com.copilot.qqpet.engine.utils.randomJitter
 import com.copilot.qqpet.engine.state.RosterStore
 import com.copilot.qqpet.engine.resilience.RateLimitExceededException
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -125,7 +126,7 @@ object PetActiveVisitTask {
 
                     else -> {
                         onLog("⚠️ [主动串门] $label (${t.uin}) 发送失败 (code=$code)")
-                        delay(1800L)
+                        delay(randomJitter(1080L, 2520L))
                     }
                 }
             } catch (e: RateLimitExceededException) {

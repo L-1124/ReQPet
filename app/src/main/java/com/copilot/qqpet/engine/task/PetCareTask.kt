@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.delay
@@ -148,7 +149,7 @@ object PetCareTask {
                     }
                 }
             } catch (_: Throwable) {}
-            delay(600L)
+            delay(randomJitter(360L, 840L))
             withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
                     bridge.bath(petId, cleanValue = 100, stage = 2, petUin = petUin) { code, data, _ ->
@@ -242,7 +243,7 @@ object PetCareTask {
             onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干$curStr")
             if (param.targetThreshold > 0 && curEnergy >= param.targetThreshold) break
             if (curEnergy >= param.maxEnergy) break
-            delay(500L)
+            delay(randomJitter(300L, 700L))
         }
 
         if (fedCount > 0) {
@@ -262,7 +263,7 @@ object PetCareTask {
             val (buyCode, buyErr) = buyFoodAwait(bridge, petId, 5L, "1")
             if (buyCode == 0) {
                 onLog("✅ [自动采购] 5 份爱心饼干采购入库成功！继续为小宠喂食...")
-                delay(500L)
+                delay(randomJitter(300L, 700L))
                 val (retryCode, _) = feedAwait(bridge, petId)
                 return Pair(retryCode, if (retryCode == 0) null else "重试喂食回包 code=$retryCode")
             } else {
@@ -320,7 +321,7 @@ object PetCareTask {
             balance = res.remainBalance
             onLog("🧼 [搓澡进度] 消耗 1 份${target.itemName} (+${res.addedClean}) -> 清洁度 $curClean（阈值 ${target.threshold}）(剩余库存: $balance)")
             if (curClean >= target.threshold || res.isFullClean || curClean >= target.maxClean) break
-            delay(450L)
+            delay(randomJitter(270L, 630L))
         }
         return BathLoopResult(true, 0, curClean, totalAdded, balance, null)
     }
@@ -355,7 +356,7 @@ object PetCareTask {
         val (buyCode, orderResult, buyErr) = buyBathItemAwait(bridge, petId, itemId, buyCount)
         if (buyCode == 0 && (orderResult == 1 || orderResult == 0)) {
             onLog("✅ [自动采购] 成功购入 $buyCount 份${itemName}！继续为小宠搓澡...")
-            delay(400L)
+            delay(randomJitter(240L, 560L))
             return Triple(buyCount, buyCount, null)
         }
         val reason = if (orderResult == 2) "金币不足" else (buyErr ?: "code=$buyCode, orderResult=$orderResult")

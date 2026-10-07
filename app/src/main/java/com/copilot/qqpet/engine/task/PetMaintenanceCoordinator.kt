@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
@@ -57,7 +58,7 @@ object PetMaintenanceCoordinator {
             if (attrs.clean < PetAdventureEngine.prefCareCleanThreshold) {
                 PetCareTask.bathWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareCleanThreshold) { PetAdventureEngine.sendLog(context, it) }
             }
-            delay(1200L)
+            delay(randomJitter(720L, 1680L))
         }
     }
 

@@ -41,6 +41,7 @@ object PublicFragmentHostHook {
             installed = true
             HookLog.trace(TAG, "已挂钩 $ACTIVITY_CLASS#$METHOD_CREATE_FRAGMENT")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.trace(TAG, "挂钩通用 Fragment 容器失败", t)
         }
     }
@@ -49,6 +50,7 @@ object PublicFragmentHostHook {
         return try {
             QQSettingFragment().apply { arguments = activity.intent?.extras }
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.trace(TAG, "QQSettingFragment() 抛异常", t)
             null
         }

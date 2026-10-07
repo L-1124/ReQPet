@@ -15,7 +15,8 @@ object HookLog {
         if (isDebugEnabled) {
             try {
                 HookApi.log(Log.INFO, tag, msg)
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.i(tag, msg)
             }
         }
@@ -33,7 +34,8 @@ object HookLog {
         try {
             val suffix = if (t != null) " -> ${t.javaClass.name}: ${t.message}\n${Log.getStackTraceString(t)}" else ""
             Log.i(TRACE_TAG, "[$tag] $msg$suffix")
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
     }
 
@@ -53,7 +55,8 @@ object HookLog {
         val fullMsg = "$msg$trace"
         try {
             HookApi.log(Log.ERROR, tag, fullMsg)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
         Log.e(tag, fullMsg)
     }

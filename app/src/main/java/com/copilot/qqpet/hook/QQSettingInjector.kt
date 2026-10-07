@@ -32,7 +32,8 @@ object QQSettingInjector {
         for (className in providerClassNames) {
             val providerCls = try {
                 Class.forName(className, false, classLoader)
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 continue
             }
 
@@ -45,12 +46,14 @@ object QQSettingInjector {
             try {
                 HookApi.hook(getListMethod).intercept { chain ->
                     val ctx = chain.getArg(0) as? Context
+
                     @Suppress("UNCHECKED_CAST")
                     val groupList = chain.proceed() as? MutableList<Any>
-                    if (ctx != null && groupList != null && groupList.isNotEmpty()) {
+                    if (ctx != null && !groupList.isNullOrEmpty()) {
                         try {
                             handleSettingListInjection(ctx, groupList, classLoader, providerCls)
                         } catch (t: Throwable) {
+                            if (t is kotlinx.coroutines.CancellationException) throw t
                             HookLog.log(TAG, "挂载异常: ${Log.getStackTraceString(t)}")
                         }
                     }
@@ -60,6 +63,7 @@ object QQSettingInjector {
                 HookLog.log(TAG, "成功挂钩设置项提供者: $className (libxposed)")
                 break
             } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
                 HookLog.log(TAG, "挂钩 $className 异常: ${t.message}")
             }
         }
@@ -88,7 +92,9 @@ object QQSettingInjector {
                     val titleVal = titleField.get(item)?.toString()
                     if (titleVal?.contains("Q宠后台伴侣") == true) return true
                 }
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            }
         }
         return false
     }
@@ -194,7 +200,9 @@ object QQSettingInjector {
                 if (QQSettingItemFactory.hasStandardItemConstructor(cls) && !candidates.contains(cls)) {
                     candidates.add(cls)
                 }
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            }
         }
 
         // 3. 动态探测 sampleGroup 中的条目（排除专有业务类与搜索组件）
@@ -219,7 +227,9 @@ object QQSettingInjector {
                     if (contractCls.isAssignableFrom(cls) && !candidates.contains(cls)) {
                         candidates.add(cls)
                     }
-                } catch (_: Throwable) {}
+                } catch (e: Throwable) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                }
             }
         }
 
@@ -229,7 +239,11 @@ object QQSettingInjector {
     private fun extractSampleItems(sampleGroup: Any): List<Any> {
         for (f in sampleGroup.javaClass.declaredFields) {
             f.isAccessible = true
-            val obj = try { f.get(sampleGroup) } catch (_: Throwable) { null }
+            val obj = try {
+                f.get(sampleGroup)
+            } catch (e: Exception) {
+                null
+            }
             if (obj is List<*> && obj.isNotEmpty()) {
                 val list = obj.filterNotNull()
                 if (list.isNotEmpty()) return list
@@ -265,6 +279,7 @@ object QQSettingInjector {
             HookEntry.globalEngine?.startBackgroundLoop(context.applicationContext)
             mainHandler.post { openSettingPage(context) }
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.trace(TAG, "调起设置页异常", t)
         }
     }
@@ -278,6 +293,7 @@ object QQSettingInjector {
             start.invoke(null, context, null, QQSettingFragment::class.java)
             HookLog.trace(TAG, "已请求宿主容器打开设置页")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.trace(TAG, "打开设置页失败", t)
         }
     }

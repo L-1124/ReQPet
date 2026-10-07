@@ -61,7 +61,8 @@ object QQSettingItemFactory {
                 }
             }
             constructor.newInstance(*args)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
     }
@@ -89,7 +90,8 @@ object QQSettingItemFactory {
                 if ((f.name == "h" || f.name == "subTitle") && (CharSequence::class.java.isAssignableFrom(f.type) || f.type == String::class.java)) {
                     f.set(item, "纯后台全自动调度")
                 }
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e}
         }
 
         val clickListenerMethod = itemCls.declaredMethods.firstOrNull { m ->
@@ -112,6 +114,7 @@ object QQSettingItemFactory {
             clickListenerMethod.invoke(item, clickProxy)
             HookLog.log(TAG, "成功绑定点击代理！")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.log(TAG, "绑定点击代理失败: ${t.message}")
         }
     }
@@ -135,7 +138,8 @@ object QQSettingItemFactory {
                     }
                     return c.newInstance(*args)
                 }
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e}
         }
         return null
     }

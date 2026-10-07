@@ -79,6 +79,7 @@ object HostClassLoaderBridge {
             installed = true
             true
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.trace(TAG, "接入宿主分流 shim 失败", t)
             false
         }

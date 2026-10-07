@@ -15,7 +15,8 @@ object TinkerBlocker {
         return try {
             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             prefs.getBoolean(PreferencesHelper.KEY_DISABLE_TINKER_PATCH, false)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             false
         }
     }
@@ -49,7 +50,8 @@ object TinkerBlocker {
                     }
                 }
             }
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e}
 
         // 2. Tinker (上层单例与管理器)
         try {
@@ -60,7 +62,8 @@ object TinkerBlocker {
                         val tinkerObj = chain.thisObject
                         val ctx = try {
                             tinkerCls.getMethod("getContext").invoke(tinkerObj) as? Context
-                        } catch (_: Throwable) {
+                        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                             null
                         }
                         if (isTinkerDisabled(ctx ?: context)) {
@@ -76,7 +79,8 @@ object TinkerBlocker {
                     }
                 }
             }
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e}
 
         // 3. TinkerInstaller (拦截外部补丁升级下发请求)
         try {
@@ -97,7 +101,8 @@ object TinkerBlocker {
                     }
                 }
             }
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e}
 
         // 4. TinkerLoader (拦截冷启动时的补丁加载 tryLoad)
         try {
@@ -115,7 +120,8 @@ object TinkerBlocker {
                     }
                 }
             }
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e}
 
         isHooked = true
         HookLog.log(TAG, "TinkerBlocker 动态拦截器就绪 (libxposed)")

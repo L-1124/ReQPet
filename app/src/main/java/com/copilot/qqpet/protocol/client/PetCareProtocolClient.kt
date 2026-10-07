@@ -63,6 +63,7 @@ class PetCareProtocolClient(
                 }
             }
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             EngineLog.w("PetCareClient", "从 PetHomeResourceManager 获取动态 foodId 失败: ${t.message}")
         }
         return DEFAULT_FOOD_ID
@@ -89,7 +90,7 @@ class PetCareProtocolClient(
     private fun tryReflectFeedBody(petId: String, targetFoodId: Long): ByteArray? {
         return try {
             val bCls = channel.classLoader.loadClass("zh5.b")
-            val bInst = bCls.newInstance()
+            val bInst = bCls.getDeclaredConstructor().newInstance()
             bCls.getField("a").set(bInst, "")
             bCls.getField("b").set(bInst, "")
             bCls.getField("c").set(bInst, "")
@@ -98,7 +99,8 @@ class PetCareProtocolClient(
             val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
             val toByteArrayMethod = nanoCls.getMethod("toByteArray", nanoCls)
             toByteArrayMethod.invoke(null, bInst) as ByteArray
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
     }
@@ -136,7 +138,10 @@ class PetCareProtocolClient(
                 val rawTip = ProtoWire.firstString(data, 3)
                 tipText = if (!rawTip.isNullOrBlank()) rawTip else null
             }
-            EngineLog.i("PetCareClient", "feedDetailed 回包: petId=$petId, code=$code, feedState=$feedState, tip=$tipText")
+            EngineLog.i(
+                "PetCareClient",
+                "feedDetailed 回包: petId=$petId, code=$code, feedState=$feedState, tip=$tipText"
+            )
             callback(FeedDetailResult(code, feedState, tipText, err))
         }
     }
@@ -161,7 +166,10 @@ class PetCareProtocolClient(
                         items.add(FoodInventoryItem(itemId, name, balance, if (energyVal > 0) energyVal else 20))
                     }
                 }
-                EngineLog.i("PetCareClient", "fetchFoodInventory 成功: remain=$remain, total=$total, items=${items.size}")
+                EngineLog.i(
+                    "PetCareClient",
+                    "fetchFoodInventory 成功: remain=$remain, total=$total, items=${items.size}"
+                )
             } else {
                 EngineLog.w("PetCareClient", "fetchFoodInventory 失败: code=$code, err=$err")
             }
@@ -187,11 +195,12 @@ class PetCareProtocolClient(
     private fun tryReflectFeedTimesBody(): ByteArray? {
         return try {
             val dCls = channel.classLoader.loadClass("zh5.d")
-            val dInst = dCls.newInstance()
+            val dInst = dCls.getDeclaredConstructor().newInstance()
             val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
             val toByteArrayMethod = nanoCls.getMethod("toByteArray", nanoCls)
             toByteArrayMethod.invoke(null, dInst) as ByteArray
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
     }
@@ -213,7 +222,10 @@ class PetCareProtocolClient(
                         onAttributesUpdated(attrs)
                         captureOwnBagFromProfile(data, displayBytes)
                     }
-                    EngineLog.i("PetCareClient", "实时三围: energy=${attrs.energy}/${attrs.maxEnergy}, clean=${attrs.clean}/${attrs.maxClean}")
+                    EngineLog.i(
+                        "PetCareClient",
+                        "实时三围: energy=${attrs.energy}/${attrs.maxEnergy}, clean=${attrs.clean}/${attrs.maxClean}"
+                    )
                     callback(0, attrs)
                     return@sendOidb
                 }
@@ -290,15 +302,23 @@ class PetCareProtocolClient(
             var mood = 0f
 
             for (m in displayObj.javaClass.methods) {
-                if (m.parameterTypes.isEmpty() && m.returnType.name.endsWith("\$c")) {
+                if (m.parameterTypes.isEmpty() && m.returnType.name.endsWith($$"$c")) {
                     val cVal = m.invoke(displayObj)
                     if (cVal != null) {
                         val cur = (cVal.javaClass.getMethod("b").invoke(cVal) as? Number)?.toFloat() ?: 0f
                         val max = (cVal.javaClass.getMethod("d").invoke(cVal) as? Number)?.toFloat() ?: 100f
                         when (m.name) {
-                            "f" -> { energy = cur; maxEnergy = max }
-                            "c" -> { clean = cur; maxClean = max }
-                            "d" -> { mood = cur }
+                            "f" -> {
+                                energy = cur; maxEnergy = max
+                            }
+
+                            "c" -> {
+                                clean = cur; maxClean = max
+                            }
+
+                            "d" -> {
+                                mood = cur
+                            }
                         }
                     }
                 }
@@ -309,6 +329,7 @@ class PetCareProtocolClient(
                 return attrs
             }
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             EngineLog.w("PetCareClient", "反射读取宠物属性异常: ${t.message}")
         }
         return null

@@ -46,7 +46,8 @@ object ProtoWireText {
                     else -> skipField(data, pos, wireType)
                 }
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
         return census.toString().ifEmpty { "empty" }
     }
@@ -68,7 +69,8 @@ object ProtoWireText {
                         System.arraycopy(data, start, sub, 0, len)
                         val str = try {
                             String(sub, Charsets.UTF_8)
-                        } catch (_: Throwable) {
+                        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                             ""
                         }
                         val isReadable = str.isNotEmpty() && str.none { it < ' ' && it != '\n' && it != '\r' && it != '\t' } && !str.contains('\uFFFD')
@@ -83,7 +85,8 @@ object ProtoWireText {
                     skipField(data, pos, wireType)
                 }
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
         return result
     }

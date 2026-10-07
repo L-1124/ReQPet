@@ -2,7 +2,7 @@ package com.copilot.qqpet.protocol.channel
 
 import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
-import android.util.Base64
+import java.util.Base64
 import com.copilot.qqpet.RuntimeSwitches
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.AccountSessionGuard
@@ -21,7 +21,7 @@ class OidbChannel(
     companion object {
         private const val TAG = "OidbChannel"
         private const val INTERFACE_CLASS = "com.tencent.ergo.hostdelegate.pb.PetPbDelegate"
-        private const val OBSERVER_CLASS = "com.tencent.ergo.hostdelegate.pb.PetPbDelegate\$a"
+        private const val OBSERVER_CLASS = $$"com.tencent.ergo.hostdelegate.pb.PetPbDelegate$a"
         private const val DELEGATE_PKG = "com.tencent.mobileqq.qqpet.delegate."
 
         const val MASTER_OFF_CODE = -101
@@ -44,11 +44,13 @@ class OidbChannel(
             context?.classLoader?.let { if (!loaders.contains(it)) loaders.add(it) }
             try {
                 Thread.currentThread().contextClassLoader?.let { if (!loaders.contains(it)) loaders.add(it) }
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             }
             try {
                 HookEntry.latestClassLoader?.let { if (!loaders.contains(it)) loaders.add(it) }
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             }
             appendMobileQQLoaders(primaryLoader, context, loaders)
             return loaders
@@ -73,17 +75,20 @@ class OidbChannel(
                             if (cl != null && !loaders.contains(cl)) loaders.add(cl)
                         }
                         break
-                    } catch (_: Throwable) {
+                    } catch (e: Throwable) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
                     }
                 }
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             }
         }
 
         fun tryLoadClass(name: String, loader: ClassLoader): Class<*>? {
             return try {
                 Class.forName(name, false, loader)
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 null
             }
         }
@@ -167,8 +172,8 @@ class OidbChannel(
                 if (params.size == 5 &&
                     params[0] == ByteArray::class.java &&
                     params[1] == String::class.java &&
-                    (params[2] == Int::class.javaPrimitiveType || params[2] == Integer::class.java) &&
-                    (params[3] == Int::class.javaPrimitiveType || params[3] == Integer::class.java) &&
+                    (params[2] == Int::class.javaPrimitiveType || params[2] == Int::class.javaObjectType) &&
+                    (params[3] == Int::class.javaPrimitiveType || params[3] == Int::class.javaObjectType) &&
                     (observerCls == null || observerCls.isAssignableFrom(params[4]) || params[4].isInterface || params[4] == Any::class.java)
                 ) {
                     targetMethod = m
@@ -185,8 +190,6 @@ class OidbChannel(
     private var observerClass: Class<*>? = null
     private val requestTracker = RequestTracker()
 
-    @Volatile
-    var isInternalSending = false
 
     var isReady: Boolean = false
         private set
@@ -201,7 +204,8 @@ class OidbChannel(
                 try {
                     val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
                     cachedDelegateClassName = prefs.getString("cached_delegate_class", null)
-                } catch (_: Throwable) {
+                } catch (e: Throwable) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                 }
             }
             val loaders = getCandidateClassLoaders(classLoader, context)
@@ -217,7 +221,8 @@ class OidbChannel(
                         try {
                             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
                             prefs.edit().putString("cached_delegate_class", cls.name).apply()
-                        } catch (_: Throwable) {
+                        } catch (e: Throwable) {
+                            if (e is kotlinx.coroutines.CancellationException) throw e
                         }
                     }
                     com.copilot.qqpet.protocol.DeviceTrace.bind(context)
@@ -229,6 +234,7 @@ class OidbChannel(
                 EngineLog.e("OidbChannel", "未能在任何可用 ClassLoader 中动态发现实现 PetPbDelegate 的发包代理类")
             }
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             EngineLog.e("OidbChannel", "反射 QQ 发包代理失败: ${t.javaClass.simpleName}: ${t.message}")
         }
     }
@@ -240,14 +246,16 @@ class OidbChannel(
                     field.isAccessible = true
                     val inst = field.get(null)
                     if (inst != null) return inst
-                } catch (_: Throwable) {
+                } catch (e: Throwable) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                 }
             }
         }
         try {
             val noArg = cls.getDeclaredConstructor().apply { isAccessible = true }
             return noArg.newInstance()
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
         for (cons in cls.declaredConstructors) {
             try {
@@ -261,7 +269,8 @@ class OidbChannel(
                 }
                 val inst = cons.newInstance(*args)
                 if (inst != null) return inst
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             }
         }
         return null
@@ -285,7 +294,8 @@ class OidbChannel(
                         }
                     }
                 }
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             }
         }
         return ""
@@ -297,12 +307,13 @@ class OidbChannel(
         val runtimeUin = getCurrentRuntimeUin()
         if (runtimeUin.isNotEmpty()) return runtimeUin
         try {
-            val decoded = String(Base64.decode(petId, Base64.DEFAULT), StandardCharsets.UTF_8)
+            val decoded = String(Base64.getDecoder().decode(petId.trim()), StandardCharsets.UTF_8)
             val uinPart = decoded.substringBefore("-")
             if (uinPart.isNotEmpty() && uinPart.all { it.isDigit() }) {
                 return uinPart
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
         return ""
     }
@@ -339,7 +350,6 @@ class OidbChannel(
             return requestId
         }
         try {
-            isInternalSending = true
             val proxyLoader = obsCls.classLoader ?: classLoader
             val observer = Proxy.newProxyInstance(
                 proxyLoader,
@@ -363,10 +373,9 @@ class OidbChannel(
             }
             method.invoke(instance, request, commandName, command, subCommand, observer)
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             EngineLog.e("OidbChannel", "sendOidb 执行反射调用异常: ${t.javaClass.simpleName}: ${t.message}")
             deliverOnce(requestId, commandName, callback, -2, null, t.message)
-        } finally {
-            isInternalSending = false
         }
         return requestId
     }
@@ -404,7 +413,11 @@ class OidbChannel(
         try {
             callback(code, data, errorMsg)
         } catch (t: Throwable) {
-            EngineLog.e("OidbChannel", "回包处理异常 #$requestId $commandName: ${t.javaClass.simpleName}: ${t.message}")
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            EngineLog.e(
+                "OidbChannel",
+                "回包处理异常 #$requestId $commandName: ${t.javaClass.simpleName}: ${t.message}"
+            )
         }
     }
 }

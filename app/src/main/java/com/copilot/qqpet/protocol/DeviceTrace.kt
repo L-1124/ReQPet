@@ -36,7 +36,8 @@ object DeviceTrace {
             val file = File(dir, "trace.log")
             if (file.length() > FILE_LIMIT) file.writeText("")
             file.appendText(line + "\n")
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
     }
 

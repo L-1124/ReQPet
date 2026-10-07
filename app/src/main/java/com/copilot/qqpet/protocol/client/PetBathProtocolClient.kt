@@ -37,28 +37,29 @@ class PetBathProtocolClient(
     private fun tryReflectBathBody(petId: String, petUin: String, cleanValue: Int, now: Long): ByteArray? {
         return try {
             val dCls = channel.classLoader.loadClass("ci5.d")
-            val dInst = dCls.newInstance()
+            val dInst = dCls.getDeclaredConstructor().newInstance()
             dCls.getField("a").set(dInst, petId)
             dCls.getField("b").set(dInst, petUin)
             val jCls = channel.classLoader.loadClass("uh5.j")
-            val jInst = jCls.newInstance()
+            val jInst = jCls.getDeclaredConstructor().newInstance()
             jCls.getField("a").set(jInst, 5000)
             jCls.getField("b").set(jInst, 500)
             jCls.getField("c").set(jInst, 501)
             dCls.getField("c").set(dInst, jInst)
             val iCls = channel.classLoader.loadClass("uh5.i")
-            val iInst = iCls.newInstance()
+            val iInst = iCls.getDeclaredConstructor().newInstance()
             iCls.getField("b").set(iInst, now - 3000L)
             iCls.getField("h").set(iInst, 1)
             dCls.getField("d").set(dInst, iInst)
             val bCls = channel.classLoader.loadClass("ci5.b")
-            val bInst = bCls.newInstance()
+            val bInst = bCls.getDeclaredConstructor().newInstance()
             bCls.getField("d").set(bInst, cleanValue)
             dCls.getField("e").set(dInst, bInst)
             val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
             val toByteArrayMethod = nanoCls.getMethod("toByteArray", nanoCls)
             toByteArrayMethod.invoke(null, dInst) as ByteArray
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
     }
@@ -186,7 +187,10 @@ class PetBathProtocolClient(
                 if (petUin.isEmpty()) {
                     onCleanUpdated(newClean)
                 }
-                EngineLog.i("PetBathClient", "doBathOnce 成功: newClean=$newClean, added=$addedClean, remain=$remainBalance")
+                EngineLog.i(
+                    "PetBathClient",
+                    "doBathOnce 成功: newClean=$newClean, added=$addedClean, remain=$remainBalance"
+                )
                 callback(BathResult(0, newClean, addedClean, remainBalance, isFullClean, null))
             } else {
                 EngineLog.w("PetBathClient", "doBathOnce 失败: code=$code, err=$err")

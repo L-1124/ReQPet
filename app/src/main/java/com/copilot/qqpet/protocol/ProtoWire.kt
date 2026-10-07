@@ -117,7 +117,8 @@ class ProtoWire {
                         skipField(data, pos, wireType)
                     }
                 }
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             }
             return null
         }
@@ -144,7 +145,8 @@ class ProtoWire {
                         skipField(data, pos, wireType)
                     }
                 }
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             }
             return list
         }
@@ -175,7 +177,8 @@ class ProtoWire {
                             pos[0] += len
                             val str = try {
                                 String(data, start, len, Charsets.UTF_8)
-                            } catch (_: Throwable) {
+                            } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                                 ""
                             }
                             val isPrintable = str.isNotEmpty() && str.all { it >= ' ' }
@@ -202,6 +205,7 @@ class ProtoWire {
                     }
                 }
             } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
                 sb.append(" (err: ${t.message})")
             }
             return sb.toString()
@@ -213,6 +217,7 @@ class ProtoWire {
             try {
                 appendOutline(data, sb, 0, maxChars, maxDepth, maxCount)
             } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
                 sb.append(" err=").append(t.message)
             }
             return if (sb.length <= maxChars) sb.toString() else sb.substring(0, maxChars)
@@ -259,7 +264,8 @@ class ProtoWire {
                         val slice = data.copyOfRange(start, start + len)
                         val text = try {
                             String(slice, Charsets.UTF_8)
-                        } catch (_: Throwable) {
+                        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                             ""
                         }
                         val readable = text.isNotEmpty() && text.length <= 160 && text.none { it < ' ' }

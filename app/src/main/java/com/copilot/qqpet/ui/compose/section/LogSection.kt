@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Icon
@@ -50,7 +51,12 @@ fun LogSection(state: SettingsState) {
     }
     LaunchedEffect(lastLine) {
         if (lastLine != null && atBottom) {
-            listState.animateScrollToItem(listState.layoutInfo.totalItemsCount - 1)
+            val count = listState.layoutInfo.totalItemsCount
+            if (count > 0) {
+                runCatching {
+                    listState.animateScrollToItem(count - 1)
+                }
+            }
         }
     }
 
@@ -61,43 +67,45 @@ fun LogSection(state: SettingsState) {
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(132.dp)
-                    .padding(end = 36.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
-            ) {
-                val visible = lines.takeLast(MAX_RENDER_LINES)
-                if (visible.isEmpty()) {
-                    item(key = "placeholder") {
-                        Text(
-                            text = PLACEHOLDER,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    itemsIndexed(visible) { _, entry ->
-                        Text(
-                            text = "${entry.time} ${entry.message}",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
-                            color = when (entry.level) {
-                                EngineLog.Level.ERROR -> MaterialTheme.colorScheme.error
-                                EngineLog.Level.WARN -> MaterialTheme.colorScheme.tertiary
-                                else -> MaterialTheme.colorScheme.onSurface
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 1.dp)
-                        )
+            SelectionContainer {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(132.dp)
+                        .padding(end = 36.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    val visible = lines.takeLast(MAX_RENDER_LINES)
+                    if (visible.isEmpty()) {
+                        item(key = "placeholder") {
+                            Text(
+                                text = PLACEHOLDER,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        itemsIndexed(visible) { _, entry ->
+                            Text(
+                                text = "${entry.time} ${entry.message}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                                color = when (entry.level) {
+                                    EngineLog.Level.ERROR -> MaterialTheme.colorScheme.error
+                                    EngineLog.Level.WARN -> MaterialTheme.colorScheme.tertiary
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 1.dp)
+                            )
+                        }
                     }
                 }
             }

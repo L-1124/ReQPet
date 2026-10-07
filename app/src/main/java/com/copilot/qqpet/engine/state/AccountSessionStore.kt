@@ -1,24 +1,33 @@
 package com.copilot.qqpet.engine.state
 
-import com.copilot.qqpet.protocol.QQPetDirectBridge
-
 import android.content.Context
+import android.util.Log
 import com.copilot.qqpet.engine.AccountSessionGuard
+import com.copilot.qqpet.engine.cache.LRUCacheManager
+import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
 import java.util.Calendar
-import java.util.Collections
-import java.util.HashSet
 
 /**
- * 账号绑定数据与每日额度持久化仓储，管理日切、点赞、福袋及名单持久化
+ * 账号绑定数据与每日额度持久化仓储
  */
 object AccountSessionStore {
 
-    private val todayLikedUins = Collections.synchronizedSet(HashSet<Long>())
-    @Volatile private var lastLikeDayKey = ""
-    private val todayClaimedBagIds = Collections.synchronizedSet(HashSet<String>())
-    @Volatile private var lastCoinBagDayKey = ""
-    @Volatile var coinBagDailyLimitReached = false
+    private const val TAG = "AccountSessionStore"
+
+    @Volatile
+    private var cacheManager: LRUCacheManager? = null
+
+    private fun ensureCache(context: Context): LRUCacheManager {
+        if (cacheManager == null) {
+            synchronized(this) {
+                if (cacheManager == null) {
+                    cacheManager = LRUCacheManager(maxSize = 500, context = context)
+                }
+            }
+        }
+        return cacheManager!!
+    }
 
     fun currentDayKey(): String {
         val cal = Calendar.getInstance()
@@ -51,220 +60,272 @@ object AccountSessionStore {
         return next
     }
 
+    /**
+     * 同步今日已点赞好友 UINs 到缓存
+     */
     fun syncTodayLikedUins(context: Context, uin: String) {
         val todayKey = currentDayKey()
-        if (lastLikeDayKey != todayKey) {
-            todayLikedUins.clear()
-            lastLikeDayKey = todayKey
+        val cacheKey = "liked_uins_${todayKey}_$uin"
+
+        ensureCache(context)
+
+        // 优先从缓存读取
+        val cached = cacheManager?.get<Set<Long>>(cacheKey, 86400000L) // 24 小时 TTL
+        if (cached != null && cached.isNotEmpty()) {
+            return
         }
+
+        // 缓存未命中或为空，从 SharedPreferences 加载
         try {
             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             val dateKey = AccountSessionGuard.scopedKey("key_liked_uins_date", uin)
             val csvKey = AccountSessionGuard.scopedKey("key_liked_uins_csv", uin)
+
             val savedDay = prefs.getString(dateKey, "") ?: ""
-            if (savedDay == todayKey) {
-                val csv = prefs.getString(csvKey, "") ?: ""
-                if (csv.isNotEmpty()) {
-                    csv.split(",").mapNotNull { it.trim().toLongOrNull() }.forEach { todayLikedUins.add(it) }
+            val csv = prefs.getString(csvKey, "") ?: ""
+
+            when {
+                savedDay == todayKey && csv.isNotEmpty() -> {
+                    // 当天数据存在且非空，加载到缓存
+                    val loaded = csv.split(",").mapNotNull { it.trim().toLongOrNull() }.toMutableSet()
+                    cacheManager?.put(cacheKey, loaded, 86400000L)
                 }
-            } else if (savedDay.isNotEmpty()) {
-                prefs.edit().putString(dateKey, todayKey).putString(csvKey, "").apply()
+
+                savedDay.isNotEmpty() -> {
+                    // 日期已变更或无 CSV，清理数据和缓存
+                    prefs.edit().putString(dateKey, todayKey).putString(csvKey, "").apply()
+                    cacheManager?.remove(cacheKey)
+                }
+
+                else -> {
+                    // 首次访问或数据已清空
+                    cacheManager?.put(cacheKey, emptySet<Long>().toMutableSet(), 86400000L)
+                }
             }
-        } catch (_: Throwable) {}
+
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to sync liked uins: ${e.message}")
+        }
     }
 
+    /**
+     * 检查好友今天是否已点赞
+     */
     fun isFriendLikedToday(context: Context, uin: String, friendUin: Long): Boolean {
         syncTodayLikedUins(context, uin)
-        return todayLikedUins.contains(friendUin)
+        val todayKey = currentDayKey()
+        val cacheKey = "liked_uins_${todayKey}_$uin"
+        return cacheManager?.get<Set<Long>>(cacheKey, 86400000L)?.contains(friendUin) ?: false
     }
 
+    /**
+     * 获取今日所有已点赞的 UINs 集合
+     */
     fun getTodayLikedUins(context: Context, uin: String): Set<Long> {
         syncTodayLikedUins(context, uin)
-        return synchronized(todayLikedUins) { HashSet(todayLikedUins) }
+        val todayKey = currentDayKey()
+        val cacheKey = "liked_uins_${todayKey}_$uin"
+        return cacheManager?.get<Set<Long>>(cacheKey, 86400000L) ?: emptySet()
     }
 
+    /**
+     * 标记某个好友为今日已点赞
+     */
     fun markFriendLikedToday(context: Context, uin: String, friendUin: Long) {
         val todayKey = currentDayKey()
-        if (lastLikeDayKey != todayKey) {
-            todayLikedUins.clear()
-            lastLikeDayKey = todayKey
-        }
-        todayLikedUins.add(friendUin)
+        val cacheKey = "liked_uins_${todayKey}_$uin"
+
+        ensureCache(context)
+
+        // 从缓存获取现有集合并添加新 UIN
+        val currentSet = getTodayLikedUins(context, uin).toMutableSet()
+        currentSet.add(friendUin)
+
+        // 更新缓存（24 小时 TTL）
+        cacheManager?.put(cacheKey, currentSet, 86400000L)
+
+        // 双重持久化到 SharedPreferences（容灾备份）
         try {
             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             val dateKey = AccountSessionGuard.scopedKey("key_liked_uins_date", uin)
             val csvKey = AccountSessionGuard.scopedKey("key_liked_uins_csv", uin)
-            val csv = synchronized(todayLikedUins) { todayLikedUins.joinToString(",") }
-            prefs.edit().putString(dateKey, todayKey).putString(csvKey, csv).apply()
-        } catch (_: Throwable) {}
+            val csv = currentSet.joinToString(",")
+
+            prefs.edit()
+                .putString(dateKey, todayKey)
+                .putString(csvKey, csv)
+                .apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist liked uin: ${e.message}")
+        }
     }
 
+    /**
+     * 同步今日已领取福袋 ID 到缓存
+     */
     fun syncTodayClaimedBags(context: Context, uin: String) {
         val todayKey = currentDayKey()
-        if (lastCoinBagDayKey != todayKey) {
-            todayClaimedBagIds.clear()
-            coinBagDailyLimitReached = false
-            lastCoinBagDayKey = todayKey
-        }
+        val bagCacheKey = "claimed_bags_${todayKey}_$uin"
+        val limitCacheKey = "coin_bag_limit_$uin"
+
+        ensureCache(context)
+
         try {
             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             val dateKey = AccountSessionGuard.scopedKey("key_coinbag_date", uin)
             val csvKey = AccountSessionGuard.scopedKey("key_coinbag_csv", uin)
+            val limitKey = AccountSessionGuard.scopedKey("key_coinbag_limit", uin)
+
             val savedDay = prefs.getString(dateKey, "") ?: ""
-            if (savedDay == todayKey) {
-                val csv = prefs.getString(csvKey, "") ?: ""
-                if (csv.isNotEmpty()) {
-                    csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { todayClaimedBagIds.add(it) }
+            val csv = prefs.getString(csvKey, "") ?: ""
+
+            // 检查缓存是否有效
+            val cachedBags = cacheManager?.get<Set<String>>(bagCacheKey, 86400000L)
+            val cachedLimit = cacheManager?.get<Boolean>(limitCacheKey, 86400000L)
+
+            when {
+                savedDay == todayKey -> {
+                    // 当天数据
+                    if (csv.isNotEmpty() && cachedBags == null) {
+                        // 有 CSV 但未在缓存中，加载到缓存
+                        val loaded = csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()
+                        cacheManager?.put(bagCacheKey, loaded, 86400000L)
+                    }
+
+                    if (cachedLimit == null) {
+                        // 限额状态未在缓存中，读取并缓存
+                        val limitReached = prefs.getBoolean(limitKey, false)
+                        cacheManager?.put(limitCacheKey, limitReached, 86400000L)
+                    }
                 }
-                coinBagDailyLimitReached = prefs.getBoolean(AccountSessionGuard.scopedKey("key_coinbag_limit", uin), false)
-            } else if (savedDay.isNotEmpty()) {
-                prefs.edit().putString(dateKey, todayKey).putString(csvKey, "").putBoolean(AccountSessionGuard.scopedKey("key_coinbag_limit", uin), false).apply()
+
+                savedDay.isNotEmpty() -> {
+                    // 日期已变更，清理数据和缓存
+                    cacheManager?.remove(bagCacheKey)
+                    cacheManager?.remove(limitCacheKey)
+                    prefs.edit()
+                        .putString(dateKey, todayKey)
+                        .putString(csvKey, "")
+                        .putBoolean(limitKey, false)
+                        .apply()
+                }
+
+                else -> {
+                    // 首次访问或数据已清空
+                    cacheManager?.put(bagCacheKey, emptySet<String>().toMutableSet(), 86400000L)
+                    cacheManager?.put(limitCacheKey, false, 86400000L)
+                }
             }
-        } catch (_: Throwable) {}
+
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to sync claimed bags: ${e.message}")
+        }
     }
 
+    /**
+     * 检查某个福袋 ID 今日是否已领取
+     */
     fun isCoinBagClaimedToday(context: Context, uin: String, bagId: String): Boolean {
         syncTodayClaimedBags(context, uin)
-        return todayClaimedBagIds.contains(bagId)
+        val todayKey = currentDayKey()
+        val cacheKey = "claimed_bags_${todayKey}_$uin"
+        return cacheManager?.get<Set<String>>(cacheKey, 86400000L)?.contains(bagId) ?: false
     }
 
+    /**
+     * 获取今日所有已领取的福袋 ID 集合
+     */
     fun getTodayClaimedBagIds(context: Context, uin: String): Set<String> {
         syncTodayClaimedBags(context, uin)
-        return synchronized(todayClaimedBagIds) { HashSet(todayClaimedBagIds) }
+        val todayKey = currentDayKey()
+        val cacheKey = "claimed_bags_${todayKey}_$uin"
+        return cacheManager?.get<Set<String>>(cacheKey, 86400000L) ?: emptySet()
     }
 
+    /**
+     * 检查今日福袋领取是否已达上限
+     */
     fun isCoinBagLimitReachedToday(context: Context, uin: String): Boolean {
         syncTodayClaimedBags(context, uin)
-        return coinBagDailyLimitReached
+        val cacheKey = "coin_bag_limit_$uin"
+        return cacheManager?.get<Boolean>(cacheKey, 86400000L) ?: false
     }
 
+    /**
+     * 标记今日福袋领取已达上限
+     */
     fun markCoinBagDailyLimitReached(context: Context, uin: String) {
-        coinBagDailyLimitReached = true
+        ensureCache(context)
+        val cacheKey = "coin_bag_limit_$uin"
+        cacheManager?.put(cacheKey, true, 86400000L)
+
+        // 同时持久化到 SharedPreferences
         try {
             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            prefs.edit().putBoolean(AccountSessionGuard.scopedKey("key_coinbag_limit", uin), true).apply()
-        } catch (_: Throwable) {}
+            prefs.edit()
+                .putBoolean(AccountSessionGuard.scopedKey("key_coinbag_limit", uin), true)
+                .apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist coin bag limit: ${e.message}")
+        }
     }
 
-    fun markCoinBagHandledToday(context: Context, uin: String, bagId: String, limitReached: Boolean = false) {
+    /**
+     * 标记某个福袋今日已领取
+     */
+    fun markCoinBagHandledToday(
+        context: Context,
+        uin: String,
+        bagId: String,
+        limitReached: Boolean = false
+    ) {
         val todayKey = currentDayKey()
-        if (lastCoinBagDayKey != todayKey) {
-            todayClaimedBagIds.clear()
-            lastCoinBagDayKey = todayKey
+        val bagCacheKey = "claimed_bags_${todayKey}_$uin"
+
+        ensureCache(context)
+
+        // 从缓存获取现有集合并添加新 ID
+        val currentSet = getTodayClaimedBagIds(context, uin).toMutableSet()
+        if (bagId.isNotEmpty()) {
+            currentSet.add(bagId)
+            cacheManager?.put(bagCacheKey, currentSet, 86400000L)
         }
-        if (bagId.isNotEmpty()) todayClaimedBagIds.add(bagId)
-        if (limitReached) coinBagDailyLimitReached = true
+
+        // 如果达到限额，更新限额状态
+        if (limitReached) {
+            markCoinBagDailyLimitReached(context, uin)
+        }
+
+        // 双重持久化到 SharedPreferences
         try {
             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             val dateKey = AccountSessionGuard.scopedKey("key_coinbag_date", uin)
             val csvKey = AccountSessionGuard.scopedKey("key_coinbag_csv", uin)
-            val csv = synchronized(todayClaimedBagIds) { todayClaimedBagIds.joinToString(",") }
-            prefs.edit().putString(dateKey, todayKey).putString(csvKey, csv).putBoolean(AccountSessionGuard.scopedKey("key_coinbag_limit", uin), coinBagDailyLimitReached).apply()
-        } catch (_: Throwable) {}
-    }
+            val limitKey = AccountSessionGuard.scopedKey("key_coinbag_limit", uin)
+            val csv = currentSet.joinToString(",")
 
-    fun loadSavedHireFriendUins(context: Context, uin: String): Set<Long> {
-        return try {
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_HIRE_FRIEND_UINS, uin)
-            val csv = prefs.getString(key, "") ?: ""
-            csv.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
-        } catch (_: Throwable) {
-            emptySet()
+            prefs.edit()
+                .putString(dateKey, todayKey)
+                .putString(csvKey, csv)
+                .putBoolean(limitKey, limitReached || isCoinBagLimitReachedToday(context, uin))
+                .apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist coin bag handled: ${e.message}")
         }
     }
 
-    fun saveHireFriendUins(context: Context, uin: String, uins: Collection<Long>) {
-        try {
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_HIRE_FRIEND_UINS, uin)
-            prefs.edit().putString(key, uins.joinToString(",")).apply()
-        } catch (_: Throwable) {}
-    }
+    fun clearAccountBoundMemoryCache(context: Context) {
+        ensureCache(context)
 
-    fun loadSavedPkBlacklistUins(context: Context, uin: String): Set<Long> {
-        return try {
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_PK_BLACKLIST_UINS, uin)
-            val csv = prefs.getString(key, "") ?: ""
-            csv.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
-        } catch (_: Throwable) {
-            emptySet()
-        }
-    }
+        // 通过模式匹配清除所有用户特定缓存
+        cacheManager?.invalidate("liked_uins_")
+        cacheManager?.invalidate("claimed_bags_")
+        cacheManager?.invalidate("coin_bag_limit_")
 
-    fun savePkBlacklistUins(context: Context, uin: String, uins: Collection<Long>) {
-        try {
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_PK_BLACKLIST_UINS, uin)
-            prefs.edit().putString(key, uins.joinToString(",")).apply()
-        } catch (_: Throwable) {}
-    }
-
-    fun loadStrangerUinPool(context: Context, uin: String): List<Long> {
-        return try {
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_STRANGER_UIN_POOL, uin)
-            val csv = prefs.getString(key, "") ?: ""
-            csv.split(",").mapNotNull { it.trim().toLongOrNull() }.distinct()
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    fun recordStrangersToPool(context: Context, uin: String, newUins: Collection<Long>) {
-        if (newUins.isEmpty()) return
-        try {
-            val existing = loadStrangerUinPool(context, uin).toMutableList()
-            for (u in newUins) {
-                if (u > 10000L && !existing.contains(u)) existing.add(u)
-            }
-            val trimmed = if (existing.size > 200) existing.takeLast(200) else existing
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_STRANGER_UIN_POOL, uin)
-            prefs.edit().putString(key, trimmed.joinToString(",")).apply()
-        } catch (_: Throwable) {}
-    }
-
-    fun clearAccountBoundMemoryCache() {
-        todayLikedUins.clear()
-        todayClaimedBagIds.clear()
-        coinBagDailyLimitReached = false
-        lastLikeDayKey = ""
-        lastCoinBagDayKey = ""
-    }
-
-    fun loadCachedHireableFriends(context: Context, uin: String): List<QQPetDirectBridge.HireableFriend> {
-        return try {
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            val raw = prefs.getString(AccountSessionGuard.scopedKey(PreferencesHelper.KEY_HIRE_FRIEND_CACHE, uin), "") ?: ""
-            raw.lines().mapNotNull { line ->
-                val p = line.split("\t")
-                val u = p.getOrNull(0)?.toLongOrNull() ?: return@mapNotNull null
-                QQPetDirectBridge.HireableFriend(
-                    u, p.getOrNull(1).orEmpty(), p.getOrNull(2).orEmpty(), p.getOrNull(3).orEmpty(),
-                    p.getOrNull(4)?.toLongOrNull() ?: 0L, p.getOrNull(5)?.toLongOrNull() ?: 0L, p.getOrNull(6)?.toLongOrNull() ?: 0L,
-                    p.getOrNull(7)?.toBooleanStrictOrNull() ?: true, p.getOrNull(8)?.toLongOrNull() ?: 0L
-                )
-            }
-        } catch (_: Throwable) { emptyList() }
-    }
-
-    fun saveCachedHireableFriends(context: Context, uin: String, list: List<QQPetDirectBridge.HireableFriend>) {
-        try {
-            val raw = list.joinToString("\n") { "${it.uin}\t${it.friendNick}\t${it.petNick}\t${it.petId}\t${it.power}\t${it.intel}\t${it.charm}\t${it.isIdle}\t${it.remainingSec}" }
-            context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE).edit()
-                .putString(AccountSessionGuard.scopedKey(PreferencesHelper.KEY_HIRE_FRIEND_CACHE, uin), raw).apply()
-        } catch (_: Throwable) {}
+        Log.d(TAG, "Cleared account-bound memory cache for all users")
     }
 
     fun saveScopedPetId(context: Context, petId: String, runtimeUin: String? = null) {
-        if (petId.isBlank()) return
-        val owner = AccountSessionGuard.extractOwnerUinFromPetId(petId).ifEmpty { runtimeUin?.trim().orEmpty() }
-        context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE).edit()
-            .putString("key_cached_pet_id", petId)
-            .putString(AccountSessionGuard.scopedKey("key_cached_pet_id", owner), petId)
-            .apply()
+        RosterStore.saveScopedPetId(context, petId, runtimeUin)
     }
-
 }

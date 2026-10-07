@@ -1,8 +1,11 @@
 package com.copilot.qqpet.engine.task
 
 import android.content.Context
+import android.util.Log
 import com.copilot.qqpet.engine.ActiveVisitHelper
 import com.copilot.qqpet.engine.state.AccountSessionStore
+import com.copilot.qqpet.engine.state.RosterStore
+import com.copilot.qqpet.engine.resilience.RateLimitExceededException
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -14,9 +17,14 @@ import kotlin.coroutines.resume
  */
 object PetSocialTask {
 
+    private const val TAG = "PetSocialTask"
+
     private const val NETWORK_TIMEOUT_MS = 8000L
 
-    suspend fun fetchLikeListAwait(bridge: QQPetDirectBridge, extra: String = ""): Pair<Int, List<QQPetDirectBridge.LikeMember>> =
+    suspend fun fetchLikeListAwait(
+        bridge: QQPetDirectBridge,
+        extra: String = ""
+    ): Pair<Int, List<QQPetDirectBridge.LikeMember>> =
         try {
             withTimeoutOrNull(NETWORK_TIMEOUT_MS) {
                 suspendCancellableCoroutine { cont ->
@@ -69,7 +77,7 @@ object PetSocialTask {
         val friendUins = cachedFriends.map { it.uin }.filter { it > 0L }.toSet()
         val ownUin = currentUin.toLongOrNull() ?: 0L
         val newStrangers = ActiveVisitHelper.extractStrangersFromVisitors(members.map { it.uin }, ownUin, friendUins)
-        if (newStrangers.isNotEmpty()) AccountSessionStore.recordStrangersToPool(context, currentUin, newStrangers)
+        if (newStrangers.isNotEmpty()) RosterStore.recordStrangersToPool(context, currentUin, newStrangers)
 
         val toLike = com.copilot.qqpet.engine.utils.PetPureCalculations.filterPendingLikeBackMembers(
             members = members,
@@ -120,7 +128,11 @@ object PetSocialTask {
         return successCount
     }
 
-    suspend fun snatchCoinBagAwait(bridge: QQPetDirectBridge, ownPetId: String, bagId: String): QQPetDirectBridge.SnatchCoinBagResult =
+    suspend fun snatchCoinBagAwait(
+        bridge: QQPetDirectBridge,
+        ownPetId: String,
+        bagId: String
+    ): QQPetDirectBridge.SnatchCoinBagResult =
         try {
             withTimeoutOrNull(NETWORK_TIMEOUT_MS) {
                 suspendCancellableCoroutine { cont ->
@@ -218,24 +230,37 @@ object PetSocialTask {
         onLog: (String) -> Unit
     ): Int {
         claimGroundCoinBag(context, bridge, ownPetId, currentUin, isManual, onLog)
-        if (!isManual && AccountSessionStore.isCoinBagLimitReachedToday(context, currentUin)) {
+
+        // 检查是否已达限额，如果已达限额立即终止
+        if (AccountSessionStore.isCoinBagLimitReachedToday(context, currentUin)) {
+            onLog("⚠️ [福袋巡检] 今日领取好友福袋次数已达官方上限，跳过本次扫描")
             return 0
         }
+
         if (isManual) onLog("🧧 [福袋巡检] 正在扫描小窝与好友列表，搜寻可领取的金币福袋...")
-        val allBags = fetchAllFriendCoinBagsAwait(bridge, maxPages = 6)
-        val todayClaimed = AccountSessionStore.getTodayClaimedBagIds(context, currentUin)
-        val pendingBags = com.copilot.qqpet.engine.utils.PetPureCalculations.filterPendingCoinBags(
-            allBags = allBags,
-            currentUin = currentUin,
-            todayClaimedBagIds = todayClaimed,
-            isManual = isManual,
-            maxFriendBags = 5
-        )
-        if (pendingBags.isEmpty()) {
-            if (isManual) onLog("ℹ️ [福袋巡检] 当前暂无待领取的金币福袋")
+
+        try {
+            val allBags = fetchAllFriendCoinBagsAwait(bridge, maxPages = 6)
+            val todayClaimed = AccountSessionStore.getTodayClaimedBagIds(context, currentUin)
+            val pendingBags = com.copilot.qqpet.engine.utils.PetPureCalculations.filterPendingCoinBags(
+                allBags = allBags,
+                currentUin = currentUin,
+                todayClaimedBagIds = todayClaimed,
+                isManual = isManual,
+                maxFriendBags = 5
+            )
+            if (pendingBags.isEmpty()) {
+                if (isManual) onLog("ℹ️ [福袋巡检] 当前暂无待领取的金币福袋")
+                return 0
+            }
+            return snatchPendingBags(context, bridge, ownPetId, currentUin, pendingBags, onLog)
+        } catch (e: RateLimitExceededException) {
+            // 速率限制已处理，不再捕获
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "福袋领取异常：${e.message}")
             return 0
         }
-        return snatchPendingBags(context, bridge, ownPetId, currentUin, pendingBags, onLog)
     }
 
     private suspend fun snatchPendingBags(
@@ -249,8 +274,17 @@ object PetSocialTask {
         var successCount = 0
         for (bag in bags) {
             val outcome = processSingleCoinBag(context, bridge, ownPetId, currentUin, bag, onLog)
-            if (outcome == SnatchOutcome.SUCCESS) successCount++
-            if (outcome == SnatchOutcome.LIMIT_REACHED) break
+            when (outcome) {
+                SnatchOutcome.SUCCESS -> successCount++
+                SnatchOutcome.LIMIT_REACHED -> {
+                    // 立即终止！不要继续遍历剩余福袋
+                    throw RateLimitExceededException("Friend coin bag daily limit reached")
+                }
+
+                SnatchOutcome.SKIP, SnatchOutcome.FAIL -> {
+                    // 跳过或失败继续下一个
+                }
+            }
         }
         return successCount
     }
@@ -266,7 +300,12 @@ object PetSocialTask {
         val selfBagId = QQPetDirectBridge.cachedOwnCoinBagId?.trim().orEmpty().ifEmpty {
             refreshOwnCoinBagAwait(bridge, ownPetId)?.trim().orEmpty()
         }
-        if (selfBagId.isNotEmpty() && (isManual || !AccountSessionStore.isCoinBagClaimedToday(context, currentUin, selfBagId))) {
+        if (selfBagId.isNotEmpty() && (isManual || !AccountSessionStore.isCoinBagClaimedToday(
+                context,
+                currentUin,
+                selfBagId
+            ))
+        ) {
             if (isManual) onLog("🧧 [自家福袋] 发现小窝地面掉落金币福袋，正在拆领...")
             val res = snatchCoinBagAwait(bridge, ownPetId, selfBagId)
             if (res.code == 0 || res.code in listOf(135091, 135092, 135096)) {
@@ -304,20 +343,23 @@ object PetSocialTask {
                 delay(1800L)
                 SnatchOutcome.SUCCESS
             }
+
             135098 -> {
                 AccountSessionStore.markCoinBagHandledToday(context, currentUin, bag.coinbagId)
                 if (!isSelfBag) {
+                    // 立即抛出异常终止会话
                     AccountSessionStore.markCoinBagDailyLimitReached(context, currentUin)
-                    onLog("ℹ️ [好友福袋] 今日领取好友福袋次数已达官方上限 (code=135098)")
-                    SnatchOutcome.LIMIT_REACHED
+                    throw RateLimitExceededException("Friend coin bag daily limit reached (code=135098)")
                 } else SnatchOutcome.SKIP
             }
+
             135091, 135092, 135096 -> {
                 AccountSessionStore.markCoinBagHandledToday(context, currentUin, bag.coinbagId)
                 if (isSelfBag) QQPetDirectBridge.cachedOwnCoinBagId = null
                 delay(800L)
                 SnatchOutcome.SKIP
             }
+
             else -> {
                 delay(1000L)
                 SnatchOutcome.FAIL

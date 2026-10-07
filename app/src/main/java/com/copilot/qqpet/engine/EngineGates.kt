@@ -14,12 +14,12 @@ internal object EngineGates {
     fun checkStealthWindows(context: Context): Long? {
         if (PetAdventureEngine.prefNightSleepMode && StealthScheduler.isNightSilentWindow(true)) {
             val s = StealthScheduler.calculateNightSleepMillis()
-            PetAdventureEngine.sendLog(context, "🌙 [夜间静默] 深夜防风控窗口中，预计 ${s / 3600000L} 小时后恢复")
+            PetAdventureEngine.sendLog(context, "[夜间静默] 深夜防风控窗口中，预计 ${s / 3600000L} 小时后恢复")
             return s
         }
         if (PetAdventureEngine.prefScreenOffSilent && !StealthScheduler.isScreenInteractive(context)) {
             val s = StealthScheduler.calculateIdleCycleDelayMillis(PetAdventureEngine.prefHumanLikeSleep)
-            PetAdventureEngine.sendLog(context, "📱 [熄屏静默] 屏幕已熄灭，拟人休眠 ${s / 1000L} 秒直至亮屏")
+            PetAdventureEngine.sendLog(context, "[熄屏静默] 屏幕已熄灭，拟人休眠 ${s / 1000L} 秒直至亮屏")
             return s
         }
         return null

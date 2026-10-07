@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.TaskLogger
 import com.copilot.qqpet.engine.model.StudyDispatchParam
 import com.copilot.qqpet.engine.model.StudyDispatchResult
 import com.copilot.qqpet.engine.utils.PetPureCalculations
@@ -39,38 +40,38 @@ object PetStudyTask {
         bridge: QQPetDirectBridge,
         petId: String,
         param: StudyDispatchParam,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): StudyDispatchResult {
         val targetStage = resolveTargetStage(bridge, petId, param.customSchoolStage)
         if (targetStage <= 0) {
-            onLog("⚠️ [学园调度] 没有可用的学园阶段，本次不降到初级学园")
+            onLog.warn("[学园调度] 没有可用的学园阶段，本次不降到初级学园")
             return StudyDispatchResult(code = -4, errorMsg = "学园阶段未知")
         }
-        onLog("📚 [学园阶段] 锁定目标学园阶段: stage=$targetStage")
+        onLog("[学园阶段] 锁定目标学园阶段: stage=$targetStage")
 
         val (evtCode, dynamicEvents) = PetWorkTask.querySelectEventsAwait(bridge, 6100L, petId, schoolStage = targetStage, careerType = 0)
         if (evtCode != 0 || dynamicEvents.isEmpty()) {
-            onLog("⚠️ [学园调度] 课程查询失败 code=$evtCode，停在阶段 $targetStage，不改去固定课程")
+            onLog.warn("[学园调度] 课程查询失败 code=$evtCode，停在阶段 $targetStage，不改去固定课程")
             return StudyDispatchResult(code = evtCode, errorMsg = "课程查询失败")
         }
-        onLog("📚 [课程拉取] 服务端返回 ${dynamicEvents.size} 门课程")
+        onLog("[课程拉取] 服务端返回 ${dynamicEvents.size} 门课程")
         val targetCourse = filterAndSelectCourse(dynamicEvents, param)
         if (targetCourse == null) {
-            onLog("⚠️ [学园调度] 阶段 $targetStage 没有与所设科目或时长匹配的课程，本次不报名")
+            onLog.warn("[学园调度] 阶段 $targetStage 没有与所设科目或时长匹配的课程，本次不报名")
             return StudyDispatchResult(code = -3, errorMsg = "没有与所设科目或时长匹配的课程")
         }
         if (param.enableFatigueToAdventure && targetCourse.isFatigued) {
             return StudyDispatchResult(code = -2, isFatigued = true, fatigueTip = targetCourse.eventTips)
         }
-        onLog("📚 [学园报名] 锁定课程: ${targetCourse.eventName} (时长:${targetCourse.costTime})，发起启程...")
+        onLog("[学园报名] 锁定课程: ${targetCourse.eventName} (时长:${targetCourse.costTime})，发起启程...")
         val (code, storyId, errMsg) = startSchoolAwait(bridge, petId, targetCourse.eventName, 6100L, targetCourse.subEventType)
         if (code == 0 && !storyId.isNullOrEmpty()) {
             return StudyDispatchResult(code = 0, storyId = storyId, courseName = targetCourse.eventName, subEventType = targetCourse.subEventType)
         }
         if (PetPureCalculations.isPetAlreadyOutError(code, errMsg)) {
-            onLog("ℹ️ [学园报名] 小宠已在出行中 (${errMsg ?: "code=$code"})")
+            onLog("[学园报名] 小宠已在出行中 (${errMsg ?: "code=$code"})")
         } else {
-            onLog("⚠️ [学园调度] ${targetCourse.eventName} 报名未成功 (code=$code, err=${errMsg ?: "无"})，不改报其它课程")
+            onLog.warn("[学园调度] ${targetCourse.eventName} 报名未成功 (code=$code, err=${errMsg ?: "无"})，不改报其它课程")
         }
         return StudyDispatchResult(
             code = code,

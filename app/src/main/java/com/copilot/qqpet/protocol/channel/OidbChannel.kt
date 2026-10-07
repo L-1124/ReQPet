@@ -140,7 +140,7 @@ class OidbChannel(
                         }
                         EngineLog.i(
                             "OidbChannel",
-                            "🎯 动态多源自适应命中 QQ 宠物原生发包代理类: $className, 发包方法: ${targetMethod.name}"
+                            "动态多源自适应命中 QQ 宠物原生发包代理类: $className, 发包方法: ${targetMethod.name}"
                         )
                         return Triple(cls, targetMethod, observerCls)
                     }
@@ -221,12 +221,12 @@ class OidbChannel(
                         }
                     }
                     com.copilot.qqpet.protocol.DeviceTrace.bind(context)
-                    EngineLog.d("OidbChannel", "✅ 成功反射挂载 QQ 宠物原生发包代理: ${cls.name}")
+                    EngineLog.d("OidbChannel", "成功反射挂载 QQ 宠物原生发包代理: ${cls.name}")
                 } else {
-                    EngineLog.e("OidbChannel", "❌ 实例化 QQ 宠物发包代理类失败: ${cls.name}")
+                    EngineLog.e("OidbChannel", "实例化 QQ 宠物发包代理类失败: ${cls.name}")
                 }
             } else {
-                EngineLog.e("OidbChannel", "❌ 未能在任何可用 ClassLoader 中动态发现实现 PetPbDelegate 的发包代理类")
+                EngineLog.e("OidbChannel", "未能在任何可用 ClassLoader 中动态发现实现 PetPbDelegate 的发包代理类")
             }
         } catch (t: Throwable) {
             EngineLog.e("OidbChannel", "反射 QQ 发包代理失败: ${t.javaClass.simpleName}: ${t.message}")

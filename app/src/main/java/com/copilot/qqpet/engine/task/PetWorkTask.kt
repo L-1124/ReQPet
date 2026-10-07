@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.TaskLogger
 import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import android.content.Intent
@@ -106,12 +107,12 @@ object PetWorkTask {
         subEventType: Long,
         hireCandidates: List<QQPetDirectBridge.HireableFriend>,
         enableHireFriend: Boolean,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): WorkStartWithHireResult {
         if (enableHireFriend && hireCandidates.isNotEmpty()) {
             for (candidate in hireCandidates) {
                 val friendLabel = candidate.friendNick.ifEmpty { candidate.uin.toString() }
-                onLog("🤝 [打工雇佣] 正在尝试雇佣空闲最高收益好友「$friendLabel」(QQ:${candidate.uin}, 小宠:${candidate.petNick}, 总资质:${candidate.totalAttr})...")
+                onLog("[打工雇佣] 正在尝试雇佣空闲最高收益好友「$friendLabel」(QQ:${candidate.uin}, 小宠:${candidate.petNick}, 总资质:${candidate.totalAttr})...")
                 val (code, storyId, errMsg) = startWorkAwait(
                     bridge = bridge, petId = petId, jobName = jobName, page = page,
                     subEventType = subEventType, hiredPetId = candidate.petId, hiredUin = candidate.uin
@@ -120,10 +121,10 @@ object PetWorkTask {
                     return WorkStartWithHireResult(code, storyId, errMsg, candidate)
                 }
                 if (PetPureCalculations.isPetAlreadyOutError(code, errMsg)) {
-                    onLog("ℹ️ [雇佣阻断] 开工被拒绝，小宠已在外出 (code=$code ${errMsg ?: "无说明"})，停止后续雇佣和单人打工")
+                    onLog("[雇佣阻断] 开工被拒绝，小宠已在外出 (code=$code ${errMsg ?: "无说明"})，停止后续雇佣和单人打工")
                     return WorkStartWithHireResult(code, storyId, errMsg, null)
                 }
-                onLog("ℹ️ [雇佣顺延] 雇佣好友「$friendLabel」未能生效 (code=$code ${errMsg ?: ""})，尝试下一候选或回退单人打工...")
+                onLog("[雇佣顺延] 雇佣好友「$friendLabel」未能生效 (code=$code ${errMsg ?: ""})，尝试下一候选或回退单人打工...")
                 delay(randomJitter(210L, 489L))
             }
         }
@@ -140,26 +141,26 @@ object PetWorkTask {
         currentUin: String,
         enableHireFriend: Boolean,
         cachedFriends: List<QQPetDirectBridge.HireableFriend>,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): List<QQPetDirectBridge.HireableFriend> {
         if (!enableHireFriend) return emptyList()
         val selectedUins = RosterStore.loadSavedHireFriendUins(context, currentUin)
         if (selectedUins.isEmpty()) {
-            onLog("ℹ️ [打工雇佣] 已开启雇佣好友，但当前未勾选好友白名单，本次执行单人打工")
+            onLog("[打工雇佣] 已开启雇佣好友，但当前未勾选好友白名单，本次执行单人打工")
             return emptyList()
         }
         val matched = cachedFriends.filter { it.uin in selectedUins && it.petId.isNotBlank() && it.petId != ownPetId }
         if (matched.isEmpty()) {
-            onLog("ℹ️ [打工雇佣] 已勾选 ${selectedUins.size} 位白名单好友，暂未匹配到有效宠物 ID，本次执行单人打工")
+            onLog("[打工雇佣] 已勾选 ${selectedUins.size} 位白名单好友，暂未匹配到有效宠物 ID，本次执行单人打工")
             return emptyList()
         }
         val idleCandidates = matched.filter { it.isIdle }.sortedByDescending { it.totalAttr }
         if (idleCandidates.isEmpty()) {
-            onLog("ℹ️ [打工雇佣] 已勾选的白名单好友当前均在忙碌中，本次自动转为单人打工")
+            onLog("[打工雇佣] 已勾选的白名单好友当前均在忙碌中，本次自动转为单人打工")
         } else {
             val best = idleCandidates.first()
             val bestName = best.friendNick.ifEmpty { best.uin.toString() }
-            onLog("🏆 [雇佣优选] 已锁定空闲且收益资质最高的好友：「$bestName」(总资质:${best.totalAttr})")
+            onLog("[雇佣优选] 已锁定空闲且收益资质最高的好友：「$bestName」(总资质:${best.totalAttr})")
         }
         return idleCandidates
     }
@@ -184,13 +185,13 @@ object PetWorkTask {
         schoolStage: Int = 0,
         careerType: Int = 0,
         timeoutMs: Long = NETWORK_TIMEOUT_MS,
-        onLog: (String) -> Unit = {}
+        onLog: TaskLogger = TaskLogger { _, _ -> }
     ): Pair<Int, List<QQPetDirectBridge.SelectEvent>> {
-        onLog("📤 [岗位查询] 已发出 0x9ab2 page=$page career=$careerType，单独计时 ${timeoutMs / 1000} 秒")
+        onLog("[岗位查询] 已发出 0x9ab2 page=$page career=$careerType，单独计时 ${timeoutMs / 1000} 秒")
         val done = AtomicBoolean(false)
         val watch = watchScope.launch {
             delay(timeoutMs)
-            if (!done.get()) onLog("⏱️ [岗位查询] ${timeoutMs / 1000} 秒到点仍无 0x9ab2 回包。调用还卡在发包里")
+            if (!done.get()) onLog("[岗位查询] ${timeoutMs / 1000} 秒到点仍无 0x9ab2 回包。调用还卡在发包里")
         }
         return try {
             val result = withTimeoutOrNull(timeoutMs) {
@@ -209,16 +210,16 @@ object PetWorkTask {
             }
             done.set(true)
             if (result == null) {
-                onLog("⏱️ [岗位查询] 等待结束，0x9ab2 没有回包")
+                onLog("[岗位查询] 等待结束，0x9ab2 没有回包")
                 Pair(-99, emptyList())
             } else {
-                onLog("📥 [岗位查询] ${result.second}")
+                onLog("[岗位查询] ${result.second}")
                 result.first
             }
         } catch (t: Throwable) {
             done.set(true)
             if (t is CancellationException) throw t
-            onLog("⚠️ [岗位查询] 中断 ${t.javaClass.simpleName}: ${t.message ?: "无说明"}")
+            onLog.warn("[岗位查询] 中断 ${t.javaClass.simpleName}: ${t.message ?: "无说明"}")
             Pair(-99, emptyList())
         } finally {
             watch.cancel()

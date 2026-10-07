@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.TaskLogger
 import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -191,13 +192,13 @@ object PetCareTask {
         bridge: QQPetDirectBridge,
         petId: String,
         targetThreshold: Int = 80,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Pair<Int, String?> {
         val attrs = queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
         val curEnergy = attrs?.energy?.toInt() ?: -1
         val maxEnergy = attrs?.maxEnergy?.toInt()?.takeIf { it > 0 } ?: 100
         if (targetThreshold > 0 && curEnergy >= 0 && curEnergy >= targetThreshold) {
-            onLog("✨ [进食检查] 当前体力已不低于阈值 ($curEnergy>=$targetThreshold)，无需补充爱心饼干")
+            onLog("[进食检查] 当前体力已不低于阈值 ($curEnergy>=$targetThreshold)，无需补充爱心饼干")
             return Pair(0, null)
         }
         val maxRounds = if (curEnergy >= 0) {
@@ -216,14 +217,14 @@ object PetCareTask {
         bridge: QQPetDirectBridge,
         petId: String,
         targetThreshold: Int = 80,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Pair<Int, String?> = feedWithAutoBuyAwait(bridge, petId, targetThreshold, onLog)
 
     private suspend fun executeFeedLoop(
         bridge: QQPetDirectBridge,
         petId: String,
         param: FeedLoopParam,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Pair<Int, String?> {
         var curEnergy = param.startEnergy
         var fedCount = 0
@@ -240,14 +241,14 @@ object PetCareTask {
             fedCount++
             if (curEnergy >= 0) curEnergy = minOf(param.maxEnergy, curEnergy + ENERGY_PER_FEED)
             val curStr = if (curEnergy >= 0) " -> 估计+${ENERGY_PER_FEED}: $curEnergy（阈值 ${param.targetThreshold}）" else ""
-            onLog("🍲 [日常进食] 成功喂食第 $fedCount 次爱心饼干$curStr")
+            onLog("[日常进食] 成功喂食第 $fedCount 次爱心饼干$curStr")
             if (param.targetThreshold > 0 && curEnergy >= param.targetThreshold) break
             if (curEnergy >= param.maxEnergy) break
             delay(randomJitter(300L, 700L))
         }
 
         if (fedCount > 0) {
-            onLog("🎉 [日常进食] 进食补充完成！共投喂 $fedCount 次，体力: $curEnergy（阈值 ${param.targetThreshold}）")
+            onLog("[日常进食] 进食补充完成！共投喂 $fedCount 次，体力: $curEnergy（阈值 ${param.targetThreshold}）")
         }
         return Pair(lastCode, lastErr)
     }
@@ -255,19 +256,19 @@ object PetCareTask {
     private suspend fun tryFeedOnceWithAutoBuy(
         bridge: QQPetDirectBridge,
         petId: String,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Pair<Int, String?> {
         val (fCode, _) = feedAwait(bridge, petId)
         if (fCode == 1000210) {
-            onLog("🛒 [自动采购] 背包饼干不足 (code=1000210)，立即自动采购 5 份爱心饼干...")
+            onLog("[自动采购] 背包饼干不足 (code=1000210)，立即自动采购 5 份爱心饼干...")
             val (buyCode, buyErr) = buyFoodAwait(bridge, petId, 5L, "1")
             if (buyCode == 0) {
-                onLog("✅ [自动采购] 5 份爱心饼干采购入库成功！继续为小宠喂食...")
+                onLog("[自动采购] 5 份爱心饼干采购入库成功！继续为小宠喂食...")
                 delay(randomJitter(300L, 700L))
                 val (retryCode, _) = feedAwait(bridge, petId)
                 return Pair(retryCode, if (retryCode == 0) null else "重试喂食回包 code=$retryCode")
             } else {
-                onLog("❌ [自动采购] 采购爱心饼干失败: code=$buyCode, 说明: ${buyErr ?: "金币不足或网络异常"}")
+                onLog.error("[自动采购] 采购爱心饼干失败: code=$buyCode, 说明: ${buyErr ?: "金币不足或网络异常"}")
                 return Pair(buyCode, buyErr)
             }
         }
@@ -279,11 +280,11 @@ object PetCareTask {
         bridge: QQPetDirectBridge,
         petId: String,
         targetThreshold: Int = 80,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): QQPetDirectBridge.BathResult {
         val target = resolveBathTarget(bridge, petId, targetThreshold)
         if (target.startClean >= target.threshold || (target.maxClean > 0 && target.startClean >= target.maxClean)) {
-            onLog("✨ [沐浴检查] 当前清洁度已不低于阈值 (${target.startClean}>=${target.threshold})，无需消耗${target.itemName} (库存: ${target.balance})")
+            onLog("[沐浴检查] 当前清洁度已不低于阈值 (${target.startClean}>=${target.threshold})，无需消耗${target.itemName} (库存: ${target.balance})")
             return QQPetDirectBridge.BathResult(0, target.startClean, 0, target.balance, true, null)
         }
         val loopRes = executeBathLoop(bridge, petId, target, onLog)
@@ -298,7 +299,7 @@ object PetCareTask {
     data class BathLoopResult(val success: Boolean, val code: Int, val curClean: Int, val totalAdded: Int, val balance: Int, val errorMsg: String?)
 
     private suspend fun executeBathLoop(
-        bridge: QQPetDirectBridge, petId: String, target: BathTargetInfo, onLog: (String) -> Unit
+        bridge: QQPetDirectBridge, petId: String, target: BathTargetInfo, onLog: TaskLogger
     ): BathLoopResult {
         var curClean = if (target.startClean >= 0) target.startClean else 0
         var totalAdded = 0
@@ -319,7 +320,7 @@ object PetCareTask {
             curClean = res.newClean
             totalAdded += res.addedClean
             balance = res.remainBalance
-            onLog("🧼 [搓澡进度] 消耗 1 份${target.itemName} (+${res.addedClean}) -> 清洁度 $curClean（阈值 ${target.threshold}）(剩余库存: $balance)")
+            onLog("[搓澡进度] 消耗 1 份${target.itemName} (+${res.addedClean}) -> 清洁度 $curClean（阈值 ${target.threshold}）(剩余库存: $balance)")
             if (curClean >= target.threshold || res.isFullClean || curClean >= target.maxClean) break
             delay(randomJitter(270L, 630L))
         }
@@ -348,19 +349,19 @@ object PetCareTask {
 
     private suspend fun purchaseSoapIfNeeded(
         bridge: QQPetDirectBridge, petId: String, itemId: String, itemName: String,
-        cleanPerSoap: Int, defaultBuyCount: Int, curClean: Int, maxClean: Int, onLog: (String) -> Unit
+        cleanPerSoap: Int, defaultBuyCount: Int, curClean: Int, maxClean: Int, onLog: TaskLogger
     ): Triple<Int, Int, String?> {
         val gapClean = (maxClean - curClean).coerceAtLeast(cleanPerSoap)
         val buyCount = maxOf(((gapClean + cleanPerSoap - 1) / cleanPerSoap).coerceIn(1, 10), defaultBuyCount)
-        onLog("🛒 [自动采购] 背包${itemName}不足 (库存 0)，正在自动采购 $buyCount 份${itemName}...")
+        onLog("[自动采购] 背包${itemName}不足 (库存 0)，正在自动采购 $buyCount 份${itemName}...")
         val (buyCode, orderResult, buyErr) = buyBathItemAwait(bridge, petId, itemId, buyCount)
         if (buyCode == 0 && (orderResult == 1 || orderResult == 0)) {
-            onLog("✅ [自动采购] 成功购入 $buyCount 份${itemName}！继续为小宠搓澡...")
+            onLog("[自动采购] 成功购入 $buyCount 份${itemName}！继续为小宠搓澡...")
             delay(randomJitter(240L, 560L))
             return Triple(buyCount, buyCount, null)
         }
         val reason = if (orderResult == 2) "金币不足" else (buyErr ?: "code=$buyCode, orderResult=$orderResult")
-        onLog("❌ [自动采购] 购买${itemName}失败: $reason")
+        onLog.error("[自动采购] 购买${itemName}失败: $reason")
         return Triple(0, 0, "购买${itemName}失败($reason)")
     }
 }

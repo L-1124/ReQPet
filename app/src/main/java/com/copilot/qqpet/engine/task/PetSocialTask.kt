@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.TaskLogger
 import com.copilot.qqpet.engine.utils.randomJitter
 import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
@@ -60,17 +61,17 @@ object PetSocialTask {
 
     suspend fun executeAutoLikeBack(
         params: LikeBackParams,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Int {
         val (context, bridge, currentUin, cachedFriends, isManual) = params
-        if (isManual) onLog("🐾 [访客回踩] 正在扫描小窝最近来访记录...")
+        if (isManual) onLog("[访客回踩] 正在扫描小窝最近来访记录...")
         val (code, members) = fetchLikeListAwait(bridge)
         if (code != 0) {
-            if (isManual) onLog("⚠️ [访客回踩] 拉取来访列表未成功 (code=$code)")
+            if (isManual) onLog.warn("[访客回踩] 拉取来访列表未成功 (code=$code)")
             return 0
         }
         if (members.isEmpty()) {
-            if (isManual) onLog("ℹ️ [访客回踩] 最近暂无好友或小伙伴来访记录")
+            if (isManual) onLog("[访客回踩] 最近暂无好友或小伙伴来访记录")
             return 0
         }
         AccountSessionStore.syncTodayLikedUins(context, currentUin)
@@ -86,7 +87,7 @@ object PetSocialTask {
             limit = 5
         )
         if (toLike.isEmpty()) {
-            if (isManual) onLog("ℹ️ [访客回踩] 当前来访的小伙伴今日均已回赠完毕")
+            if (isManual) onLog("[访客回踩] 当前来访的小伙伴今日均已回赠完毕")
             return 0
         }
         return processLikeBackMembers(params, toLike, friendUins, onLog)
@@ -96,7 +97,7 @@ object PetSocialTask {
         params: LikeBackParams,
         toLike: List<QQPetDirectBridge.LikeMember>,
         friendUins: Set<Long>,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Int {
         val (context, bridge, currentUin, _, isManual) = params
         var successCount = 0
@@ -109,21 +110,21 @@ object PetSocialTask {
                 AccountSessionStore.markFriendLikedToday(context, currentUin, m.uin)
                 if (lCode == 0) {
                     successCount++
-                    onLog("✅ [自动回踩] 成功回赠$typeDesc $name！")
+                    onLog("[自动回踩] 成功回赠$typeDesc $name！")
                     delay(randomJitter(1500L, 3500L))
                 } else {
-                    if (isManual) onLog("ℹ️ [访客回踩] $name 今日已回赠过 (code=136202)")
+                    if (isManual) onLog("[访客回踩] $name 今日已回赠过 (code=136202)")
                     delay(randomJitter(1080L, 2520L))
                 }
             } else {
-                if (isManual) onLog("⚠️ [访客回踩] 回赠 $name 失败 (code=$lCode)")
+                if (isManual) onLog.warn("[访客回踩] 回赠 $name 失败 (code=$lCode)")
                 delay(randomJitter(720L, 1680L))
             }
         }
         if (successCount > 0) {
-            onLog("🎉 [自动回踩] 本轮来访回赠完成，成功回礼 $successCount 位小伙伴 (好友+陌生人)")
+            onLog("[自动回踩] 本轮来访回赠完成，成功回礼 $successCount 位小伙伴 (好友+陌生人)")
         } else if (isManual) {
-            onLog("ℹ️ [访客回踩] 本轮未产生新的回礼记录 (可能对方今日已达上限或已被回赠)")
+            onLog("[访客回踩] 本轮未产生新的回礼记录 (可能对方今日已达上限或已被回赠)")
         }
         return successCount
     }
@@ -227,17 +228,17 @@ object PetSocialTask {
         ownPetId: String,
         currentUin: String,
         isManual: Boolean,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Int {
         claimGroundCoinBag(context, bridge, ownPetId, currentUin, isManual, onLog)
 
         // 检查是否已达限额，如果已达限额立即终止
         if (AccountSessionStore.isCoinBagLimitReachedToday(context, currentUin)) {
-            onLog("⚠️ [福袋巡检] 今日领取好友福袋次数已达官方上限，跳过本次扫描")
+            onLog.warn("[福袋巡检] 今日领取好友福袋次数已达官方上限，跳过本次扫描")
             return 0
         }
 
-        if (isManual) onLog("🧧 [福袋巡检] 正在扫描小窝与好友列表，搜寻可领取的金币福袋...")
+        if (isManual) onLog("[福袋巡检] 正在扫描小窝与好友列表，搜寻可领取的金币福袋...")
 
         try {
             val allBags = fetchAllFriendCoinBagsAwait(bridge, maxPages = 6)
@@ -250,7 +251,7 @@ object PetSocialTask {
                 maxFriendBags = 5
             )
             if (pendingBags.isEmpty()) {
-                if (isManual) onLog("ℹ️ [福袋巡检] 当前暂无待领取的金币福袋")
+                if (isManual) onLog("[福袋巡检] 当前暂无待领取的金币福袋")
                 return 0
             }
             return snatchPendingBags(context, bridge, ownPetId, currentUin, pendingBags, onLog)
@@ -269,7 +270,7 @@ object PetSocialTask {
         ownPetId: String,
         currentUin: String,
         bags: List<QQPetDirectBridge.FriendCoinBagInfo>,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Int {
         var successCount = 0
         for (bag in bags) {
@@ -295,7 +296,7 @@ object PetSocialTask {
         ownPetId: String,
         currentUin: String,
         isManual: Boolean,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ) {
         val selfBagId = QQPetDirectBridge.cachedOwnCoinBagId?.trim().orEmpty().ifEmpty {
             refreshOwnCoinBagAwait(bridge, ownPetId)?.trim().orEmpty()
@@ -306,17 +307,17 @@ object PetSocialTask {
                 selfBagId
             ))
         ) {
-            if (isManual) onLog("🧧 [自家福袋] 发现小窝地面掉落金币福袋，正在拆领...")
+            if (isManual) onLog("[自家福袋] 发现小窝地面掉落金币福袋，正在拆领...")
             val res = snatchCoinBagAwait(bridge, ownPetId, selfBagId)
             if (res.code == 0 || res.code in listOf(135091, 135092, 135096)) {
                 AccountSessionStore.markCoinBagHandledToday(context, currentUin, selfBagId)
                 QQPetDirectBridge.cachedOwnCoinBagId = null
                 if (res.code == 0) {
                     val goldStr = if (res.gotGold > 0L) "，斩获 +${res.gotGold} 金币！" else "！"
-                    onLog("🎉 [自家福袋] 成功拆开地面金币福袋$goldStr")
+                    onLog("[自家福袋] 成功拆开地面金币福袋$goldStr")
                 }
             } else if (isManual) {
-                onLog("⚠️ [自家福袋] 拆领地面福袋失败 (code=${res.code}, err=${res.errorMsg})")
+                onLog.warn("[自家福袋] 拆领地面福袋失败 (code=${res.code}, err=${res.errorMsg})")
             }
             delay(randomJitter(900L, 2100L))
         }
@@ -328,7 +329,7 @@ object PetSocialTask {
         ownPetId: String,
         currentUin: String,
         bag: QQPetDirectBridge.FriendCoinBagInfo,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): SnatchOutcome {
         val isSelfBag = bag.isSelf || (currentUin.isNotEmpty() && bag.friendUin.toString() == currentUin)
         val tagPrefix = if (isSelfBag) "自家福袋" else "好友福袋"
@@ -339,7 +340,7 @@ object PetSocialTask {
                 AccountSessionStore.markCoinBagHandledToday(context, currentUin, bag.coinbagId)
                 if (isSelfBag) QQPetDirectBridge.cachedOwnCoinBagId = null
                 val goldStr = if (res.gotGold > 0L) "，斩获 +${res.gotGold} 金币" else ""
-                onLog("🎉 [$tagPrefix] 成功拆开 $label 的福袋$goldStr！")
+                onLog("[$tagPrefix] 成功拆开 $label 的福袋$goldStr！")
                 delay(randomJitter(1080L, 2520L))
                 SnatchOutcome.SUCCESS
             }
@@ -373,7 +374,7 @@ object PetSocialTask {
         ownPetId: String,
         currentUin: String,
         isManual: Boolean,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Boolean = executeAutoClaimCoinBags(context, bridge, ownPetId, currentUin, isManual, onLog) > 0
 
     /** 收益结算成功后，若开启了捡福袋，再执行一轮领取。不改变福袋的定时巡检。 */
@@ -383,10 +384,10 @@ object PetSocialTask {
         ownPetId: String,
         currentUin: String,
         enabled: Boolean,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ) {
         if (!enabled) return
-        onLog("🧧 [结算福袋] 收益已结算，按设置再捡一次福袋")
+        onLog("[结算福袋] 收益已结算，按设置再捡一次福袋")
         executeAutoClaimCoinBags(context, bridge, ownPetId, currentUin, false, onLog)
     }
 }

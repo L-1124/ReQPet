@@ -99,11 +99,11 @@ internal object EngineConfigLoader {
         val prefNightSleepMode = PetAdventureEngine.prefNightSleepMode
         val prefScreenOffSilent = PetAdventureEngine.prefScreenOffSilent
 
-        PetAdventureEngine.sendLog(context, "⚙️ 总开关:${onOff(masterEnabled)}（默认关闭；关闭时模块不发起任何请求）")
+        PetAdventureEngine.sendLog(context, "总开关:${onOff(masterEnabled)}（默认关闭；关闭时模块不发起任何请求）")
         val hireCount = prefHireFriendUinsCsv.split(',').count { it.isNotBlank() }
         PetAdventureEngine.sendLog(
             context,
-            "⚙️ 配置生效 学习:${onOff(enableStudy)} 打工:${onOff(enableWork)} 照顾:${onOff(enableCare)} 冒险:${
+            "配置生效 学习:${onOff(enableStudy)} 打工:${onOff(enableWork)} 照顾:${onOff(enableCare)} 冒险:${
                 onOff(
                     enableAdventure
                 )
@@ -120,7 +120,7 @@ internal object EngineConfigLoader {
             PetAdventureEngine.cachedWorkPlaces?.stages?.find { it.stage == prefCustomWorkType }?.title
         PetAdventureEngine.sendLog(
             context,
-            "⚙️ 调度明细 学园:${UiDescUtils.schoolStageLabel(prefCustomSchoolStage)} " +
+            "调度明细 学园:${UiDescUtils.schoolStageLabel(prefCustomSchoolStage)} " +
                     "科目:${UiDescUtils.courseSubjectLabel(prefCustomCourseSubject)} " +
                     "课时:${UiDescUtils.courseDurationLabel(prefCustomCourseDuration)} " +
                     "场所:${UiDescUtils.workTypeLabel(prefCustomWorkType, placeTitle)} " +

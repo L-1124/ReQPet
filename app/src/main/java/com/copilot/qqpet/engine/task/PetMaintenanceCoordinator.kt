@@ -53,10 +53,10 @@ object PetMaintenanceCoordinator {
         val attrs = PetCareTask.queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
         if (attrs != null && (attrs.energy < PetAdventureEngine.prefCareEnergyThreshold || attrs.clean < PetAdventureEngine.prefCareCleanThreshold)) {
             if (attrs.energy < PetAdventureEngine.prefCareEnergyThreshold) {
-                PetCareTask.feedWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareEnergyThreshold) { PetAdventureEngine.sendLog(context, it) }
+                PetCareTask.feedWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareEnergyThreshold) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
             }
             if (attrs.clean < PetAdventureEngine.prefCareCleanThreshold) {
-                PetCareTask.bathWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareCleanThreshold) { PetAdventureEngine.sendLog(context, it) }
+                PetCareTask.bathWithAutoBuyAwait(context, bridge, petId, PetAdventureEngine.prefCareCleanThreshold) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
             }
             delay(randomJitter(720L, 1680L))
         }
@@ -66,7 +66,7 @@ object PetMaintenanceCoordinator {
         if (!PetAdventureEngine.enableClaimCoinBag || (now - PetAdventureEngine.lastCoinBagTimeMillis <= COIN_BAG_INTERVAL_MS)) return
         PetAdventureEngine.lastCoinBagTimeMillis = now
         PetSocialTask.executeAutoClaimCoinBags(context, bridge, petId, PetAdventureEngine.currentActiveUin, false) {
-            PetAdventureEngine.sendLog(context, it)
+            level, msg -> PetAdventureEngine.sendLog(context, level, msg)
         }
     }
 
@@ -81,7 +81,7 @@ object PetMaintenanceCoordinator {
             cachedFriends = friends,
             isManual = false
         )
-        PetSocialTask.executeAutoLikeBack(params) { PetAdventureEngine.sendLog(context, it) }
+        PetSocialTask.executeAutoLikeBack(params) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
     }
 
     private suspend fun checkActiveVisitMaintenance(context: Context, bridge: QQPetDirectBridge, now: Long) {
@@ -97,7 +97,7 @@ object PetMaintenanceCoordinator {
             enableStrangers = PetAdventureEngine.prefActiveVisitStrangers,
             dailyLimit = PetAdventureEngine.prefActiveVisitDailyLimit,
             isManual = false
-        ) { PetAdventureEngine.sendLog(context, it) }
+        ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
     }
 
     private suspend fun checkAutoPkMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String, now: Long) {
@@ -115,14 +115,14 @@ object PetMaintenanceCoordinator {
         val friends = PetAccountGateway.loadCachedHireableFriends(context)
         val candidates = PetPkTask.collectPkCandidates(context, bridge, petId, PetAdventureEngine.currentActiveUin, friends)
         val newCount = PetPkTask.executeSinglePk(context, bridge, petId, PetAdventureEngine.currentActiveUin, candidates, myTotal) {
-            PetAdventureEngine.sendLog(context, it)
+            level, msg -> PetAdventureEngine.sendLog(context, level, msg)
         }
         if (newCount in 1..9) {
             val nextCdSec = ThreadLocalRandom.current().nextLong(60L, 180L)
             PetAdventureEngine.pkCooldownMillis = nextCdSec * 1000L
-            PetAdventureEngine.sendLog(context, "⏱️ [自动PK] 本场对决结算完毕，随机冷却休眠 ${nextCdSec} 秒 (1~3分钟) 后进入下一场...")
+            PetAdventureEngine.sendLog(context, "[自动PK] 本场对决结算完毕，随机冷却休眠 ${nextCdSec} 秒 (1~3分钟) 后进入下一场...")
         } else if (newCount >= 10) {
-            PetAdventureEngine.sendLog(context, "🎉 [自动PK] 今日 10 场对决挑战已全部打满，明日将自动重置！")
+            PetAdventureEngine.sendLog(context, "[自动PK] 今日 10 场对决挑战已全部打满，明日将自动重置！")
         }
     }
 }

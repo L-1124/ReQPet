@@ -34,7 +34,7 @@ object TinkerBlocker {
                     HookApi.hook(method).intercept { chain ->
                         val ctx = chain.getArg(0) as? Context
                         if (isTinkerDisabled(ctx ?: context)) {
-                            HookLog.log(TAG, "🛡️ [TinkerBlocker] isTinkerEnableWithSharedPreferences 被拦截，强制返回 false")
+                            HookLog.log(TAG, "[TinkerBlocker] isTinkerEnableWithSharedPreferences 被拦截，强制返回 false")
                             false
                         } else {
                             chain.proceed()
@@ -64,7 +64,7 @@ object TinkerBlocker {
                             null
                         }
                         if (isTinkerDisabled(ctx ?: context)) {
-                            HookLog.log(TAG, "🛡️ [TinkerBlocker] Tinker.isTinkerEnabled() 被拦截，强制返回 false")
+                            HookLog.log(TAG, "[TinkerBlocker] Tinker.isTinkerEnabled() 被拦截，强制返回 false")
                             false
                         } else {
                             chain.proceed()
@@ -89,7 +89,7 @@ object TinkerBlocker {
                     HookApi.hook(method).intercept { chain ->
                         val ctx = chain.getArg(0) as? Context
                         if (isTinkerDisabled(ctx ?: context)) {
-                            HookLog.log(TAG, "🛡️ [TinkerBlocker] 成功拦截云端下发的 onReceiveUpgradePatch 补丁升级请求！")
+                            HookLog.log(TAG, "[TinkerBlocker] 成功拦截云端下发的 onReceiveUpgradePatch 补丁升级请求！")
                             null
                         } else {
                             chain.proceed()
@@ -107,7 +107,7 @@ object TinkerBlocker {
                     HookApi.hook(method).intercept { chain ->
                         val appObj = chain.getArg(0) as? Context
                         if (isTinkerDisabled(appObj ?: context)) {
-                            HookLog.log(TAG, "🛡️ [TinkerBlocker] TinkerLoader.tryLoad 被拦截，直接阻断补丁加载流程")
+                            HookLog.log(TAG, "[TinkerBlocker] TinkerLoader.tryLoad 被拦截，直接阻断补丁加载流程")
                             Intent().apply { putExtra("intent_return_code", -1) }
                         } else {
                             chain.proceed()

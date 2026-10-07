@@ -21,6 +21,9 @@ object EngineLog {
     fun w(message: String) = write(Level.WARN, TAG, message)
     fun e(message: String) = write(Level.ERROR, TAG, message)
 
+    /** 带级别单参数出口：message 即正文，调用方不再用 emoji 表达级别 */
+    fun write(level: Level, message: String) = write(level, TAG, message)
+
     /** 带来源标签的输出：来源与级别随条目结构化保留 */
     fun d(tag: String, message: String) = write(Level.DEBUG, tag, message)
     fun i(tag: String, message: String) = write(Level.INFO, tag, message)
@@ -39,7 +42,7 @@ object EngineLog {
             buffer.addLast(entry)
             entry
         }
-        HookLog.log(TAG, "[${stamped.source}] ${stamped.message}")
+        HookLog.log(TAG, "[${stamped.source}] ${level.tag} ${stamped.message}")
         for (listener in listeners) {
             try {
                 listener(stamped)
@@ -60,7 +63,7 @@ object EngineLog {
         listeners.remove(listener)
     }
 
-    enum class Level { DEBUG, INFO, WARN, ERROR }
+    enum class Level(val tag: String) { DEBUG("D"), INFO("I"), WARN("W"), ERROR("E") }
 }
 
 /** 结构化日志条目：级别与来源供 UI 着色与过滤，time 为渲染用时分秒文本 */

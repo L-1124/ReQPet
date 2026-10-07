@@ -93,7 +93,7 @@ class QQSettingFragment : QPublicBaseFragment() {
             val petId = if (!remotePetId.isNullOrEmpty() &&
                 PetPureCalculations.shouldUpdateCachedPetId(PetAdventureEngine.cachedPetId, remotePetId)
             ) {
-                HookLog.w("QQSettingFragment", "🔄 [设置页核验] 发现新活跃小宠 ID: $remotePetId，覆写旧缓存")
+                HookLog.w("QQSettingFragment", "[设置页核验] 发现新活跃小宠 ID: $remotePetId，覆写旧缓存")
                 PetAdventureEngine.saveScopedPetId(context, remotePetId)
                 remotePetId
             } else {

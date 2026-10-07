@@ -92,7 +92,7 @@ fun LogSection(state: SettingsState) {
                         } else {
                             itemsIndexed(visible) { _, entry ->
                                 Text(
-                                    text = "${entry.time} ${entry.message}",
+                                    text = "${entry.time} [${entry.level.tag}] ${entry.message}",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 11.sp,

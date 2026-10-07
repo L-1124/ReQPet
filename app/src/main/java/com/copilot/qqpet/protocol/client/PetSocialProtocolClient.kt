@@ -218,7 +218,7 @@ class PetSocialProtocolClient(
                 val bagId = parseGroundCoinBagId(data)
                 if (!bagId.isNullOrEmpty()) {
                     onOwnBagFound(bagId)
-                    EngineLog.i("PetSocialClient", "🧧 [0x9acb_0] 捕获到自家地面钱袋: $bagId")
+                    EngineLog.i("PetSocialClient", "[0x9acb_0] 捕获到自家地面钱袋: $bagId")
                 }
                 callback(0, bagId, null)
             } else {

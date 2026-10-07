@@ -1,6 +1,8 @@
 package com.copilot.qqpet.engine.task
 
 import android.content.Context
+import com.copilot.qqpet.engine.EngineLog
+import com.copilot.qqpet.engine.TaskLogger
 import com.copilot.qqpet.engine.model.StoryStatusResult
 import com.copilot.qqpet.engine.model.WorkDispatchParam
 import com.copilot.qqpet.engine.model.WorkDispatchResult
@@ -19,43 +21,43 @@ object PetAdaptiveWorkTask {
         bridge: QQPetDirectBridge,
         petId: String,
         param: WorkDispatchParam,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): WorkDispatchResult {
         val (targetCareerType, placeName) = resolveCareerTypeAndPlace(param)
-        onLog("💼 [动态求职] 锁定场所: $placeName (Career=$targetCareerType，工时设置=${param.customWorkDuration})")
-        onLog("💼 [动态求职] 先确认小宠是否已在外出...")
+        onLog("[动态求职] 锁定场所: $placeName (Career=$targetCareerType，工时设置=${param.customWorkDuration})")
+        onLog("[动态求职] 先确认小宠是否已在外出...")
         val (story, ongoing) = describeOngoingOuting(bridge, petId, onLog)
         if (story.code != 0) {
-            onLog("ℹ️ [外出判定] 状态没查完，本次不拉取岗位，也不发起雇佣")
+            onLog("[外出判定] 状态没查完，本次不拉取岗位，也不发起雇佣")
             return WorkDispatchResult(code = story.code, errorMsg = story.bodyNote ?: "状态查询未完成", placeName = placeName)
         }
         if (ongoing != null) {
-            onLog("ℹ️ [当前外出] $ongoing。本次不拉取岗位，也不发起雇佣")
+            onLog("[当前外出] $ongoing。本次不拉取岗位，也不发起雇佣")
             return WorkDispatchResult(code = CODE_ALREADY_OUT, errorMsg = ongoing, placeName = placeName)
         }
 
         if (param.customWorkType <= 0 && param.cachedWorkPlaces == null) {
-            onLog("⚠️ [打工调度] 还没有场所缓存，本次不猜测星尘魔法塔，请先打开一次设置页同步解锁状态")
+            onLog.warn("[打工调度] 还没有场所缓存，本次不猜测星尘魔法塔，请先打开一次设置页同步解锁状态")
             return WorkDispatchResult(code = -4, errorMsg = "场所缓存为空", placeName = placeName)
         }
-        onLog("💼 [动态求职] 当前未在外出，正在拉取「$placeName」岗位...")
+        onLog("[动态求职] 当前未在外出，正在拉取「$placeName」岗位...")
         val (evtCode, dynamicJobs) = PetWorkTask.querySelectEventsAwait(
             bridge, 6400L, petId, schoolStage = 0, careerType = targetCareerType, onLog = onLog
         )
         if (evtCode != 0 || dynamicJobs.isEmpty()) {
-            onLog("⚠️ [打工调度] 岗位查询失败 code=$evtCode，停在「$placeName」，不改去其它场所")
+            onLog.warn("[打工调度] 岗位查询失败 code=$evtCode，停在「$placeName」，不改去其它场所")
             return WorkDispatchResult(code = evtCode, errorMsg = "岗位查询失败", placeName = placeName)
         }
-        onLog("💼 [岗位拉取] 服务端返回 ${dynamicJobs.size} 个打工岗位")
+        onLog("[岗位拉取] 服务端返回 ${dynamicJobs.size} 个打工岗位")
         val targetJob = filterAndSelectJob(dynamicJobs, param)
         if (targetJob == null) {
-            onLog("⚠️ [打工调度] 「$placeName」没有与所设工时匹配的可做岗位，本次不派遣")
+            onLog.warn("[打工调度] 「$placeName」没有与所设工时匹配的可做岗位，本次不派遣")
             return WorkDispatchResult(code = -3, errorMsg = "没有与所设工时匹配的岗位", placeName = placeName)
         }
         if (param.enableFatigueToAdventure && targetJob.isFatigued) {
             return WorkDispatchResult(code = -2, isFatigued = true, fatigueTip = targetJob.eventTips)
         }
-        onLog("💼 [小镇上岗] 锁定岗位: ${targetJob.eventName} (工时:${targetJob.costTime})，发起启程...")
+        onLog("[小镇上岗] 锁定岗位: ${targetJob.eventName} (工时:${targetJob.costTime})，发起启程...")
         val hireRes = PetWorkTask.startWorkWithOptionalHireAwait(
             context = context, bridge = bridge, petId = petId, jobName = targetJob.eventName,
             page = 6400L, subEventType = targetJob.subEventType, hireCandidates = param.hireCandidates,
@@ -70,9 +72,9 @@ object PetAdaptiveWorkTask {
         if (PetPureCalculations.isPetAlreadyOutError(hireRes.code, hireRes.errorMsg)) {
             val detail = describeOngoingOuting(bridge, petId, onLog).second
             val reason = detail ?: listOfNotNull(hireRes.errorMsg, "code=${hireRes.code}").joinToString(" ")
-            onLog("ℹ️ [当前外出] 开工被拒绝。$reason")
+            onLog("[当前外出] 开工被拒绝。$reason")
         } else {
-            onLog("⚠️ [打工调度] ${targetJob.eventName} 未开工 (code=${hireRes.code} ${hireRes.errorMsg ?: "无说明"})，不改派其它场所")
+            onLog.warn("[打工调度] ${targetJob.eventName} 未开工 (code=${hireRes.code} ${hireRes.errorMsg ?: "无说明"})，不改派其它场所")
         }
         return WorkDispatchResult(
             code = hireRes.code, errorMsg = hireRes.errorMsg ?: "开工未生效",
@@ -83,11 +85,11 @@ object PetAdaptiveWorkTask {
     private suspend fun describeOngoingOuting(
         bridge: QQPetDirectBridge,
         petId: String,
-        onLog: ((String) -> Unit)? = null
+        onLog: TaskLogger? = null
     ): Pair<StoryStatusResult, String?> {
         val story = PetWorkTask.queryStoryStatusAwait(bridge, petId)
-        onLog?.invoke("🧭 [外出判定] code=${story.code} 子状态=${story.status ?: "无"} 剩余=${story.remaining ?: "无"} 总时长=${story.total ?: "无"} story=${story.storyId ?: "无"}")
-        if (!story.bodyNote.isNullOrBlank()) onLog?.invoke("🧭 [外出回包] ${story.bodyNote}")
+        onLog?.log(EngineLog.Level.INFO, "[外出判定] code=${story.code} 子状态=${story.status ?: "无"} 剩余=${story.remaining ?: "无"} 总时长=${story.total ?: "无"} story=${story.storyId ?: "无"}")
+        if (!story.bodyNote.isNullOrBlank()) onLog?.log(EngineLog.Level.INFO, "[外出回包] ${story.bodyNote}")
         val rem = story.remaining
         val storyId = story.storyId?.takeIf { it.isNotEmpty() }
         val reject = when {
@@ -99,7 +101,7 @@ object PetAdaptiveWorkTask {
         }
         if (reject != null) {
             val prefix = if (story.code != 0) "状态没查完" else "因此视为未在外出"
-            onLog?.invoke("🧭 [外出判定] $prefix：$reject")
+            onLog?.log(EngineLog.Level.INFO, "[外出判定] $prefix：$reject")
             return Pair(story, null)
         }
         if (rem == null || rem <= 0L || storyId == null) return Pair(story, null)

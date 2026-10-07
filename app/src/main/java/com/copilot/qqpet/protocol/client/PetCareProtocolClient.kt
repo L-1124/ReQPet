@@ -35,7 +35,7 @@ class PetCareProtocolClient(
                 val ownBag = bagFromPet.ifEmpty { bagFromRoot }
                 if (ownBag.isNotEmpty()) {
                     onOwnBagFound(ownBag)
-                    EngineLog.i("PetCareClient", "🧧 [0x95e1_0] 在本人主宠资料中捕获到地面福袋: $ownBag")
+                    EngineLog.i("PetCareClient", "[0x95e1_0] 在本人主宠资料中捕获到地面福袋: $ownBag")
                 }
             }
             callback(code, petId, data)
@@ -136,7 +136,7 @@ class PetCareProtocolClient(
                 val rawTip = ProtoWire.firstString(data, 3)
                 tipText = if (!rawTip.isNullOrBlank()) rawTip else null
             }
-            EngineLog.i("PetCareClient", "🥣 feedDetailed 回包: petId=$petId, code=$code, feedState=$feedState, tip=$tipText")
+            EngineLog.i("PetCareClient", "feedDetailed 回包: petId=$petId, code=$code, feedState=$feedState, tip=$tipText")
             callback(FeedDetailResult(code, feedState, tipText, err))
         }
     }
@@ -161,9 +161,9 @@ class PetCareProtocolClient(
                         items.add(FoodInventoryItem(itemId, name, balance, if (energyVal > 0) energyVal else 20))
                     }
                 }
-                EngineLog.i("PetCareClient", "🥣 fetchFoodInventory 成功: remain=$remain, total=$total, items=${items.size}")
+                EngineLog.i("PetCareClient", "fetchFoodInventory 成功: remain=$remain, total=$total, items=${items.size}")
             } else {
-                EngineLog.w("PetCareClient", "🥣 fetchFoodInventory 失败: code=$code, err=$err")
+                EngineLog.w("PetCareClient", "fetchFoodInventory 失败: code=$code, err=$err")
             }
             callback(code, remain, total, items)
         }
@@ -175,11 +175,11 @@ class PetCareProtocolClient(
             if (code == 0 && data != null) {
                 val remain = (ProtoWire.firstVarint(data, 1) ?: 0L).toInt()
                 val total = (ProtoWire.firstVarint(data, 2) ?: 0L).toInt()
-                EngineLog.i("PetCareClient", "📊 查询喂食状态回包: remain=$remain, total=$total")
+                EngineLog.i("PetCareClient", "查询喂食状态回包: remain=$remain, total=$total")
                 callback(0, remain, total)
                 return@sendOidb
             }
-            EngineLog.w("PetCareClient", "📊 查询喂食状态失败: code=$code, err=$err")
+            EngineLog.w("PetCareClient", "查询喂食状态失败: code=$code, err=$err")
             callback(code, 0, 0)
         }
     }
@@ -213,12 +213,12 @@ class PetCareProtocolClient(
                         onAttributesUpdated(attrs)
                         captureOwnBagFromProfile(data, displayBytes)
                     }
-                    EngineLog.i("PetCareClient", "📊 实时三围: energy=${attrs.energy}/${attrs.maxEnergy}, clean=${attrs.clean}/${attrs.maxClean}")
+                    EngineLog.i("PetCareClient", "实时三围: energy=${attrs.energy}/${attrs.maxEnergy}, clean=${attrs.clean}/${attrs.maxClean}")
                     callback(0, attrs)
                     return@sendOidb
                 }
             }
-            EngineLog.w("PetCareClient", "📊 查询实时三围失败 (petId=$petId): code=$code, err=$err")
+            EngineLog.w("PetCareClient", "查询实时三围失败 (petId=$petId): code=$code, err=$err")
             callback(code, null)
         }
     }
@@ -247,7 +247,7 @@ class PetCareProtocolClient(
         val ownBag = bagFromRoot.ifEmpty { bagFromDisplay }
         if (ownBag.isNotEmpty()) {
             onOwnBagFound(ownBag)
-            EngineLog.i("PetCareClient", "🧧 [0x96f2_1] 实时捕获到地面福袋: $ownBag")
+            EngineLog.i("PetCareClient", "[0x96f2_1] 实时捕获到地面福袋: $ownBag")
         }
     }
 

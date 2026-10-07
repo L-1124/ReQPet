@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.TaskLogger
 import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import com.copilot.qqpet.engine.PetAccountGateway
@@ -104,19 +105,19 @@ object PetPkTask {
         bridge: QQPetDirectBridge,
         ownPetId: String,
         cand: CandidateItem,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Boolean {
         val pkStatus = queryFriendPkStatusAwait(bridge, cand.uin, cand.petId, ownPetId) ?: return true
         if (pkStatus.rawStatus == 300 && !pkStatus.ongoingStoryId.isNullOrEmpty()) {
-            onLog("⏳ [自动PK] 发现历史未结算对决 (storyId=${pkStatus.ongoingStoryId})，正在领奖...")
+            onLog("[自动PK] 发现历史未结算对决 (storyId=${pkStatus.ongoingStoryId})，正在领奖...")
             val sRes = settlePkBattleAwait(bridge, pkStatus.ongoingStoryId, ownPetId)
             if (sRes?.code == 0) {
-                onLog("🎉 [自动PK] 历史对决结算完成！斩获金币: +${sRes.goldEarned}")
+                onLog("[自动PK] 历史对决结算完成！斩获金币: +${sRes.goldEarned}")
             }
             delay(randomJitter(720L, 1680L))
         }
         if (!pkStatus.canPk && pkStatus.rawStatus != 100 && pkStatus.rawStatus != 300) {
-            onLog("ℹ️ [自动PK] 对手「${cand.userNick}」当前不可对决 (rawStatus=${pkStatus.rawStatus})，寻找下一位...")
+            onLog("[自动PK] 对手「${cand.userNick}」当前不可对决 (rawStatus=${pkStatus.rawStatus})，寻找下一位...")
             return false
         }
         return true
@@ -126,7 +127,7 @@ object PetPkTask {
         bridge: QQPetDirectBridge,
         ownPetId: String,
         cand: CandidateItem,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): QQPetDirectBridge.PkSettleResult? {
         val battleRes = kotlinx.coroutines.withTimeoutOrNull(8000L) {
             suspendCancellableCoroutine<QQPetDirectBridge.PkBattleResult> { cont ->
@@ -136,15 +137,15 @@ object PetPkTask {
             }
         }
         if (battleRes == null) {
-            onLog("⚠️ [自动PK] 对决发包超时 (8s)，跳过对手「${cand.userNick}」")
+            onLog.warn("[自动PK] 对决发包超时 (8s)，跳过对手「${cand.userNick}」")
             return null
         }
         if (battleRes.code != 0 || battleRes.storyId.isNullOrEmpty()) {
-            onLog("⚠️ [自动PK] 对决回包: code=${battleRes.code}, err=${battleRes.errorMsg ?: "暂不可战"}，跳过")
+            onLog.warn("[自动PK] 对决回包: code=${battleRes.code}, err=${battleRes.errorMsg ?: "暂不可战"}，跳过")
             return null
         }
-        val outcomeStr = if (battleRes.isWin) "🎉 战斗大捷！" else "💥 战斗惜败"
-        onLog("⚔️ [对决进行中] 我方「${battleRes.myNick}」战力 ${battleRes.myPower} VS 对方「${battleRes.oppNick}」战力 ${battleRes.oppPower} -> 判定: $outcomeStr")
+        val outcomeStr = if (battleRes.isWin) "战斗大捷！" else "战斗惜败"
+        onLog("[对决进行中] 我方「${battleRes.myNick}」战力 ${battleRes.myPower} VS 对方「${battleRes.oppNick}」战力 ${battleRes.oppPower} -> 判定: $outcomeStr")
         val waitSec = if (battleRes.leftDurationSec in 1..25) battleRes.leftDurationSec else 5L
         delay(waitSec * 1000L + 500L)
         val settleRes = kotlinx.coroutines.withTimeoutOrNull(8000L) {
@@ -155,7 +156,7 @@ object PetPkTask {
             }
         }
         if (settleRes == null) {
-            onLog("⚠️ [自动PK] 对决结算回包超时 (8s)")
+            onLog.warn("[自动PK] 对决结算回包超时 (8s)")
         }
         return settleRes
     }
@@ -168,7 +169,7 @@ object PetPkTask {
         candidates: List<CandidateItem>,
         myTotal: Long,
         specificTargetUin: Long = 0L,
-        onLog: (String) -> Unit
+        onLog: TaskLogger
     ): Int {
         val currentCount = AccountSessionStore.getDailyPkCount(context, currentUin)
         if (currentCount >= 10) return currentCount
@@ -184,12 +185,12 @@ object PetPkTask {
                 canPk = true
             )) continue
             if (!checkAndPrepareOpponent(bridge, ownPetId, cand, onLog)) continue
-            onLog("🎯 [对手锁定] 选中碾压对手: 「${cand.userNick}」的小宠「${cand.petNick}」(对手三维: ${cand.totalAttr} <= 我方: $myTotal)")
+            onLog("[对手锁定] 选中碾压对手: 「${cand.userNick}」的小宠「${cand.petNick}」(对手三维: ${cand.totalAttr} <= 我方: $myTotal)")
             val settle = challengeOpponent(bridge, ownPetId, cand, onLog)
             if (settle != null) {
                 val newCount = AccountSessionStore.incrementDailyPkCount(context, currentUin)
                 val goldStr = if (settle.goldEarned in 1..1_000_000L) "，斩获金币: +${settle.goldEarned}" else ""
-                onLog("🏅 [PK结算] 第 $newCount/10 场对决完成: ${settle.title ?: "大捷"}$goldStr！")
+                onLog("[PK结算] 第 $newCount/10 场对决完成: ${settle.title ?: "大捷"}$goldStr！")
                 bridge.refreshProfile()
                 return newCount
             }

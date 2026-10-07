@@ -132,7 +132,7 @@ object QQSettingInjector {
         } else {
             groupList.add(newGroup)
         }
-        HookLog.log(TAG, "🎯 成功安全注入「Q宠后台伴侣」专属卡片 (API 82)！")
+        HookLog.log(TAG, "成功安全注入「Q宠后台伴侣」专属卡片 (API 82)！")
     }
 
     private fun selectValidSampleGroup(groupList: List<Any>): Any? {
@@ -260,7 +260,7 @@ object QQSettingInjector {
 
     private fun onSettingEntryClick(context: Context) {
         HookLog.trace(TAG, "入口被点击 context=${context.javaClass.name}")
-        HookLog.log(TAG, "⚡ 用户在 QQ 设置中点击了「Q宠后台伴侣」！")
+        HookLog.log(TAG, "用户在 QQ 设置中点击了「Q宠后台伴侣」！")
         try {
             HookEntry.globalEngine?.startBackgroundLoop(context.applicationContext)
             mainHandler.post { openSettingPage(context) }

@@ -14,3 +14,4 @@ build/
 *.aab
 AGENTS.md
 gradle/gradle-daemon-jvm.properties
+.kotlin/

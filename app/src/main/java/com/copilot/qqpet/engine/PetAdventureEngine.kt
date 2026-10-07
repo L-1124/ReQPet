@@ -198,6 +198,9 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         @Suppress("UNUSED_PARAMETER")
         fun sendLog(context: Context, message: String) = EngineLog.i(message)
 
+        @Suppress("UNUSED_PARAMETER")
+        fun sendLog(context: Context, level: EngineLog.Level, message: String) = EngineLog.write(level, message)
+
         fun formatLiveStatusText(): String {
             if (!masterEnabled) return "总开关未开启 · 模块待命中"
             val sec = getLiveRemainingSeconds()
@@ -218,14 +221,16 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
     fun sendLog(context: Context, message: String) = Companion.sendLog(context, message)
 
+    fun sendLog(context: Context, level: EngineLog.Level, message: String) = Companion.sendLog(context, level, message)
+
     fun sendReadySignal(context: Context) {
-        sendLog(context, "🟢 [内核连接] 发包引擎与代理已成功接驳就绪")
+        sendLog(context, "[内核连接] 发包引擎与代理已成功接驳就绪")
     }
 
     fun startBackgroundLoop(context: Context) {
         reloadConfig(context)
         if (!masterEnabled) {
-            sendLog(context, "🛑 [总开关] 未开启，主循环不启动（默认关闭，请在设置页打开总开关）")
+            sendLog(context, "[总开关] 未开启，主循环不启动（默认关闭，请在设置页打开总开关）")
             return
         }
         if (isLoopRunning) return
@@ -243,12 +248,12 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         reloadConfig(context)
         if (!masterEnabled) {
             stopBackgroundLoop()
-            sendLog(context, "🛑 [总开关] 已关闭，调度已停止（配置已保存）")
+            sendLog(context, "[总开关] 已关闭，调度已停止（配置已保存）")
             return
         }
         isLoopRunning = true
         launchLoop(context)
-        sendLog(context, "⚡ [即刻唤醒] 外部指令触发，调度协程已重置并立即巡检")
+        sendLog(context, "[即刻唤醒] 外部指令触发，调度协程已重置并立即巡检")
     }
 
     private fun launchLoop(context: Context) {
@@ -270,7 +275,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     suspend fun executeMasterCycle(context: Context): Long {
         reloadConfig(context)
         if (!masterEnabled) {
-            sendLog(context, "🛑 [总开关] 未开启，本轮巡检跳过")
+            sendLog(context, "[总开关] 未开启，本轮巡检跳过")
             return 60 * 1000L
         }
         checkStealthWindows(context)?.let { return it }
@@ -281,27 +286,27 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         }
         if (!bridge.isReady) {
             currentStatusText = "发包代理连接中..."
-            sendLog(context, "⏳ [挂起] QQ 内部发包代理尚未就绪，等待 10 秒...")
+            sendLog(context, "[挂起] QQ 内部发包代理尚未就绪，等待 10 秒...")
             return 10000L
         }
         val petId = ensurePetId(context) ?: return 30 * 1000L
-        sendLog(context, "🔎 [主循环] 正在查询外出状态")
+        sendLog(context, "[主循环] 正在查询外出状态")
         val story = queryStoryStatusAwait(petId)
         if (story.code == 0) {
             // 从服务器回包动态校准任务时长，替代纯硬编码
             TimeConfigManager.extractAndConfigureDuration(story)
         }
         if (story.code != 0) {
-            sendLog(context, "🧭 [主循环] 外出状态没查完 code=${story.code} ${story.bodyNote ?: ""}")
+            sendLog(context, "[主循环] 外出状态没查完 code=${story.code} ${story.bodyNote ?: ""}")
             performMaintenance(context, petId)
             return sleepForMaintenance(context, 8_000L)
         }
         if ((story.remaining ?: 0L) <= 0L || story.storyId.isNullOrEmpty()) {
             sendLog(
                 context,
-                "🧭 [主循环] 状态查询成功，当前没有进行中的外出 子状态=${story.status ?: "无"} 剩余=${story.remaining ?: "无"} story=${story.storyId ?: "无"}"
+                "[主循环] 状态查询成功，当前没有进行中的外出 子状态=${story.status ?: "无"} 剩余=${story.remaining ?: "无"} story=${story.storyId ?: "无"}"
             )
-            if (!story.bodyNote.isNullOrBlank()) sendLog(context, "🧭 [主循环回包] ${story.bodyNote}")
+            if (!story.bodyNote.isNullOrBlank()) sendLog(context, "[主循环回包] ${story.bodyNote}")
         }
         val hiredSleep = handleOngoingStory(context, petId, story)
         handleStorySettlement(context, petId, story)
@@ -319,7 +324,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
                 if (waitMs < outingSleep) "按照料提前到 ${waitMs / 1000L} 秒后再查" else "${waitMs / 1000L} 秒后再查"
             sendLog(
                 context,
-                "⏳ [任务进行中] 仍在$kind，剩余 ${PetPureCalculations.formatDuration(rem)}，$waitNote，StoryID=${story.storyId ?: "无"}"
+                "[任务进行中] 仍在$kind，剩余 ${PetPureCalculations.formatDuration(rem)}，$waitNote，StoryID=${story.storyId ?: "无"}"
             )
             return waitMs
         }
@@ -334,12 +339,12 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         if (petId.isNullOrEmpty()) {
             val (_, fetched) = queryOwnPetAwait()
             if (fetched.isNullOrEmpty()) {
-                sendLog(context, "❌ [巡检] 获取宠物 ID 失败，30 秒后重试")
+                sendLog(context, EngineLog.Level.ERROR, "[巡检] 获取宠物 ID 失败，30 秒后重试")
                 return null
             }
             saveScopedPetId(context, fetched)
             petId = fetched
-            sendLog(context, "✅ [巡检] 成功锁定宠物 ID: $petId")
+            sendLog(context, "[巡检] 成功锁定宠物 ID: $petId")
         }
         return petId
     }
@@ -365,7 +370,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
     fun runAction(context: Context, action: String) {
         if (!masterEnabled) {
-            sendLog(context, "🛑 [总开关] 未开启，忽略手动指令：$action")
+            sendLog(context, "[总开关] 未开启，忽略手动指令：$action")
             return
         }
         scope.launch {

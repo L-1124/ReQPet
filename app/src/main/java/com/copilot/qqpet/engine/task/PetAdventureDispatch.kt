@@ -1,6 +1,7 @@
 package com.copilot.qqpet.engine.task
 
 import android.content.Context
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.engine.config.TimeConfigManager
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -21,7 +22,7 @@ internal object PetAdventureDispatch {
         petId: String
     ): Boolean {
         PetAdventureEngine.currentStatusText = "森林探险启程中..."
-        PetAdventureEngine.sendLog(context, "🌲 [探险启程] 正在前往神秘森林发起探险巡航...")
+        PetAdventureEngine.sendLog(context, "[探险启程] 正在前往神秘森林发起探险巡航...")
         val adventureRes: Pair<Int, String?>? = withTimeoutOrNull(8000L) {
             suspendCancellableCoroutine<Pair<Int, String?>> { cont ->
                 bridge.startAdventure(petId) { code, storyId, _, _ ->
@@ -37,10 +38,10 @@ internal object PetAdventureDispatch {
             PetAdventureEngine.currentTaskEndTimeMillis =
                 System.currentTimeMillis() + TimeConfigManager.getCurrentDuration("ADVENTURE") * 1000L
             PetAdventureEngine.currentStatusText = "正在神秘森林探险寻宝中"
-            PetAdventureEngine.sendLog(context, "🎉 [探险成功] 顺利踏入神秘森林！StoryID: $storyId，奇遇宝藏探索中")
+            PetAdventureEngine.sendLog(context, "[探险成功] 顺利踏入神秘森林！StoryID: $storyId，奇遇宝藏探索中")
             return true
         }
-        PetAdventureEngine.sendLog(context, "⚠️ [探险回包] 森林探险启程未生效 (code=$code)")
+        PetAdventureEngine.sendLog(context, EngineLog.Level.WARN, "[探险回包] 森林探险启程未生效 (code=$code)")
         return false
     }
 }

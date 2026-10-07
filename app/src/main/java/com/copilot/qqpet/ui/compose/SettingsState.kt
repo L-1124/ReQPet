@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import com.copilot.qqpet.HookEntry
+import kotlinx.coroutines.launch
 import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.LogEntry
 import com.copilot.qqpet.engine.PetAccountGateway
@@ -51,21 +52,45 @@ class SettingsState(
         private set
 
     private val logListener: (LogEntry) -> Unit = { refreshLogs() }
+    private val prefListener =
+        android.content.SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
+            if (key != null) {
+                values[key] = sharedPreferences.all[key]
+            } else {
+                for ((k, v) in sharedPreferences.all) values[k] = v
+            }
+        }
 
-    private var lastPrefsVersion: Long = Long.MIN_VALUE
+
     private var lastPkSummaryKey: Pair<String, String>? = null
     private var lastPkSummaryFriends: List<QQPetDirectBridge.HireableFriend>? = null
+    private var logCollectJob: kotlinx.coroutines.Job? = null
+
 
     init {
         refresh()
     }
 
-    fun attach() {
-        EngineLog.addListener(logListener)
+    fun attach(scope: kotlinx.coroutines.CoroutineScope? = null) {
+        prefs.registerOnSharedPreferenceChangeListener(prefListener)
+        for ((k, v) in prefs.all) values[k] = v
+        if (scope != null) {
+            logCollectJob?.cancel()
+            logCollectJob = scope.launch {
+                EngineLog.logFlow.collect {
+                    refreshLogs()
+                }
+            }
+        } else {
+            EngineLog.addListener(logListener)
+        }
     }
 
     fun detach() {
+        logCollectJob?.cancel()
+        logCollectJob = null
         EngineLog.removeListener(logListener)
+        prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
     }
 
     fun bool(key: String, def: Boolean = false): Boolean =
@@ -106,7 +131,6 @@ class SettingsState(
 
     /** 每秒 tick 与页面 resume 都会调用：引擎状态、日志每秒刷新；prefs 仅在外部变化时重读 */
     fun refresh() {
-        syncExternalPrefsIfNeeded()
         statusText = PetAdventureEngine.formatLiveStatusText()
         val details = PetAdventureEngine.cachedSchoolDetails
         schoolDetails = details
@@ -143,18 +167,6 @@ class SettingsState(
         refreshLogs()
     }
 
-    /**
-     * 外部改动检测：本类写入会同步更新 values 快照，无需重读；
-     * 外部写入（多入口/账号切换清库）通过 all 快照哈希变化发现，每秒仅一次浅读。
-     */
-    private fun syncExternalPrefsIfNeeded() {
-        val allEntries = runCatching { prefs.all }.getOrNull() ?: return
-        val current = allEntries.hashCode().toLong()
-        if (current != lastPrefsVersion) {
-            lastPrefsVersion = current
-            for ((key, value) in allEntries) values[key] = value
-        }
-    }
 
     private fun buildPkBlacklistSummary(): String {
         val blacklistUins = PetAccountGateway.loadSavedPkBlacklistUins(context)

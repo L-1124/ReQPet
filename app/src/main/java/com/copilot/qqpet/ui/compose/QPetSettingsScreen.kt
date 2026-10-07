@@ -20,6 +20,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -44,8 +45,9 @@ fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
             state.refresh()
         }
     }
+    val scope = rememberCoroutineScope()
     DisposableEffect(Unit) {
-        state.attach()
+        state.attach(scope)
         onDispose { state.detach() }
     }
 

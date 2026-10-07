@@ -15,7 +15,8 @@ object HostTheme {
             val res = context.resources
             val id = res.getIdentifier("qui_brand_standard", "color", context.packageName)
             if (id == 0) null else res.getColorStateList(id, null).defaultColor
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
     }
@@ -26,7 +27,8 @@ object HostTheme {
             val method = qqThemeClass.getMethod("isNowThemeIsNight")
             val res = method.invoke(null) as? Boolean
             if (res != null) return res
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
 
         try {
@@ -37,13 +39,15 @@ object HostTheme {
                     if (res != null) return res
                 }
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
 
         return try {
             (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
                     Configuration.UI_MODE_NIGHT_YES
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             false
         }
     }

@@ -65,7 +65,8 @@ fun CareerSection(state: SettingsState) {
             if (!prefs.contains(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS)) {
                 prefs.edit().putInt(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS, HIRED_RECALL_DEFAULT).apply()
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
     }
 

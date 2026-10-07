@@ -128,7 +128,8 @@ fun PkBlacklistDialog(state: SettingsState, onDismiss: () -> Unit) {
             try {
                 val result = active.fetchLikeListAwait("")
                 if (result.first == 0) result.second else emptyList<QQPetDirectBridge.LikeMember>()
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                 emptyList<QQPetDirectBridge.LikeMember>()
             }
         }

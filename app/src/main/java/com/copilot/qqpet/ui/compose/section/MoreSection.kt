@@ -30,12 +30,14 @@ fun MoreSection(state: SettingsState) {
                         context.startActivity(
                             Intent(Intent.ACTION_VIEW, Uri.parse(NATIVE_URI)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         )
-                    } catch (_: Throwable) {
+                    } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                         try {
                             context.startActivity(
                                 Intent(Intent.ACTION_VIEW, Uri.parse(WEB_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             )
-                        } catch (_: Throwable) {
+                        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
                         }
                     }
                 }

@@ -12,14 +12,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.compose.section.ActionSection
@@ -30,12 +34,13 @@ import com.copilot.qqpet.ui.compose.section.LogSection
 import com.copilot.qqpet.ui.compose.section.MetricsSection
 import com.copilot.qqpet.ui.compose.section.MoreSection
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         while (true) {
-            delay(1000L)
+            delay(1000L.milliseconds)
             state.refresh()
         }
     }
@@ -44,9 +49,12 @@ fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
         onDispose { state.detach() }
     }
 
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
+            LargeTopAppBar(
                 title = { Text("Q宠后台伴侣") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -55,7 +63,8 @@ fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
                             contentDescription = "返回"
                         )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior
             )
         }
     ) { innerPadding ->
@@ -65,7 +74,7 @@ fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
                 SectionHeader("总开关")
@@ -104,5 +113,13 @@ fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
             item { MetricsSection(state.engineMetrics) }
             item { MoreSection(state) }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun QPetSettingsScreenPreview() {
+    MaterialTheme {
+        QPetSettingsScreen(state = SettingsState(LocalContext.current, null), onBack = {})
     }
 }

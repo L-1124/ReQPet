@@ -8,6 +8,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,16 +24,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SliderState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -44,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 import kotlin.math.roundToInt
@@ -52,9 +56,9 @@ import kotlin.math.roundToInt
 fun SectionHeader(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleSmallEmphasized,
+        style = MaterialTheme.typography.titleMediumEmphasized,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
+        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)
     )
 }
 
@@ -72,10 +76,7 @@ fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope
 
 @Composable
 fun CardDivider(startPadding: Int = 16) {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = startPadding.dp),
-        color = MaterialTheme.colorScheme.outlineVariant
-    )
+    Spacer(modifier = Modifier.height(8.dp))
 }
 
 @Composable
@@ -267,7 +268,8 @@ fun SliderRow(
     }
 }
 
-/** 单选用 expressive ToggleButton 组；ButtonGroup 的 content 在这版不是 composable 上下文，故自行排布。 */
+/** 单选用 expressive SegmentedButton 组 */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChoiceToggleRow(
     title: String,
@@ -290,26 +292,87 @@ fun ChoiceToggleRow(
                 modifier = Modifier.padding(top = 2.dp)
             )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
         ) {
             options.forEachIndexed { index, label ->
-                ToggleButton(
-                    checked = index == selectedIndex,
-                    onCheckedChange = { onSelect(index) },
-                    modifier = Modifier.weight(1f),
-                    content = {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                )
+                SegmentedButton(
+                    selected = index == selectedIndex,
+                    onClick = { onSelect(index) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                    icon = {},
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SectionHeaderPreview() {
+    MaterialTheme {
+        SectionHeader("通用设置")
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SettingsCardPreview() {
+    MaterialTheme {
+        SettingsCard(modifier = Modifier.padding(16.dp)) {
+            ToggleRow("示例开关", true, {})
+            CardDivider()
+            ToggleRow("未开启开关", false, {})
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ActionRowPreview() {
+    MaterialTheme {
+        ActionRow(
+            title = "管理名单",
+            subtitle = "已拉黑 10 位对手",
+            trailing = "点击进入",
+            onClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SliderRowPreview() {
+    MaterialTheme {
+        SliderRow(
+            title = "阈值调节",
+            value = 60,
+            range = 0..100,
+            valueLabel = "60%",
+            onValueChange = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ChoiceToggleRowPreview() {
+    MaterialTheme {
+        ChoiceToggleRow(
+            title = "单选设置",
+            options = listOf("短课", "长课", "自适应"),
+            selectedIndex = 1,
+            onSelect = {}
+        )
     }
 }
 

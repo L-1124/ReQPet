@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.engine.metrics.EngineMetrics
 import com.copilot.qqpet.protocol.channel.ProtocolBreakers
@@ -105,5 +106,13 @@ private fun MetricCell(label: String, value: String) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun MetricsSectionPreview() {
+    MaterialTheme {
+        MetricsSection(metrics = null)
     }
 }

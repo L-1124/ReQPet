@@ -2,8 +2,10 @@ package com.copilot.qqpet.ui.compose.section
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import com.copilot.qqpet.ui.compose.ActionRow
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SettingsCard
@@ -36,5 +38,13 @@ fun MoreSection(state: SettingsState) {
                 }
             }
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun MoreSectionPreview() {
+    MaterialTheme {
+        MoreSection(state = SettingsState(LocalContext.current, null))
     }
 }

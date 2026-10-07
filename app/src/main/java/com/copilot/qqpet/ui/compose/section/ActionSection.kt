@@ -1,6 +1,7 @@
 package com.copilot.qqpet.ui.compose.section
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.toggleable
@@ -16,12 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SettingsCard
 import com.copilot.qqpet.ui.compose.SettingsState
 import com.copilot.qqpet.ui.compose.dialog.ConfirmDialog
+import androidx.compose.ui.platform.LocalContext
 
 private data class ActionItemDef(
     val title: String,

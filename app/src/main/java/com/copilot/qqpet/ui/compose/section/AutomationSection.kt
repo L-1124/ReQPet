@@ -2,12 +2,15 @@ package com.copilot.qqpet.ui.compose.section
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.compose.ActionRow
 import com.copilot.qqpet.ui.compose.CardDivider
@@ -229,4 +232,12 @@ private fun FriendCareThresholdSliderRow(
         valueLabel = FRIEND_CARE_THRESHOLD_VALUES[index].toString(),
         onValueChange = { state.setInt(key, FRIEND_CARE_THRESHOLD_VALUES.getOrElse(it) { defaultValue }) }
     )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun AutomationSectionPreview() {
+    MaterialTheme {
+        AutomationSection(state = SettingsState(LocalContext.current, null))
+    }
 }

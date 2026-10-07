@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.copilot.qqpet.engine.EngineLog
@@ -28,6 +29,7 @@ import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SettingsCard
 import com.copilot.qqpet.ui.compose.SettingsState
+import androidx.compose.ui.platform.LocalContext
 
 private const val MAX_RENDER_LINES = 80
 private const val PLACEHOLDER = "暂无日志"
@@ -121,5 +123,13 @@ fun LogSection(state: SettingsState) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun LogSectionPreview() {
+    MaterialTheme {
+        LogSection(state = SettingsState(LocalContext.current, null))
     }
 }

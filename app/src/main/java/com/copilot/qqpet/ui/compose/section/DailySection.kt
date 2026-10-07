@@ -2,8 +2,11 @@ package com.copilot.qqpet.ui.compose.section
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.tooling.preview.Preview
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.ExpandablePanel
@@ -101,4 +104,12 @@ private fun ThresholdSliderRow(
         valueLabel = CARE_THRESHOLD_VALUES[index].toString(),
         onValueChange = { state.setInt(key, CARE_THRESHOLD_VALUES.getOrElse(it) { defaultValue }) }
     )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun DailySectionPreview() {
+    MaterialTheme {
+        DailySection(state = SettingsState(LocalContext.current, null))
+    }
 }

@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -63,7 +64,7 @@ private data class PkTarget(
 private fun buildInitialCandidates(context: Context, blacklistUins: List<Long>): List<PkTarget> {
     val candidates = mutableListOf<PkTarget>()
     val seen = mutableSetOf<Long>()
-    for (friend in PetAdventureEngine.loadCachedHireableFriends(context)) {
+    for (friend in PetAccountGateway.loadCachedHireableFriends(context)) {
         if (friend.uin <= 0L || seen.contains(friend.uin)) continue
         seen.add(friend.uin)
         candidates.add(
@@ -89,7 +90,7 @@ private fun buildInitialCandidates(context: Context, blacklistUins: List<Long>):
 fun PkBlacklistDialog(state: SettingsState, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val blacklistUins = remember {
-        mutableStateListOf<Long>().apply { addAll(PetAdventureEngine.loadSavedPkBlacklistUins(context)) }
+        mutableStateListOf<Long>().apply { addAll(PetAccountGateway.loadSavedPkBlacklistUins(context)) }
     }
     val candidates = remember {
         mutableStateListOf<PkTarget>().apply { addAll(buildInitialCandidates(context, blacklistUins.toList())) }
@@ -98,7 +99,7 @@ fun PkBlacklistDialog(state: SettingsState, onDismiss: () -> Unit) {
     var showManualAdd by remember { mutableStateOf(false) }
 
     fun persistSelection() {
-        PetAdventureEngine.savePkBlacklistUins(context, blacklistUins)
+        PetAccountGateway.savePkBlacklistUins(context, blacklistUins)
         state.syncConfig()
         state.refresh()
     }

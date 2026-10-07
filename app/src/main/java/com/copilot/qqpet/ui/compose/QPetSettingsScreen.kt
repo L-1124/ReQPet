@@ -27,6 +27,7 @@ import com.copilot.qqpet.ui.compose.section.AutomationSection
 import com.copilot.qqpet.ui.compose.section.CareerSection
 import com.copilot.qqpet.ui.compose.section.DailySection
 import com.copilot.qqpet.ui.compose.section.LogSection
+import com.copilot.qqpet.ui.compose.section.MetricsSection
 import com.copilot.qqpet.ui.compose.section.MoreSection
 import kotlinx.coroutines.delay
 
@@ -100,6 +101,7 @@ fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
             item { AutomationSection(state) }
             item { ActionSection(state) }
             item { LogSection(state) }
+            item { MetricsSection(state.engineMetrics) }
             item { MoreSection(state) }
         }
     }

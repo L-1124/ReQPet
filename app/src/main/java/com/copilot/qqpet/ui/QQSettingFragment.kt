@@ -7,7 +7,9 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.ui.platform.ComposeView
 import com.copilot.qqpet.HookEntry
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.hook.HookLog
 import com.copilot.qqpet.ui.compose.ComposeInjectionHost
 import com.copilot.qqpet.ui.compose.QPetExpressiveTheme
@@ -89,7 +91,7 @@ class QQSettingFragment : QPublicBaseFragment() {
             activeEngine.verifyAndSyncAccountSession(context)
             val (_, remotePetId) = activeEngine.queryOwnPetAwait()
             val petId = if (!remotePetId.isNullOrEmpty() &&
-                PetAdventureEngine.shouldUpdateCachedPetId(PetAdventureEngine.cachedPetId, remotePetId)
+                PetPureCalculations.shouldUpdateCachedPetId(PetAdventureEngine.cachedPetId, remotePetId)
             ) {
                 HookLog.w("QQSettingFragment", "🔄 [设置页核验] 发现新活跃小宠 ID: $remotePetId，覆写旧缓存")
                 PetAdventureEngine.saveScopedPetId(context, remotePetId)
@@ -100,7 +102,7 @@ class QQSettingFragment : QPublicBaseFragment() {
             if (petId.isNullOrEmpty()) return@launch
             activeEngine.preloadAccountDataAwait(petId)
             activeEngine.queryPetAttributesAwait(petId)
-            if (PetAdventureEngine.loadCachedHireableFriends(context).isEmpty()) {
+            if (PetAccountGateway.loadCachedHireableFriends(context).isEmpty()) {
                 activeEngine.fetchAllHireableFriendsAwait(context, enrichSelectedAndTop = false)
             }
         }

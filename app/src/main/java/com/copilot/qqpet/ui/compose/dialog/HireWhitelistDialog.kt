@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -56,13 +57,13 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val selected = remember {
-        mutableStateListOf<Long>().apply { addAll(PetAdventureEngine.loadSavedHireFriendUins(context)) }
+        mutableStateListOf<Long>().apply { addAll(PetAccountGateway.loadSavedHireFriendUins(context)) }
     }
     var query by remember { mutableStateOf("") }
     var refreshing by remember { mutableStateOf(false) }
 
     fun persistSelection() {
-        PetAdventureEngine.saveHireFriendUins(context, selected)
+        PetAccountGateway.saveHireFriendUins(context, selected)
         state.syncConfig()
         state.refresh()
     }
@@ -97,11 +98,11 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
         val active = HookEntry.globalEngine ?: return
         scope.launch {
             val enriched = withContext(Dispatchers.IO) { active.enrichFriendDetailsAwait(friend) }
-            val cached = PetAdventureEngine.loadCachedHireableFriends(context).toMutableList()
+            val cached = PetAccountGateway.loadCachedHireableFriends(context).toMutableList()
             val index = cached.indexOfFirst { it.uin == friend.uin }
             if (index >= 0) {
                 cached[index] = enriched
-                PetAdventureEngine.saveCachedHireableFriends(context, cached)
+                PetAccountGateway.saveCachedHireableFriends(context, cached)
                 state.refresh()
             }
         }

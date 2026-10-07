@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.HookEntry
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
@@ -348,11 +349,11 @@ private fun workSubtitle(state: SettingsState, workPlaces: QQPetDirectBridge.Sec
 }
 
 private fun hireWhitelistSummary(context: Context): String {
-    val selectedUins = PetAdventureEngine.loadSavedHireFriendUins(context)
+    val selectedUins = PetAccountGateway.loadSavedHireFriendUins(context)
     if (selectedUins.isEmpty()) {
         return "当前未勾选好友 (未选择的好友不会雇佣 · 点击搜索勾选)"
     }
-    val cachedFriends = PetAdventureEngine.loadCachedHireableFriends(context)
+    val cachedFriends = PetAccountGateway.loadCachedHireableFriends(context)
     val matchedNames = selectedUins.mapNotNull { uin ->
         val friend = cachedFriends.find { it.uin == uin }
         if (friend != null && friend.friendNick.isNotBlank()) friend.friendNick else uin.toString()

@@ -9,7 +9,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.EngineLog
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.engine.metrics.EngineMetrics
+import com.copilot.qqpet.engine.metrics.EngineMetricsImpl
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.util.SettingConfigSyncer
@@ -38,6 +41,9 @@ class SettingsState(
         private set
     var hireableFriends by mutableStateOf<List<QQPetDirectBridge.HireableFriend>>(emptyList())
         private set
+    val engineMetrics: EngineMetrics? = runCatching {
+        engine?.let { EngineMetricsImpl.getInstance(context) }
+    }.getOrNull()
     var logLines by mutableStateOf<List<String>>(emptyList())
         private set
     var pkBlacklistSummary by mutableStateOf("")
@@ -153,11 +159,11 @@ class SettingsState(
     }
 
     private fun buildPkBlacklistSummary(): String {
-        val blacklistUins = PetAdventureEngine.loadSavedPkBlacklistUins(context)
+        val blacklistUins = PetAccountGateway.loadSavedPkBlacklistUins(context)
         if (blacklistUins.isEmpty()) {
             return "未设置免战名单 (全部碾压对手均可对决 · 点击管理黑名单)"
         }
-        val cachedFriends = PetAdventureEngine.loadCachedHireableFriends(context)
+        val cachedFriends = PetAccountGateway.loadCachedHireableFriends(context)
         val matchedNames = blacklistUins.map { uin ->
             val friend = cachedFriends.find { it.uin == uin }
             if (friend != null && friend.friendNick.isNotBlank()) friend.friendNick else uin.toString()

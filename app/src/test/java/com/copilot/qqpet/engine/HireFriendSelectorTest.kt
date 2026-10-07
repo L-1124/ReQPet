@@ -1,5 +1,6 @@
 package com.copilot.qqpet.engine
 
+import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -9,7 +10,7 @@ class HireFriendSelectorTest {
 
     @Test
     fun `parseHireFriendUins filters invalid values and deduplicates`() {
-        val parsed = PetAdventureEngine.parseHireFriendUins(" 10001, 20002,abc,-5,10001 , 0 ")
+        val parsed = PetPureCalculations.parseHireFriendUins(" 10001, 20002,abc,-5,10001 , 0 ")
         assertEquals(setOf(10001L, 20002L), parsed)
     }
 

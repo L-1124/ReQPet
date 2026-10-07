@@ -34,6 +34,10 @@ class OidbChannel(
         var resolvedSendMethodName: String = "c"
             internal set
 
+        @Volatile
+        var cachedDelegateClassName: String? = null
+            internal set
+
         fun getCandidateClassLoaders(primaryLoader: ClassLoader, context: Context?): List<ClassLoader> {
             val loaders = mutableListOf<ClassLoader>()
             loaders.add(primaryLoader)
@@ -104,7 +108,21 @@ class OidbChannel(
         }
 
         fun findDelegateClass(loaders: List<ClassLoader>): Triple<Class<*>?, Method?, Class<*>?> {
-            val candidateNames = buildCandidateClassNames()
+            resolvedDelegateClass?.let { cls ->
+                val targetMethod = findOidbSendMethod(cls, null)
+                if (targetMethod != null) {
+                    val obs = targetMethod.parameterTypes[4]
+                    return Triple(cls, targetMethod, obs)
+                }
+            }
+
+            val cachedName = cachedDelegateClassName
+            val candidateNames = if (!cachedName.isNullOrEmpty()) {
+                listOf(cachedName) + buildCandidateClassNames().filter { it != cachedName }
+            } else {
+                buildCandidateClassNames()
+            }
+
             for (loader in loaders) {
                 var observerCls = tryFindObserverClass(loaders, loader)
                 val interfaceCls = tryLoadClass(INTERFACE_CLASS, loader)
@@ -116,10 +134,13 @@ class OidbChannel(
                     if (targetMethod != null && (isInterfaceMatch || interfaceCls == null)) {
                         resolvedDelegateClass = cls
                         resolvedSendMethodName = targetMethod.name
+                        cachedDelegateClassName = className
                         if (observerCls == null) {
                             observerCls = targetMethod.parameterTypes[4]
                         }
-                        EngineLog.i("OidbChannel", "🎯 动态多源自适应命中 QQ 宠物原生发包代理类: $className, 发包方法: ${targetMethod.name}"
+                        EngineLog.i(
+                            "OidbChannel",
+                            "🎯 动态多源自适应命中 QQ 宠物原生发包代理类: $className, 发包方法: ${targetMethod.name}"
                         )
                         return Triple(cls, targetMethod, observerCls)
                     }
@@ -176,6 +197,13 @@ class OidbChannel(
 
     private fun tryInitDelegate() {
         try {
+            if (cachedDelegateClassName == null && context != null) {
+                try {
+                    val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
+                    cachedDelegateClassName = prefs.getString("cached_delegate_class", null)
+                } catch (_: Throwable) {
+                }
+            }
             val loaders = getCandidateClassLoaders(classLoader, context)
             val (cls, method, obsCls) = findDelegateClass(loaders)
             if (cls != null && method != null && obsCls != null) {
@@ -185,6 +213,13 @@ class OidbChannel(
                     delegateInstance = inst
                     sendOidbMethod = method
                     isReady = true
+                    if (context != null) {
+                        try {
+                            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putString("cached_delegate_class", cls.name).apply()
+                        } catch (_: Throwable) {
+                        }
+                    }
                     com.copilot.qqpet.protocol.DeviceTrace.bind(context)
                     EngineLog.d("OidbChannel", "✅ 成功反射挂载 QQ 宠物原生发包代理: ${cls.name}")
                 } else {

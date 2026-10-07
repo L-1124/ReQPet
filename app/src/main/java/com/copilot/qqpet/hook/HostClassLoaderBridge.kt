@@ -9,7 +9,7 @@ import java.net.URL
  */
 class HostAwareClassLoader(
     originalParent: ClassLoader,
-    private val hostClassLoader: ClassLoader
+    @Volatile var hostClassLoader: ClassLoader
 ) : ClassLoader(originalParent) {
 
     override fun loadClass(name: String, resolve: Boolean): Class<*> =
@@ -48,20 +48,32 @@ object HostClassLoaderBridge {
     @Volatile
     private var installed = false
 
+    @Volatile
+    private var hostAwareLoader: HostAwareClassLoader? = null
+
     /**
      * @param moduleLoader 模块自己的 ClassLoader（本模块类的定义 loader）
      * @param hostLoader   宿主 ClassLoader（即 lpparam.classLoader）
      * @return 宿主类是否已可解析
      */
     fun install(moduleLoader: ClassLoader, hostLoader: ClassLoader): Boolean {
-        if (installed) return true
+        if (installed) {
+            updateHostLoader(hostLoader)
+            return true
+        }
         return try {
             val parentField = ClassLoader::class.java.getDeclaredField("parent")
             parentField.isAccessible = true
             val originalParent = parentField.get(moduleLoader) as? ClassLoader
-            if (originalParent !is HostAwareClassLoader) {
-                parentField.set(moduleLoader, HostAwareClassLoader(originalParent ?: hostLoader, hostLoader))
+            val aware = if (originalParent is HostAwareClassLoader) {
+                originalParent.hostClassLoader = hostLoader
+                originalParent
+            } else {
+                val shim = HostAwareClassLoader(originalParent ?: hostLoader, hostLoader)
+                parentField.set(moduleLoader, shim)
+                shim
             }
+            hostAwareLoader = aware
             // 自检：改完之后必须能解析出宿主基类，否则方案不成立
             moduleLoader.loadClass(HOST_FRAGMENT_BASE)
             installed = true
@@ -69,6 +81,15 @@ object HostClassLoaderBridge {
         } catch (t: Throwable) {
             HookLog.trace(TAG, "接入宿主分流 shim 失败", t)
             false
+        }
+    }
+
+    fun updateHostLoader(newHostLoader: ClassLoader) {
+        hostAwareLoader?.let { loader ->
+            if (loader.hostClassLoader !== newHostLoader) {
+                loader.hostClassLoader = newHostLoader
+                HookLog.trace(TAG, "已更新宿主分流 shim 目标 ClassLoader 为最新实例: $newHostLoader")
+            }
         }
     }
 }

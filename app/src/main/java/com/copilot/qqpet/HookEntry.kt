@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.hook.CrashInterceptor
 import com.copilot.qqpet.hook.HookApi
 import com.copilot.qqpet.hook.HookLog
 import com.copilot.qqpet.hook.HostClassLoaderBridge
@@ -49,6 +50,19 @@ class HookEntry : XposedModule() {
         var processName: String = ""
             private set
 
+        fun getActualProcessName(): String {
+            if (processName.isNotEmpty()) return processName
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                val name = android.app.Application.getProcessName()
+                if (!name.isNullOrEmpty()) return name
+            }
+            return try {
+                java.io.File("/proc/self/cmdline").readText().trim('\u0000', ' ', '\n')
+            } catch (_: Throwable) {
+                ""
+            }
+        }
+
         fun reconnectBridgeIfAvailable(context: Context): Boolean {
             val entry = instance ?: return false
             val loader = latestClassLoader ?: context.classLoader ?: return false
@@ -83,14 +97,20 @@ class HookEntry : XposedModule() {
         // 模块自身不再被注入，这里的判断只是兜底；真正的目标是 QQ 主进程
         if (param.packageName == MODULE_PACKAGE) return
         if (param.packageName != TARGET_PACKAGE) return
-        if (processName.isNotEmpty() && processName != TARGET_PACKAGE) {
-            HookLog.log(TAG, "跳过 QQ 非主进程: $processName")
+
+        val actualProcess = getActualProcessName()
+        if (actualProcess.isNotEmpty() && actualProcess != TARGET_PACKAGE) {
+            HookLog.trace(TAG, "跳过 QQ 非主进程: $actualProcess")
             return
         }
 
         instance = this
         val classLoader = param.classLoader
         latestClassLoader = classLoader
+
+        // 尽早注入全局未捕获异常监控，防止宿主 Crash SDK 静默强杀
+        CrashInterceptor.install()
+
         // 必须在任何"模块类继承宿主类"的解析发生之前完成，否则 NoClassDefFoundError 会被缓存
         val hostResolvable = HostClassLoaderBridge.install(javaClass.classLoader, classLoader)
         HookLog.trace(
@@ -99,7 +119,7 @@ class HookEntry : XposedModule() {
         )
         HookLog.log(
             TAG,
-            "成功注入 QQ 主进程: $processName, PID=${android.os.Process.myPid()} (libxposed api=$apiVersion)"
+            "成功注入 QQ 主进程: $actualProcess, PID=${android.os.Process.myPid()} (libxposed api=$apiVersion)"
         )
         TinkerBlocker.install(classLoader)
 
@@ -109,20 +129,26 @@ class HookEntry : XposedModule() {
             findMethodInHierarchy(baseAppCls, "onCreate")?.let { method ->
                 HookApi.hook(method).intercept { chain ->
                     val result = chain.proceed()
-                    val app = chain.thisObject as? Context
-                    if (app != null) {
-                        val appLoader = app.classLoader
-                        latestClassLoader = appLoader
-                        HookLog.log(TAG, "BaseApplicationImpl.onCreate 触发, classLoader=$appLoader")
-                        initEngineAndReceiver(app, appLoader, "BaseApplicationImpl.onCreate")
-                        hookSplashActivity(appLoader)
-                        QQSettingInjector.inject(appLoader)
+                    runCatching {
+                        val app = chain.thisObject as? Context
+                        if (app != null) {
+                            val appLoader = app.classLoader
+                            latestClassLoader = appLoader
+                            HostClassLoaderBridge.updateHostLoader(appLoader)
+                            CrashInterceptor.install(app)
+                            HookLog.log(TAG, "BaseApplicationImpl.onCreate 触发, classLoader=$appLoader")
+                            initEngineAndReceiver(app, appLoader, "BaseApplicationImpl.onCreate")
+                            hookSplashActivity(appLoader)
+                            QQSettingInjector.inject(appLoader)
+                        }
+                    }.onFailure { t ->
+                        HookLog.e(TAG, "BaseApplicationImpl.onCreate 注入执行异常", t)
                     }
                     result
                 }
             }
         } catch (t: Throwable) {
-            HookLog.log(TAG, "Hook BaseApplicationImpl 异常: ${t.message}")
+            HookLog.e(TAG, "Hook BaseApplicationImpl 异常", t)
         }
 
         // 挂钩 2: MobileQQ.onCreate
@@ -131,18 +157,24 @@ class HookEntry : XposedModule() {
             findMethodInHierarchy(mobileQQCls, "onCreate")?.let { method ->
                 HookApi.hook(method).intercept { chain ->
                     val result = chain.proceed()
-                    val context = chain.thisObject as? Context
-                    if (context != null) {
-                        latestClassLoader = context.classLoader
-                        initEngineAndReceiver(context, context.classLoader, "MobileQQ.onCreate")
-                        hookSplashActivity(context.classLoader)
-                        QQSettingInjector.inject(context.classLoader)
+                    runCatching {
+                        val context = chain.thisObject as? Context
+                        if (context != null) {
+                            latestClassLoader = context.classLoader
+                            HostClassLoaderBridge.updateHostLoader(context.classLoader)
+                            CrashInterceptor.install(context)
+                            initEngineAndReceiver(context, context.classLoader, "MobileQQ.onCreate")
+                            hookSplashActivity(context.classLoader)
+                            QQSettingInjector.inject(context.classLoader)
+                        }
+                    }.onFailure { t ->
+                        HookLog.e(TAG, "MobileQQ.onCreate 注入执行异常", t)
                     }
                     result
                 }
             }
         } catch (t: Throwable) {
-            HookLog.log(TAG, "Hook MobileQQ.onCreate 异常: ${t.message}")
+            HookLog.e(TAG, "Hook MobileQQ.onCreate 异常", t)
         }
 
         // 挂钩 3: 针对通用 Activity.onCreate 提供超轻量单次设置项保底注入
@@ -150,25 +182,30 @@ class HookEntry : XposedModule() {
             val onCreate = Activity::class.java.getDeclaredMethod("onCreate", Bundle::class.java)
             HookApi.hook(onCreate).intercept { chain ->
                 val result = chain.proceed()
-                val activity = chain.thisObject as? Activity
-                if (activity != null && activity.packageName == TARGET_PACKAGE) {
-                    latestClassLoader = activity.classLoader
-                    if (!QQSettingInjector.isHooked) {
-                        QQSettingInjector.inject(activity.classLoader)
+                runCatching {
+                    val activity = chain.thisObject as? Activity
+                    if (activity != null && activity.packageName == TARGET_PACKAGE) {
+                        latestClassLoader = activity.classLoader
+                        HostClassLoaderBridge.updateHostLoader(activity.classLoader)
+                        if (!QQSettingInjector.isHooked) {
+                            QQSettingInjector.inject(activity.classLoader)
+                        }
+                        if (globalBridge?.isReady != true) {
+                            val appContext = activity.applicationContext ?: activity
+                            initEngineAndReceiver(
+                                appContext,
+                                activity.classLoader,
+                                "Activity.onCreate[${activity.javaClass.simpleName}]"
+                            )
+                        }
                     }
-                    if (globalBridge?.isReady != true) {
-                        val appContext = activity.applicationContext ?: activity
-                        initEngineAndReceiver(
-                            appContext,
-                            activity.classLoader,
-                            "Activity.onCreate[${activity.javaClass.simpleName}]"
-                        )
-                    }
+                }.onFailure { t ->
+                    HookLog.e(TAG, "Activity.onCreate 设置保底执行异常", t)
                 }
                 result
             }
         } catch (t: Throwable) {
-            HookLog.log(TAG, "Hook Activity.onCreate 设置保底异常: ${t.message}")
+            HookLog.e(TAG, "Hook Activity.onCreate 设置保底异常", t)
         }
 
         // 挂钩 4: 针对 QQ 主界面 SplashActivity 触发保活、设置注入与会话校准
@@ -183,16 +220,21 @@ class HookEntry : XposedModule() {
             findMethodInHierarchy(splashCls, "onResume")?.let { method ->
                 HookApi.hook(method).intercept { chain ->
                     val result = chain.proceed()
-                    val activity = chain.thisObject as? Activity
-                    if (activity != null && activity.packageName == TARGET_PACKAGE) {
-                        val appContext = activity.applicationContext ?: activity
-                        latestClassLoader = activity.classLoader
-                        QQSettingInjector.inject(activity.classLoader)
-                        if (globalBridge?.isReady != true) {
-                            initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onResume")
+                    runCatching {
+                        val activity = chain.thisObject as? Activity
+                        if (activity != null && activity.packageName == TARGET_PACKAGE) {
+                            val appContext = activity.applicationContext ?: activity
+                            latestClassLoader = activity.classLoader
+                            HostClassLoaderBridge.updateHostLoader(activity.classLoader)
+                            QQSettingInjector.inject(activity.classLoader)
+                            if (globalBridge?.isReady != true) {
+                                initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onResume")
+                            }
+                            globalEngine?.verifyAndSyncAccountSession(appContext)
+                            globalEngine?.startBackgroundLoop(appContext)
                         }
-                        globalEngine?.verifyAndSyncAccountSession(appContext)
-                        globalEngine?.startBackgroundLoop(appContext)
+                    }.onFailure { t ->
+                        HookLog.e(TAG, "SplashActivity.onResume 执行异常", t)
                     }
                     result
                 }
@@ -201,14 +243,19 @@ class HookEntry : XposedModule() {
             findMethodInHierarchy(splashCls, "onCreate", Bundle::class.java)?.let { method ->
                 HookApi.hook(method).intercept { chain ->
                     val result = chain.proceed()
-                    val activity = chain.thisObject as? Activity
-                    if (activity != null && activity.packageName == TARGET_PACKAGE) {
-                        val appContext = activity.applicationContext ?: activity
-                        latestClassLoader = activity.classLoader
-                        QQSettingInjector.inject(activity.classLoader)
-                        if (globalBridge?.isReady != true) {
-                            initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onCreate")
+                    runCatching {
+                        val activity = chain.thisObject as? Activity
+                        if (activity != null && activity.packageName == TARGET_PACKAGE) {
+                            val appContext = activity.applicationContext ?: activity
+                            latestClassLoader = activity.classLoader
+                            HostClassLoaderBridge.updateHostLoader(activity.classLoader)
+                            QQSettingInjector.inject(activity.classLoader)
+                            if (globalBridge?.isReady != true) {
+                                initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onCreate")
+                            }
                         }
+                    }.onFailure { t ->
+                        HookLog.e(TAG, "SplashActivity.onCreate 执行异常", t)
                     }
                     result
                 }
@@ -216,7 +263,8 @@ class HookEntry : XposedModule() {
 
             isSplashHooked = true
             HookLog.log(TAG, "已成功挂钩 SplashActivity 主界面保活与设置项注入 (libxposed)")
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            HookLog.e(TAG, "Hook SplashActivity 异常", t)
         }
     }
 
@@ -259,14 +307,14 @@ class HookEntry : XposedModule() {
                     HookLog.log(TAG, "发包内核暂未就绪，等待后续分包触发 (来源: $from)")
                 }
             } catch (t: Throwable) {
-                HookLog.log(TAG, "初始化发包内核失败: ${t.message}")
+                HookLog.e(TAG, "初始化发包内核失败", t)
             }
         }
 
         try {
             PacketSniffer.install(classLoader, appContext)
         } catch (t: Throwable) {
-            HookLog.log(TAG, "启动 PacketSniffer 异常: ${t.message}")
+            HookLog.e(TAG, "启动 PacketSniffer 异常", t)
         }
 
         TinkerBlocker.install(classLoader, appContext)
@@ -314,7 +362,7 @@ class HookEntry : XposedModule() {
                 return true
             }
         } catch (t: Throwable) {
-            HookLog.log(TAG, "检查登录状态异常: ${t.message}")
+            HookLog.e(TAG, "检查登录状态异常", t)
         }
         return false
     }

@@ -2,34 +2,49 @@ package com.copilot.qqpet.ui.compose.dialog
 
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,12 +56,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.copilot.qqpet.engine.PetAccountGateway
-import com.copilot.qqpet.engine.PetAdventureEngine
+import androidx.compose.ui.unit.sp
 import com.copilot.qqpet.HookEntry
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.compose.CardDivider
+import com.copilot.qqpet.ui.compose.CompactSearchBar
 import com.copilot.qqpet.ui.compose.SettingsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -97,6 +114,7 @@ fun PkBlacklistDialog(state: SettingsState, onDismiss: () -> Unit) {
     }
     var query by remember { mutableStateOf("") }
     var showManualAdd by remember { mutableStateOf(false) }
+    var manualInput by remember { mutableStateOf("") }
 
     fun persistSelection() {
         PetAccountGateway.savePkBlacklistUins(context, blacklistUins)
@@ -134,94 +152,189 @@ fun PkBlacklistDialog(state: SettingsState, onDismiss: () -> Unit) {
     } else {
         candidates.filter { item ->
             item.nick.contains(keyword, ignoreCase = true) ||
-                item.petNick.contains(keyword, ignoreCase = true) ||
-                item.uin.toString().contains(keyword)
+                    item.petNick.contains(keyword, ignoreCase = true) ||
+                    item.uin.toString().contains(keyword)
         }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(text = "选择 PK 免战黑名单", style = MaterialTheme.typography.titleLarge)
+            Text(text = "PK 免战黑名单", style = MaterialTheme.typography.titleLarge)
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "已勾选目标将绝对免战跳过，零发包防误打；未勾选且三维低于我方的对手正常挑战。",
+                    text = "已勾选的目标将跳过挑战；未勾选且属性低于我方的对手正常发起挑战。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp),
-                    singleLine = true,
-                    placeholder = { Text("搜索昵称 / QQ 号") },
-                    trailingIcon = if (query.isEmpty()) {
-                        null
-                    } else {
-                        {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Clear,
-                                    contentDescription = "清空",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
+                Spacer(modifier = Modifier.height(10.dp))
+                CompactSearchBar(
+                    query = query,
+                    onQueryChange = { query = it },
+                    placeholder = "搜索昵称 / QQ 号"
                 )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp),
+                        .padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (keyword.isNotEmpty()) {
-                            "搜索到 ${filtered.size} 人 · 已拉黑 ${blacklistUins.size} 人"
-                        } else {
-                            "已拉黑 ${blacklistUins.size} 人 · 候选池共 ${candidates.size} 人"
-                        },
+                        text = "已拉黑 ${blacklistUins.size} / ${candidates.size}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(
-                        onClick = {
-                            if (blacklistUins.isNotEmpty()) {
+                    if (blacklistUins.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
                                 blacklistUins.clear()
                                 persistSelection()
                             }
+                        ) {
+                            Text(
+                                text = "清空",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
                         }
-                    ) {
+                    }
+                    TextButton(onClick = { showManualAdd = !showManualAdd }) {
                         Text(
-                            text = "全不选",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.error
+                            text = if (showManualAdd) "收起" else "+ 添加",
+                            style = MaterialTheme.typography.labelMedium
                         )
                     }
-                    TextButton(onClick = { showManualAdd = true }) {
-                        Text(text = "+ 输入QQ拉黑", style = MaterialTheme.typography.labelMedium)
-                    }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                if (filtered.isEmpty()) {
-                    Text(
-                        text = if (keyword.isNotEmpty()) {
-                            "未找到匹配「$keyword」的对象，可点击右上角「+ 输入QQ拉黑」直接添加"
-                        } else {
-                            "暂无候选好友，可点击右上角「+ 输入QQ拉黑」添加免战对象"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+                AnimatedVisibility(
+                    visible = showManualAdd,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = CircleShape,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 36.dp)
-                    )
+                            .height(44.dp)
+                            .padding(vertical = 2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 14.dp, end = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (manualInput.isEmpty()) {
+                                    Text(
+                                        text = "输入 QQ 号免战",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                BasicTextField(
+                                    value = manualInput,
+                                    onValueChange = { manualInput = it.filter { ch -> ch.isDigit() } },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            if (manualInput.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { manualInput = "" },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Clear,
+                                        contentDescription = "清空",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                            Button(
+                                onClick = {
+                                    val rawUin = manualInput.trim().toLongOrNull()
+                                    if (rawUin != null && rawUin > 10000L) {
+                                        if (!blacklistUins.contains(rawUin)) blacklistUins.add(rawUin)
+                                        if (candidates.none { it.uin == rawUin }) {
+                                            candidates.add(0, PkTarget(rawUin, "手动免战号", "-", "手动免战"))
+                                        }
+                                        persistSelection()
+                                        manualInput = ""
+                                        showManualAdd = false
+                                    } else {
+                                        Toast.makeText(context, "请输入有效的纯数字 QQ 号", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.height(34.dp),
+                                shape = CircleShape,
+                                enabled = manualInput.isNotBlank(),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+                            ) {
+                                Text("添加", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                if (filtered.isEmpty()) {
+                    val searchUin = keyword.toLongOrNull()
+                    if (searchUin != null && searchUin > 10000L) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "未在候选列表中找到此 QQ",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            FilledTonalButton(
+                                onClick = {
+                                    if (!blacklistUins.contains(searchUin)) blacklistUins.add(searchUin)
+                                    if (candidates.none { it.uin == searchUin }) {
+                                        candidates.add(0, PkTarget(searchUin, "手动免战号", "-", "手动免战"))
+                                    }
+                                    persistSelection()
+                                    query = ""
+                                },
+                                shape = MaterialTheme.shapes.medium
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("将「$searchUin」加入免战黑名单")
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = if (keyword.isNotEmpty()) "未找到匹配「$keyword」的好友" else "暂无好友数据，可点击「添加QQ」直接录入",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 36.dp)
+                        )
+                    }
                 } else {
                     LazyColumn(
                         modifier = Modifier
@@ -259,49 +372,6 @@ fun PkBlacklistDialog(state: SettingsState, onDismiss: () -> Unit) {
         }
     )
 
-    if (showManualAdd) {
-        var manualInput by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showManualAdd = false },
-            title = {
-                Text(text = "手动添加免战 QQ 号", style = MaterialTheme.typography.titleMedium)
-            },
-            text = {
-                OutlinedTextField(
-                    value = manualInput,
-                    onValueChange = { manualInput = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = { Text("输入 QQ 号") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val rawUin = manualInput.trim().toLongOrNull()
-                        if (rawUin != null && rawUin > 0L) {
-                            if (!blacklistUins.contains(rawUin)) blacklistUins.add(rawUin)
-                            if (candidates.none { it.uin == rawUin }) {
-                                candidates.add(0, PkTarget(rawUin, "手动免战号", "-", "手动免战"))
-                            }
-                            persistSelection()
-                            showManualAdd = false
-                        } else {
-                            Toast.makeText(context, "请输入有效的纯数字 QQ 号", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                ) {
-                    Text(text = "确认免战", style = MaterialTheme.typography.labelLarge)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showManualAdd = false }) {
-                    Text(text = "取消", style = MaterialTheme.typography.labelLarge)
-                }
-            }
-        )
-    }
 }
 
 @Composable
@@ -314,7 +384,7 @@ private fun PkTargetRow(
         modifier = Modifier
             .fillMaxWidth()
             .toggleable(value = blocked, role = Role.Checkbox, onValueChange = { onToggle() })
-            .padding(horizontal = 4.dp, vertical = 10.dp),
+            .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -334,26 +404,20 @@ private fun PkTargetRow(
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
-        FilterChip(
-            selected = blocked,
-            onClick = { onToggle() },
-            label = {
-                Text(
-                    text = if (blocked) "免战" else "正常",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            },
-            leadingIcon = if (blocked) {
-                {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(FilterChipDefaults.IconSize)
-                    )
-                }
-            } else {
-                null
-            }
+        Checkbox(
+            checked = blocked,
+            onCheckedChange = null
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PkBlacklistDialogUiPreview() {
+    MaterialTheme {
+        PkBlacklistDialog(
+            state = SettingsState(LocalContext.current, null),
+            onDismiss = {}
         )
     }
 }

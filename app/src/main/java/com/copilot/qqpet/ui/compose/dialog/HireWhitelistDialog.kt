@@ -2,23 +2,20 @@ package com.copilot.qqpet.ui.compose.dialog
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,8 +23,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,12 +36,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.copilot.qqpet.engine.PetAccountGateway
-import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.HookEntry
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.compose.CardDivider
+import com.copilot.qqpet.ui.compose.CompactSearchBar
 import com.copilot.qqpet.ui.compose.SettingsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -119,8 +117,8 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
     } else {
         friends.filter { friend ->
             friend.friendNick.contains(keyword, ignoreCase = true) ||
-                friend.petNick.contains(keyword, ignoreCase = true) ||
-                friend.uin.toString().contains(keyword)
+                    friend.petNick.contains(keyword, ignoreCase = true) ||
+                    friend.uin.toString().contains(keyword)
         }
     }
 
@@ -136,69 +134,49 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp),
-                    singleLine = true,
-                    placeholder = { Text("搜索昵称 / QQ 号") },
-                    trailingIcon = if (query.isEmpty()) {
-                        null
-                    } else {
-                        {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Clear,
-                                    contentDescription = "清空",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
+                Spacer(modifier = Modifier.height(10.dp))
+                CompactSearchBar(
+                    query = query,
+                    onQueryChange = { query = it },
+                    placeholder = "搜索昵称 / QQ 号"
                 )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp),
+                        .padding(top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = when {
-                            refreshing -> "正在同步好友列表与实测资质..."
-                            keyword.isNotEmpty() -> "搜索到 ${filtered.size} 人 · 已勾选 ${selected.size} 人"
-                            else -> "已勾选 ${selected.size} 人 · 共 ${friends.size} 位养宠好友"
-                        },
+                        text = if (refreshing) "正在同步..." else "已选 ${selected.size} / ${friends.size}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(
-                        onClick = {
-                            if (selected.isNotEmpty()) {
+                    if (selected.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
                                 selected.clear()
                                 persistSelection()
                             }
+                        ) {
+                            Text(
+                                text = "清空",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
                         }
-                    ) {
-                        Text(
-                            text = "全不选",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
                     }
                     TextButton(onClick = { refreshFriends() }) {
-                        Text(text = "刷新好友与资质", style = MaterialTheme.typography.labelMedium)
+                        Text(text = "刷新", style = MaterialTheme.typography.labelMedium)
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(8.dp))
                 if (filtered.isEmpty()) {
                     Text(
                         text = when {
                             refreshing -> "正在拉取养宠好友列表，请稍候..."
                             keyword.isNotEmpty() -> "未找到匹配「$keyword」的养宠好友"
-                            else -> "暂无数据，请点击「刷新好友与资质」"
+                            else -> "暂无数据，请点击「刷新」"
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -248,7 +226,7 @@ private fun HireFriendRow(
         modifier = Modifier
             .fillMaxWidth()
             .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onToggle() })
-            .padding(horizontal = 4.dp, vertical = 10.dp),
+            .padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -277,26 +255,20 @@ private fun HireFriendRow(
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
-        FilterChip(
-            selected = checked,
-            onClick = { onToggle() },
-            label = {
-                Text(
-                    text = if (checked) "已选" else "未选",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            },
-            leadingIcon = if (checked) {
-                {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(FilterChipDefaults.IconSize)
-                    )
-                }
-            } else {
-                null
-            }
+        Checkbox(
+            checked = checked,
+            onCheckedChange = null
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun HireWhitelistDialogPreview() {
+    MaterialTheme {
+        HireWhitelistDialog(
+            state = SettingsState(LocalContext.current, null),
+            onDismiss = {}
         )
     }
 }

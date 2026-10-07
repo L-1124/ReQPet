@@ -114,6 +114,7 @@ fun ActionSection(state: SettingsState) {
             title = item.confirmTitle,
             message = item.confirmMessage,
             confirmText = item.confirmBtnText,
+            isDestructive = item.isDestructive,
             onConfirm = {
                 state.action(item.actionCmd)
                 pending = null

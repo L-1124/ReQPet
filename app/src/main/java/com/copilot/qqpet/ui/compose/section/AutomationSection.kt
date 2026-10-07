@@ -28,7 +28,7 @@ import com.copilot.qqpet.ui.util.UiDescUtils
 private val FRIEND_CARE_THRESHOLD_VALUES = listOf(40, 50, 60, 70, 80, 90, 100)
 
 private val ACTIVE_VISIT_LIMITS = listOf(10, 20, 30, 50)
-private val ACTIVE_VISIT_LIMIT_LABELS = listOf("10人", "20人 (推荐)", "30人", "50人")
+private val ACTIVE_VISIT_LIMIT_LABELS = listOf("10人", "20人", "30人", "50人")
 
 private data class DangerousSwitch(
     val key: String,
@@ -120,7 +120,7 @@ fun AutomationSection(state: SettingsState) {
                 val limit = state.int(PreferencesHelper.KEY_ACTIVE_VISIT_DAILY_LIMIT, 20)
                 val limitIndex = ACTIVE_VISIT_LIMITS.indexOf(limit).let { if (it >= 0) it else 1 }
                 ChoiceToggleRow(
-                    title = "单日主动串门安全上限 (防风控，离散拟人发包)",
+                    title = "单日主动串门安全上限",
                     options = ACTIVE_VISIT_LIMIT_LABELS,
                     selectedIndex = limitIndex,
                     onSelect = {

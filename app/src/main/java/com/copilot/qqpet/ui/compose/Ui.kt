@@ -5,21 +5,38 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,8 +61,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -268,7 +290,91 @@ fun SliderRow(
     }
 }
 
-/** 单选用 expressive SegmentedButton 组 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SegmentedChoiceRow(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: List<Boolean>? = null
+) {
+    if (options.isEmpty()) return
+    val safeSelected = selectedIndex.coerceIn(0, options.lastIndex)
+    val textMeasurer = rememberTextMeasurer()
+    val textStyle = MaterialTheme.typography.labelMedium
+    val density = LocalDensity.current
+
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val availableWidthPx = with(density) { maxWidth.toPx() }
+        val iconSpacePx = with(density) { (SegmentedButtonDefaults.IconSize + 8.dp).toPx() }
+        val paddingPx = with(density) { 24.dp.toPx() }
+        val requiredWidths = remember(options, availableWidthPx, textStyle) {
+            options.map { label ->
+                val textW = textMeasurer.measure(label, textStyle).size.width
+                textW + iconSpacePx.toInt() + paddingPx.toInt()
+            }
+        }
+        val totalRequiredWidthPx = remember(requiredWidths) { requiredWidths.sum() }
+        val canFitEqually = totalRequiredWidthPx <= availableWidthPx
+
+        if (canFitEqually) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                options.forEachIndexed { index, label ->
+                    val isSelected = index == safeSelected
+                    SegmentedButton(
+                        selected = isSelected,
+                        onClick = { onSelect(index) },
+                        enabled = enabled?.getOrElse(index) { true } ?: true,
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                        icon = { SegmentedButtonDefaults.Icon(isSelected) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = label,
+                            style = textStyle,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        } else {
+            val scrollState = rememberScrollState()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scrollState)
+            ) {
+                SingleChoiceSegmentedButtonRow {
+                    options.forEachIndexed { index, label ->
+                        val isSelected = index == safeSelected
+                        val minWidthDp = with(density) { requiredWidths[index].toDp() }
+                        SegmentedButton(
+                            selected = isSelected,
+                            onClick = { onSelect(index) },
+                            enabled = enabled?.getOrElse(index) { true } ?: true,
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                            icon = { SegmentedButtonDefaults.Icon(isSelected) },
+                            modifier = Modifier.widthIn(min = minWidthDp)
+                        ) {
+                            Text(
+                                text = label,
+                                style = textStyle,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChoiceToggleRow(
@@ -276,7 +382,8 @@ fun ChoiceToggleRow(
     options: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    subtitle: String? = null
+    subtitle: String? = null,
+    enabled: List<Boolean>? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Text(
@@ -292,27 +399,13 @@ fun ChoiceToggleRow(
                 modifier = Modifier.padding(top = 2.dp)
             )
         }
-        SingleChoiceSegmentedButtonRow(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        ) {
-            options.forEachIndexed { index, label ->
-                SegmentedButton(
-                    selected = index == selectedIndex,
-                    onClick = { onSelect(index) },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                    icon = {},
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
+        SegmentedChoiceRow(
+            options = options,
+            selectedIndex = selectedIndex,
+            onSelect = onSelect,
+            enabled = enabled,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 
@@ -386,4 +479,67 @@ fun ExpandablePanel(visible: Boolean, content: @Composable ColumnScope.() -> Uni
     ) {
         Column(modifier = Modifier.fillMaxWidth(), content = content)
     }
+}
+
+@Composable
+fun CompactSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier
+) {
+    BasicTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            color = MaterialTheme.colorScheme.onSurface
+        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(38.dp),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        shape = CircleShape
+                    )
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(modifier = Modifier.weight(1f)) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    innerTextField()
+                }
+                if (query.isNotEmpty()) {
+                    IconButton(
+                        onClick = { onQueryChange("") },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = "清空",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    )
 }

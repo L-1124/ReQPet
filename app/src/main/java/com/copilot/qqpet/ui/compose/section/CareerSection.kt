@@ -8,11 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +33,7 @@ import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.ExpandablePanel
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SettingsCard
+import com.copilot.qqpet.ui.compose.SegmentedChoiceRow
 import com.copilot.qqpet.ui.compose.SettingsState
 import com.copilot.qqpet.ui.compose.ToggleRow
 import com.copilot.qqpet.ui.compose.dialog.HireWhitelistDialog
@@ -140,25 +137,26 @@ private fun StudyPanel(state: SettingsState, details: QQPetDirectBridge.SecondMa
             .padding(bottom = 12.dp)
     ) {
         OptionLabel("学园阶段")
-        ToggleButtonRow(
-            labels = stageItems.map { it.title },
+        SegmentedChoiceRow(
+            options = stageItems.map { it.title },
             enabled = stageItems.map { it.enabled },
             selectedIndex = state.int(PreferencesHelper.KEY_SCHOOL_STAGE, 0),
-            onSelect = { state.setInt(PreferencesHelper.KEY_SCHOOL_STAGE, it) }
+            onSelect = { state.setInt(PreferencesHelper.KEY_SCHOOL_STAGE, it) },
+            modifier = Modifier.padding(vertical = 4.dp)
         )
-        OptionLabel("专攻科目 (按官方属性加点)")
-        ToggleButtonRow(
-            labels = listOf("智能轮换", "智力(文科)", "力量(体育)", "魅力(艺术)"),
-            enabled = List(4) { true },
+        OptionLabel("专攻科目")
+        SegmentedChoiceRow(
+            options = listOf("智能轮换", "智力", "力量", "魅力"),
             selectedIndex = state.int(PreferencesHelper.KEY_COURSE_SUBJECT, 0),
-            onSelect = { state.setInt(PreferencesHelper.KEY_COURSE_SUBJECT, it) }
+            onSelect = { state.setInt(PreferencesHelper.KEY_COURSE_SUBJECT, it) },
+            modifier = Modifier.padding(vertical = 4.dp)
         )
         OptionLabel("课时时长偏好")
-        ToggleButtonRow(
-            labels = listOf("任意课时", "基础短课(10-45m)", "进阶长课(1-2.25h)"),
-            enabled = List(3) { true },
+        SegmentedChoiceRow(
+            options = listOf("任意课时", "基础短课", "进阶长课"),
             selectedIndex = state.int(PreferencesHelper.KEY_COURSE_DURATION, 0),
-            onSelect = { state.setInt(PreferencesHelper.KEY_COURSE_DURATION, it) }
+            onSelect = { state.setInt(PreferencesHelper.KEY_COURSE_DURATION, it) },
+            modifier = Modifier.padding(vertical = 4.dp)
         )
     }
 }
@@ -180,19 +178,21 @@ private fun WorkPanel(
             .padding(horizontal = 16.dp)
             .padding(bottom = 4.dp)
     ) {
-        OptionLabel("打工场所 (职业小镇动态识别)")
-        ToggleButtonRow(
-            labels = placeOptions.map { it.title },
+        OptionLabel("打工场所")
+        SegmentedChoiceRow(
+            options = placeOptions.map { it.title },
             enabled = placeOptions.map { it.enabled },
             selectedIndex = placeIndex,
-            onSelect = { index -> placeOptions.getOrNull(index)?.let { onWorkTypeSelected(it.careerId) } }
+            onSelect = { index -> placeOptions.getOrNull(index)?.let { onWorkTypeSelected(it.careerId) } },
+            modifier = Modifier.padding(vertical = 4.dp)
         )
-        OptionLabel("打工时长偏好 (官方实测阶梯工时)")
-        ToggleButtonRow(
-            labels = durationOptions.labels,
+        OptionLabel("打工时长偏好")
+        SegmentedChoiceRow(
+            options = durationOptions.labels,
             enabled = durationOptions.enabled,
             selectedIndex = state.int(PreferencesHelper.KEY_WORK_DURATION, 0),
-            onSelect = { state.setInt(PreferencesHelper.KEY_WORK_DURATION, it) }
+            onSelect = { state.setInt(PreferencesHelper.KEY_WORK_DURATION, it) },
+            modifier = Modifier.padding(vertical = 4.dp)
         )
         durationOptions.tips.filterNotNull().forEach { tip ->
             Text(
@@ -216,7 +216,7 @@ private fun HiredRecallPanel(state: SettingsState) {
             .padding(top = 8.dp, bottom = 12.dp)
     ) {
         Text(
-            text = "被雇佣打工提前召回 (自选进度锁定奖金)",
+            text = "被雇佣打工提前召回",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
@@ -228,13 +228,15 @@ private fun HiredRecallPanel(state: SettingsState) {
             modifier = Modifier.padding(top = 2.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))
-        ToggleButtonRow(
-            labels = HIRED_RECALL_LABELS,
-            enabled = List(HIRED_RECALL_LABELS.size) { true },
+        SegmentedChoiceRow(
+            options = HIRED_RECALL_LABELS,
             selectedIndex = selectedIndex,
             onSelect = { index ->
-                state.setInt(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS, HIRED_RECALL_VALUES.getOrElse(index) { HIRED_RECALL_DEFAULT })
-            }
+                state.setInt(
+                    PreferencesHelper.KEY_HIRED_RECALL_PROGRESS,
+                    HIRED_RECALL_VALUES.getOrElse(index) { HIRED_RECALL_DEFAULT })
+            },
+            modifier = Modifier.padding(vertical = 4.dp)
         )
     }
 }
@@ -249,41 +251,6 @@ private fun OptionLabel(text: String) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ToggleButtonRow(
-    labels: List<String>,
-    enabled: List<Boolean>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit
-) {
-    if (labels.isEmpty()) return
-    val safeSelected = selectedIndex.coerceIn(0, labels.lastIndex)
-    SingleChoiceSegmentedButtonRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-    ) {
-        labels.forEachIndexed { index, label ->
-            SegmentedButton(
-                selected = index == safeSelected,
-                onClick = { onSelect(index) },
-                enabled = enabled.getOrElse(index) { true },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
-                icon = {},
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
 
 @Preview(showBackground = true)
 @Composable
@@ -301,7 +268,11 @@ private fun HiredRecallPanelPreview() {
     }
 }
 
-private class WorkDurationOptions(val labels: List<String>, val enabled: List<Boolean>, val tips: List<String?> = emptyList())
+private class WorkDurationOptions(
+    val labels: List<String>,
+    val enabled: List<Boolean>,
+    val tips: List<String?> = emptyList()
+)
 
 private fun workDurationOptions(jobs: List<QQPetDirectBridge.SelectEvent>?): WorkDurationOptions {
     if (jobs.isNullOrEmpty()) {

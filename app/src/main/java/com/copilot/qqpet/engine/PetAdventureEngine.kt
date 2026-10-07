@@ -13,6 +13,8 @@ import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.util.UiDescUtils
 import kotlinx.coroutines.*
 import kotlin.coroutines.resume
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Q宠后台全功能自动化调度引擎 (v1.0.75 架构解耦门面)
@@ -23,167 +25,205 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     companion object {
         private const val TAG = "PetAdventureEngine"
         private const val NETWORK_TIMEOUT_MS = 8000L
+
+        @Volatile
         var cachedPetId: String? = null
+
+        @Volatile
         var lastActiveStoryId: String? = null
+
+        private val sessionMutex = kotlinx.coroutines.sync.Mutex()
 
         @Volatile
         var lastReportedOngoingStoryId: String? = null
+
         @Volatile
         var currentActiveUin: String = ""
 
         @Volatile
         var isLoopRunning = false
+
         @Volatile
         var lastFatigueSwitchTimeMillis = 0L
 
         @Volatile
         var masterEnabled = false
+
         @Volatile
         var enableStudy = false
 
         @Volatile
         var enableWork = false
+
         @Volatile
         var enableCare = false
 
         @Volatile
         var enableAdventure = false
+
         @Volatile
         var enableSettle = false
 
         @Volatile
         var enableLikeBack = false
+
         @Volatile
         var enableClaimCoinBag = false
 
         @Volatile
         var enableFatigueToAdventure = false
+
         @Volatile
         var enableAutoPk = false
 
         @Volatile
         var lastPkTimeMillis = 0L
+
         @Volatile
         var pkCooldownMillis = 60 * 1000L
 
         @Volatile
         var prefHumanLikeSleep = true
+
         @Volatile
         var prefNightSleepMode = true
 
         @Volatile
         var prefScreenOffSilent = true
+
         @Volatile
         var prefHideQQSettingEntry = false
 
         @Volatile
         var prefDebugLog = false
+
         @Volatile
         var enableHireFriend = false
 
         @Volatile
         var prefHireFriendUinsCsv: String = ""
+
         @Volatile
         var prefPkBlacklistUinsCsv: String = ""
 
         @Volatile
         var prefHiredRecallProgress = 72
+
         @Volatile
         var enableActiveVisit = false
 
         @Volatile
         var prefActiveVisitFriends = true
+
         @Volatile
         var prefActiveVisitStrangers = true
 
         @Volatile
         var prefActiveVisitDailyLimit = 20
+
         @Volatile
         var lastActiveVisitTimeMillis = 0L
 
         @Volatile
         var cachedHireableFriends: List<QQPetDirectBridge.HireableFriend> = emptyList()
+
         @Volatile
         var enableFriendCare = false
 
         @Volatile
         var prefFriendCareEnergyThreshold = 60
+
         @Volatile
         var prefFriendCareCleanThreshold = 60
 
         @Volatile
         var currentStatusText = "全自动守护中 · 一刻不停三维轮转"
+
         @Volatile
         var currentTaskEndTimeMillis = 0L
 
         @Volatile
         var currentTaskTypeName = "进阶修习中"
+
         @Volatile
         var roundRobinCursor = 0
 
         @Volatile
         var studyAttributeCursor = 0
+
         @Volatile
         var workJobCursor = 0
 
         @Volatile
         var prefStudyMode = 0
+
         @Volatile
         var prefWorkMode = 0
 
         @Volatile
         var prefCustomSchoolStage = 0
+
         @Volatile
         var prefCustomCourseSubject = 0
 
         @Volatile
         var prefCustomCourseDuration = 0
+
         @Volatile
         var prefCustomWorkType = 0
 
         @Volatile
         var prefCustomWorkDuration = 0
+
         @Volatile
         var prefCareEnergyThreshold = 60
 
         @Volatile
         var prefCareCleanThreshold = 60
+
         @Volatile
         var lastCareTimeMillis = 0L
 
         @Volatile
         var lastLikeBackTimeMillis = 0L
+
         @Volatile
         var lastCoinBagTimeMillis = 0L
 
         @Volatile
         var lastOwnPetCheckMillis = 0L
+
         @Volatile
         var cachedSchoolDetails: QQPetDirectBridge.SecondMapDetails? = null
 
         @Volatile
         var cachedSchoolCourses: List<QQPetDirectBridge.SelectEvent>? = null
+
         @Volatile
         var cachedWorkPlaces: QQPetDirectBridge.SecondMapDetails? = null
 
         @Volatile
         var cachedWorkJobs: List<QQPetDirectBridge.SelectEvent>? = null
+
         @Volatile
         var learnedStudySubEvent: Long? = null
 
         @Volatile
         var learnedStudyName: String? = null
+
         @Volatile
         var learnedWorkSubEvent: Long? = null
 
         @Volatile
         var learnedWorkName: String? = null
 
+        @Synchronized
         fun clearAccountBoundMemoryCache(context: Context) {
             AccountSessionStore.clearAccountBoundMemoryCache(context); cachedSchoolDetails = null; cachedWorkPlaces =
                 null
         }
 
+        @Synchronized
         fun saveScopedPetId(context: Context, petId: String, runtimeUin: String? = null) {
             AccountSessionStore.saveScopedPetId(context, petId, runtimeUin)
             cachedPetId = petId
@@ -195,11 +235,9 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             (currentTaskEndTimeMillis - System.currentTimeMillis()).coerceAtLeast(0L) / 1000L
 
         /** 日志统一出口；context 为历史参数，已无用 */
-        @Suppress("UNUSED_PARAMETER")
-        fun sendLog(context: Context, message: String) = EngineLog.i(message)
+        fun sendLog(message: String) = EngineLog.i(message)
 
-        @Suppress("UNUSED_PARAMETER")
-        fun sendLog(context: Context, level: EngineLog.Level, message: String) = EngineLog.write(level, message)
+        fun sendLog(level: EngineLog.Level, message: String) = EngineLog.write(level, message)
 
         fun formatLiveStatusText(): String {
             if (!masterEnabled) return "总开关未开启 · 模块待命中"
@@ -219,18 +257,18 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         this.bridge = newBridge
     }
 
-    fun sendLog(context: Context, message: String) = Companion.sendLog(context, message)
+    fun sendLog(message: String) = Companion.sendLog(message)
 
-    fun sendLog(context: Context, level: EngineLog.Level, message: String) = Companion.sendLog(context, level, message)
+    fun sendLog(level: EngineLog.Level, message: String) = Companion.sendLog(level, message)
 
     fun sendReadySignal(context: Context) {
-        sendLog(context, "[内核连接] 发包引擎与代理已成功接驳就绪")
+        sendLog("[内核连接] 发包引擎与代理已成功接驳就绪")
     }
 
     fun startBackgroundLoop(context: Context) {
         reloadConfig(context)
         if (!masterEnabled) {
-            sendLog(context, "[总开关] 未开启，主循环不启动（默认关闭，请在设置页打开总开关）")
+            sendLog("[总开关] 未开启，主循环不启动（默认关闭，请在设置页打开总开关）")
             return
         }
         if (isLoopRunning) return
@@ -248,12 +286,12 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         reloadConfig(context)
         if (!masterEnabled) {
             stopBackgroundLoop()
-            sendLog(context, "[总开关] 已关闭，调度已停止（配置已保存）")
+            sendLog("[总开关] 已关闭，调度已停止（配置已保存）")
             return
         }
         isLoopRunning = true
         launchLoop(context)
-        sendLog(context, "[即刻唤醒] 外部指令触发，调度协程已重置并立即巡检")
+        sendLog("[即刻唤醒] 外部指令触发，调度协程已重置并立即巡检")
     }
 
     private fun launchLoop(context: Context) {
@@ -267,7 +305,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
                     EngineLog.e(TAG, "主循环异常: ${t.javaClass.simpleName}: ${t.message}")
                     15000L
                 }
-                delay(delayMs)
+                delay(delayMs.milliseconds)
             }
         }
     }
@@ -275,7 +313,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     suspend fun executeMasterCycle(context: Context): Long {
         reloadConfig(context)
         if (!masterEnabled) {
-            sendLog(context, "[总开关] 未开启，本轮巡检跳过")
+            sendLog("[总开关] 未开启，本轮巡检跳过")
             return 60 * 1000L
         }
         checkStealthWindows(context)?.let { return it }
@@ -286,33 +324,32 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         }
         if (!bridge.isReady) {
             currentStatusText = "发包代理连接中..."
-            sendLog(context, "[挂起] QQ 内部发包代理尚未就绪，等待 10 秒...")
+            sendLog("[挂起] QQ 内部发包代理尚未就绪，等待 10 秒...")
             return 10000L
         }
         val petId = ensurePetId(context) ?: return 30 * 1000L
-        sendLog(context, "[主循环] 正在查询外出状态")
+        sendLog("[主循环] 正在查询外出状态")
         val story = queryStoryStatusAwait(petId)
         if (story.code == 0) {
             // 从服务器回包动态校准任务时长，替代纯硬编码
             TimeConfigManager.extractAndConfigureDuration(story)
         }
         if (story.code != 0) {
-            sendLog(context, "[主循环] 外出状态没查完 code=${story.code} ${story.bodyNote ?: ""}")
+            sendLog("[主循环] 外出状态没查完 code=${story.code} ${story.bodyNote ?: ""}")
             performMaintenance(context, petId)
             return sleepForMaintenance(context, 8_000L)
         }
         if ((story.remaining ?: 0L) <= 0L || story.storyId.isNullOrEmpty()) {
             sendLog(
-                context,
                 "[主循环] 状态查询成功，当前没有进行中的外出 子状态=${story.status ?: "无"} 剩余=${story.remaining ?: "无"} story=${story.storyId ?: "无"}"
             )
-            if (!story.bodyNote.isNullOrBlank()) sendLog(context, "[主循环回包] ${story.bodyNote}")
+            if (!story.bodyNote.isNullOrBlank()) sendLog("[主循环回包] ${story.bodyNote}")
         }
         val hiredSleep = handleOngoingStory(context, petId, story)
         handleStorySettlement(context, petId, story)
         performMaintenance(context, petId)
         val rem = story.remaining ?: 0L
-        if (story.code == 0 && rem > 0L) {
+        if (rem > 0L) {
             val kind = currentTaskTypeName.ifEmpty { "外出" }
             val outingSleep = if (hiredSleep != null && hiredSleep > 0L) {
                 hiredSleep
@@ -323,7 +360,6 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
             val waitNote =
                 if (waitMs < outingSleep) "按照料提前到 ${waitMs / 1000L} 秒后再查" else "${waitMs / 1000L} 秒后再查"
             sendLog(
-                context,
                 "[任务进行中] 仍在$kind，剩余 ${PetPureCalculations.formatDuration(rem)}，$waitNote，StoryID=${story.storyId ?: "无"}"
             )
             return waitMs
@@ -335,18 +371,17 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         EngineGates.checkStealthWindows(context)
 
     suspend fun ensurePetId(context: Context): String? {
-        var petId = cachedPetId
-        if (petId.isNullOrEmpty()) {
+        cachedPetId?.takeIf { it.isNotEmpty() }?.let { return it }
+        sessionMutex.withLock {
+            cachedPetId?.takeIf { it.isNotEmpty() }?.let { return it }
             val (_, fetched) = queryOwnPetAwait()
             if (fetched.isNullOrEmpty()) {
-                sendLog(context, EngineLog.Level.ERROR, "[巡检] 获取宠物 ID 失败，30 秒后重试")
+                sendLog(EngineLog.Level.ERROR, "[巡检] 获取宠物 ID 失败，30 秒后重试")
                 return null
             }
             saveScopedPetId(context, fetched)
-            petId = fetched
-            sendLog(context, "[巡检] 成功锁定宠物 ID: $petId")
+            return fetched.also { sendLog("[巡检] 成功锁定宠物 ID: $it") }
         }
-        return petId
     }
 
     private suspend fun handleOngoingStory(context: Context, petId: String, story: StoryStatusResult): Long? =
@@ -370,17 +405,15 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
     fun runAction(context: Context, action: String) {
         if (!masterEnabled) {
-            sendLog(context, "[总开关] 未开启，忽略手动指令：$action")
+            sendLog("[总开关] 未开启，忽略手动指令：$action")
             return
         }
         scope.launch {
             val petId = ensurePetId(context) ?: return@launch
-            if (action == "cycle") {
-                executeMasterCycle(context)
-            } else if (action == "query_work_places" || action == "query_account_status") {
-                preloadAccountData(context)
-            } else {
-                PetCycleDispatcher.executeAction(context, bridge, petId, action)
+            when (action) {
+                "cycle" -> executeMasterCycle(context)
+                "query_work_places", "query_account_status" -> preloadAccountData(context)
+                else -> PetCycleDispatcher.executeAction(context, bridge, petId, action)
             }
         }
     }
@@ -405,6 +438,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
 
     suspend fun preloadAccountDataAwait(petId: String) = PetPreloader.preloadAccountDataAwait(bridge, petId)
 
+    @Synchronized
     fun verifyAndSyncAccountSession(context: Context): String {
         val liveUin = bridge.getCurrentRuntimeUin()
         if (AccountSessionGuard.isValidUin(liveUin) && liveUin != currentActiveUin) {

@@ -30,7 +30,8 @@ object AccountSessionGuard {
             if (isValidUin(uinPart)) {
                 return uinPart
             }
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e}
         return ""
     }
 

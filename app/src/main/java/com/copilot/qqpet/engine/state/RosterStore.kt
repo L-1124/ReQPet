@@ -20,7 +20,8 @@ object RosterStore {
             val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_HIRE_FRIEND_UINS, uin)
             val csv = prefs.getString(key, "") ?: ""
             csv.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             emptySet()
         }
     }
@@ -30,7 +31,8 @@ object RosterStore {
             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_HIRE_FRIEND_UINS, uin)
             prefs.edit().putString(key, uins.joinToString(",")).apply()
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
     }
 
@@ -40,7 +42,8 @@ object RosterStore {
             val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_PK_BLACKLIST_UINS, uin)
             val csv = prefs.getString(key, "") ?: ""
             csv.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             emptySet()
         }
     }
@@ -50,7 +53,8 @@ object RosterStore {
             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_PK_BLACKLIST_UINS, uin)
             prefs.edit().putString(key, uins.joinToString(",")).apply()
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
     }
 
@@ -60,7 +64,8 @@ object RosterStore {
             val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_STRANGER_UIN_POOL, uin)
             val csv = prefs.getString(key, "") ?: ""
             csv.split(",").mapNotNull { it.trim().toLongOrNull() }.distinct()
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             emptyList()
         }
     }
@@ -76,7 +81,8 @@ object RosterStore {
             val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             val key = AccountSessionGuard.scopedKey(PreferencesHelper.KEY_STRANGER_UIN_POOL, uin)
             prefs.edit().putString(key, trimmed.joinToString(",")).apply()
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
     }
 
@@ -100,7 +106,8 @@ object RosterStore {
                     p.getOrNull(8)?.toLongOrNull() ?: 0L
                 )
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             emptyList()
         }
     }
@@ -111,7 +118,8 @@ object RosterStore {
                 list.joinToString("\n") { "${it.uin}\t${it.friendNick}\t${it.petNick}\t${it.petId}\t${it.power}\t${it.intel}\t${it.charm}\t${it.isIdle}\t${it.remainingSec}" }
             context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE).edit()
                 .putString(AccountSessionGuard.scopedKey(PreferencesHelper.KEY_HIRE_FRIEND_CACHE, uin), raw).apply()
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
     }
 

@@ -37,7 +37,6 @@ internal object PetStoryHandlers {
         if (PetAdventureEngine.lastReportedOngoingStoryId != storyId) {
             PetAdventureEngine.lastReportedOngoingStoryId = storyId
             PetAdventureEngine.sendLog(
-                context,
                 "[任务进行中] 小宠正在 ${PetAdventureEngine.currentTaskTypeName} (剩余 ${
                     PetPureCalculations.formatDuration(
                         rem
@@ -56,7 +55,7 @@ internal object PetStoryHandlers {
                 selfUin,
                 PetAdventureEngine.prefHiredRecallProgress
             )
-        ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+        ) { level, msg -> PetAdventureEngine.sendLog( level, msg) }
         if (decision.isHired) {
             if (decision.hasRecalled) {
                 PetAdventureEngine.lastActiveStoryId = null
@@ -66,7 +65,7 @@ internal object PetStoryHandlers {
             if (decision.settled) {
                 PetSocialTask.claimOnceAfterSettle(
                     context, bridge, petId, PetAdventureEngine.currentActiveUin, PetAdventureEngine.enableClaimCoinBag
-                ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog( level, msg) }
             }
             return decision.nextSleepMillis
         }
@@ -82,13 +81,13 @@ internal object PetStoryHandlers {
     ) {
         val pendingId = PetAdventureEngine.lastActiveStoryId ?: story.storyId
         if ((story.remaining ?: 0L) <= 0L && PetAdventureEngine.enableSettle && !pendingId.isNullOrEmpty()) {
-            PetAdventureEngine.sendLog(context, "[结算] 自动发起收益结算 (StoryID: $pendingId)...")
+            PetAdventureEngine.sendLog( "[结算] 自动发起收益结算 (StoryID: $pendingId)...")
             val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, pendingId, petId)
             if (code == 0) {
-                PetAdventureEngine.sendLog(context, "[结算] 收益结算成功！金币与经验已入账")
+                PetAdventureEngine.sendLog( "[结算] 收益结算成功！金币与经验已入账")
                 PetSocialTask.claimOnceAfterSettle(
                     context, bridge, petId, PetAdventureEngine.currentActiveUin, PetAdventureEngine.enableClaimCoinBag
-                ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog( level, msg) }
             }
             PetAdventureEngine.lastActiveStoryId = null
             PetAdventureEngine.lastReportedOngoingStoryId = null

@@ -1,6 +1,9 @@
 package com.copilot.qqpet.engine
 
 import com.copilot.qqpet.hook.HookLog
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.CopyOnWriteArrayList
@@ -16,6 +19,8 @@ object EngineLog {
     private val timeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
     private val buffer = ArrayDeque<LogEntry>()
     private val listeners = CopyOnWriteArrayList<(LogEntry) -> Unit>()
+    private val _logFlow = MutableSharedFlow<LogEntry>(replay = 0, extraBufferCapacity = 64)
+    val logFlow: SharedFlow<LogEntry> = _logFlow.asSharedFlow()
 
     fun i(message: String) = write(Level.INFO, TAG, message)
     fun w(message: String) = write(Level.WARN, TAG, message)
@@ -43,10 +48,12 @@ object EngineLog {
             entry
         }
         HookLog.log(TAG, "[${stamped.source}] ${level.tag} ${stamped.message}")
+        _logFlow.tryEmit(stamped)
         for (listener in listeners) {
             try {
                 listener(stamped)
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             }
         }
     }

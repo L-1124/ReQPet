@@ -6,7 +6,7 @@ import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.engine.cache.LRUCacheManager
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
-import java.util.Calendar
+import java.time.LocalDate
 
 /**
  * 账号绑定数据与每日额度持久化仓储
@@ -29,8 +29,8 @@ object AccountSessionStore {
     }
 
     fun currentDayKey(): String {
-        val cal = Calendar.getInstance()
-        return "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.DAY_OF_YEAR)}"
+        val today = LocalDate.now()
+        return "${today.year}-${today.dayOfYear}"
     }
 
     fun getDailyPkCount(context: Context, uin: String): Int {
@@ -70,7 +70,7 @@ object AccountSessionStore {
 
         // 优先从缓存读取
         val cached = cacheManager?.get<Set<Long>>(cacheKey, 86400000L) // 24 小时 TTL
-        if (cached != null && cached.isNotEmpty()) {
+        if (!cached.isNullOrEmpty()) {
             return
         }
 

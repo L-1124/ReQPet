@@ -1,6 +1,6 @@
 package com.copilot.qqpet.engine
 
-import java.util.Calendar
+import java.time.LocalTime
 import kotlin.random.Random
 
 /**
@@ -13,10 +13,8 @@ object StealthScheduler {
      */
     fun isNightSilentWindow(enabled: Boolean = true): Boolean {
         if (!enabled) return false
-        val cal = Calendar.getInstance()
-        val hour = cal.get(Calendar.HOUR_OF_DAY)
-        val minute = cal.get(Calendar.MINUTE)
-        val currentMinutes = hour * 60 + minute
+        val now = LocalTime.now()
+        val currentMinutes = now.hour * 60 + now.minute
         return currentMinutes in 90..390
     }
 
@@ -24,10 +22,8 @@ object StealthScheduler {
      * 计算夜间静默休眠毫秒数 (睡到早晨 06:35 ~ 06:55 唤醒)
      */
     fun calculateNightSleepMillis(): Long {
-        val cal = Calendar.getInstance()
-        val hour = cal.get(Calendar.HOUR_OF_DAY)
-        val minute = cal.get(Calendar.MINUTE)
-        val currentMinutes = hour * 60 + minute
+        val now = LocalTime.now()
+        val currentMinutes = now.hour * 60 + now.minute
         val wakeTargetMinutes = 390 + Random.nextInt(5, 26)
         val diffMinutes = if (wakeTargetMinutes > currentMinutes) {
             wakeTargetMinutes - currentMinutes
@@ -102,9 +98,9 @@ object StealthScheduler {
         return 60_000L
     }
 
-   fun isLogAllowed(debugEnabled: Boolean): Boolean = debugEnabled
+    fun isLogAllowed(debugEnabled: Boolean): Boolean = debugEnabled
 
-   fun shouldInjectSettingCard(hideSettingEntry: Boolean): Boolean = !hideSettingEntry
+    fun shouldInjectSettingCard(hideSettingEntry: Boolean): Boolean = !hideSettingEntry
 
     /**
      * 判断设备屏幕是否处于点亮/交互状态 (PowerManager.isInteractive)
@@ -114,7 +110,8 @@ object StealthScheduler {
         return try {
             val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
             pm?.isInteractive ?: true
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             true
         }
     }

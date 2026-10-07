@@ -11,13 +11,14 @@ import com.copilot.qqpet.hook.HookLog
 import com.copilot.qqpet.hook.HostClassLoaderBridge
 import com.copilot.qqpet.hook.QQSettingInjector
 import com.copilot.qqpet.hook.TinkerBlocker
-import com.copilot.qqpet.protocol.PacketSniffer
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
 import kotlinx.coroutines.*
+import kotlin.time.Duration.Companion.milliseconds
 
 class HookEntry : XposedModule() {
 
@@ -58,7 +59,8 @@ class HookEntry : XposedModule() {
             }
             return try {
                 java.io.File("/proc/self/cmdline").readText().trim('\u0000', ' ', '\n')
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 ""
             }
         }
@@ -75,7 +77,8 @@ class HookEntry : XposedModule() {
             while (current != null) {
                 try {
                     return current.getDeclaredMethod(name, *params)
-                } catch (_: Throwable) {
+                } catch (e: Throwable) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     current = current.superclass
                 }
             }
@@ -88,16 +91,16 @@ class HookEntry : XposedModule() {
         processName = param.processName
         HookApi.attach(
             hooker = { executable -> hook(executable) },
+            deoptimizer = { executable -> deoptimize(executable) },
             logger = { priority, tag, message -> log(priority, tag, message) }
         )
         HookLog.trace(TAG, "模块已载入进程 ${param.processName} (api=$apiVersion, $frameworkName $frameworkVersion)")
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
-        // 模块自身不再被注入，这里的判断只是兜底；真正的目标是 QQ 主进程
+        if (!param.isFirstPackage) return
         if (param.packageName == MODULE_PACKAGE) return
         if (param.packageName != TARGET_PACKAGE) return
-
         val actualProcess = getActualProcessName()
         if (actualProcess.isNotEmpty() && actualProcess != TARGET_PACKAGE) {
             HookLog.trace(TAG, "跳过 QQ 非主进程: $actualProcess")
@@ -112,7 +115,7 @@ class HookEntry : XposedModule() {
         CrashInterceptor.install()
 
         // 必须在任何"模块类继承宿主类"的解析发生之前完成，否则 NoClassDefFoundError 会被缓存
-        val hostResolvable = HostClassLoaderBridge.install(javaClass.classLoader, classLoader)
+        val hostResolvable = HostClassLoaderBridge.install(javaClass.classLoader ?: classLoader, classLoader)
         HookLog.trace(
             TAG,
             "已注入 QQ 主进程 pid=${android.os.Process.myPid()} 宿主类解析=${if (hostResolvable) "OK" else "失败"}"
@@ -127,7 +130,7 @@ class HookEntry : XposedModule() {
         try {
             val baseAppCls = classLoader.loadClass("com.tencent.common.app.BaseApplicationImpl")
             findMethodInHierarchy(baseAppCls, "onCreate")?.let { method ->
-                HookApi.hook(method).intercept { chain ->
+                HookApi.hook(method, id = "qq_base_app_create").intercept { chain ->
                     val result = chain.proceed()
                     runCatching {
                         val app = chain.thisObject as? Context
@@ -148,6 +151,7 @@ class HookEntry : XposedModule() {
                 }
             }
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.e(TAG, "Hook BaseApplicationImpl 异常", t)
         }
 
@@ -155,7 +159,7 @@ class HookEntry : XposedModule() {
         try {
             val mobileQQCls = Class.forName("mqq.app.MobileQQ", false, classLoader)
             findMethodInHierarchy(mobileQQCls, "onCreate")?.let { method ->
-                HookApi.hook(method).intercept { chain ->
+                HookApi.hook(method, id = "qq_mobile_qq_create").intercept { chain ->
                     val result = chain.proceed()
                     runCatching {
                         val context = chain.thisObject as? Context
@@ -174,38 +178,8 @@ class HookEntry : XposedModule() {
                 }
             }
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.e(TAG, "Hook MobileQQ.onCreate 异常", t)
-        }
-
-        // 挂钩 3: 针对通用 Activity.onCreate 提供超轻量单次设置项保底注入
-        try {
-            val onCreate = Activity::class.java.getDeclaredMethod("onCreate", Bundle::class.java)
-            HookApi.hook(onCreate).intercept { chain ->
-                val result = chain.proceed()
-                runCatching {
-                    val activity = chain.thisObject as? Activity
-                    if (activity != null && activity.packageName == TARGET_PACKAGE) {
-                        latestClassLoader = activity.classLoader
-                        HostClassLoaderBridge.updateHostLoader(activity.classLoader)
-                        if (!QQSettingInjector.isHooked) {
-                            QQSettingInjector.inject(activity.classLoader)
-                        }
-                        if (globalBridge?.isReady != true) {
-                            val appContext = activity.applicationContext ?: activity
-                            initEngineAndReceiver(
-                                appContext,
-                                activity.classLoader,
-                                "Activity.onCreate[${activity.javaClass.simpleName}]"
-                            )
-                        }
-                    }
-                }.onFailure { t ->
-                    HookLog.e(TAG, "Activity.onCreate 设置保底执行异常", t)
-                }
-                result
-            }
-        } catch (t: Throwable) {
-            HookLog.e(TAG, "Hook Activity.onCreate 设置保底异常", t)
         }
 
         // 挂钩 4: 针对 QQ 主界面 SplashActivity 触发保活、设置注入与会话校准
@@ -218,7 +192,7 @@ class HookEntry : XposedModule() {
             val splashCls = classLoader.loadClass("com.tencent.mobileqq.activity.SplashActivity")
 
             findMethodInHierarchy(splashCls, "onResume")?.let { method ->
-                HookApi.hook(method).intercept { chain ->
+                HookApi.hook(method, id = "qq_splash_resume").intercept { chain ->
                     val result = chain.proceed()
                     runCatching {
                         val activity = chain.thisObject as? Activity
@@ -241,7 +215,7 @@ class HookEntry : XposedModule() {
             }
 
             findMethodInHierarchy(splashCls, "onCreate", Bundle::class.java)?.let { method ->
-                HookApi.hook(method).intercept { chain ->
+                HookApi.hook(method, id = "qq_splash_create").intercept { chain ->
                     val result = chain.proceed()
                     runCatching {
                         val activity = chain.thisObject as? Activity
@@ -264,6 +238,7 @@ class HookEntry : XposedModule() {
             isSplashHooked = true
             HookLog.log(TAG, "已成功挂钩 SplashActivity 主界面保活与设置项注入 (libxposed)")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.e(TAG, "Hook SplashActivity 异常", t)
         }
     }
@@ -274,7 +249,8 @@ class HookEntry : XposedModule() {
         try {
             val prefs = appContext.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             HookLog.isDebugEnabled = prefs.getBoolean(PreferencesHelper.KEY_DEBUG_LOG, false)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
 
         // 协议熔断器事件统一落入引擎指标
@@ -307,15 +283,11 @@ class HookEntry : XposedModule() {
                     HookLog.log(TAG, "发包内核暂未就绪，等待后续分包触发 (来源: $from)")
                 }
             } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
                 HookLog.e(TAG, "初始化发包内核失败", t)
             }
         }
 
-        try {
-            PacketSniffer.install(classLoader, appContext)
-        } catch (t: Throwable) {
-            HookLog.e(TAG, "启动 PacketSniffer 异常", t)
-        }
 
         TinkerBlocker.install(classLoader, appContext)
 
@@ -337,7 +309,7 @@ class HookEntry : XposedModule() {
         loginPollJob = CoroutineScope(Dispatchers.IO).launch {
             val retryDelays = longArrayOf(1500L, 3000L, 5000L, 8000L, 12000L, 20000L, 30000L)
             for (delayMs in retryDelays) {
-                delay(delayMs)
+                delay(delayMs.milliseconds)
                 if (PetAdventureEngine.isLoopRunning) break
                 val started = tryStartLoopIfLoggedIn(appContext, classLoader, "异步复检:$from")
                 if (started) break
@@ -362,8 +334,23 @@ class HookEntry : XposedModule() {
                 return true
             }
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             HookLog.e(TAG, "检查登录状态异常", t)
         }
         return false
+    }
+
+    override fun onHotReloading(param: HotReloadingParam): Boolean {
+        HookLog.log(TAG, "检测到模块热重载请求，正在注销旧代任务与类引用...")
+        loginPollJob?.cancel()
+        loginPollJob = null
+        globalEngine?.stopBackgroundLoop()
+        globalEngine = null
+        globalBridge = null
+        latestClassLoader = null
+        instance = null
+        isSplashHooked = false
+        isReadySignalled = false
+        return true
     }
 }

@@ -19,15 +19,91 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
 
     constructor(classLoader: ClassLoader) : this(classLoader, null)
 
-    data class SelectEvent(val eventName: String, val subEventType: Long, val canDo: Boolean, val level: Int = 0, val cost: String = "", val costTime: String = "", val reward: String = "", val rewardExtra: String = "", val eventTips: String = "", val isOwnerNeedCare: Boolean = false, val isFatigued: Boolean = false)
-    data class SchoolStageInfo(val stage: Int, val title: String, val limitStatus: Int, val isGraduated: Boolean = false, val lockReason: String = "")
-    data class SecondMapDetails(val code: Int, val currentStage: Int, val lastSubEvent: Long, val stages: List<SchoolStageInfo>, val power: Long = 0L, val intel: Long = 0L, val charm: Long = 0L)
-    data class LikeMember(val uin: Long, val nick: String, val headerUrl: String, val timestamp: Long, val desc: String, val canLikeBack: Boolean, val petId: String = "")
-    data class PetAttributes(val energy: Float, val maxEnergy: Float = 100f, val clean: Float, val maxClean: Float = 100f, val mood: Float = 0f)
-    data class BathItemConfig(val itemId: String, val name: String, val gold: Int, val cleanValue: Int, val defaultPurchaseCount: Int)
-    data class BathResult(val code: Int, val newClean: Int, val addedClean: Int, val remainBalance: Int, val isFullClean: Boolean, val errorMsg: String? = null)
-    data class FriendCoinBagInfo(val friendUin: Long, val friendNick: String, val friendPetId: String, val petNick: String, val coinbagId: String, val isSelf: Boolean = false)
-    data class SnatchCoinBagResult(val code: Int, val coinbagId: String, val gotGold: Long, val status: Int, val alreadyOpened: Boolean, val errorMsg: String? = null)
+    data class SelectEvent(
+        val eventName: String,
+        val subEventType: Long,
+        val canDo: Boolean,
+        val level: Int = 0,
+        val cost: String = "",
+        val costTime: String = "",
+        val reward: String = "",
+        val rewardExtra: String = "",
+        val eventTips: String = "",
+        val isOwnerNeedCare: Boolean = false,
+        val isFatigued: Boolean = false
+    )
+
+    data class SchoolStageInfo(
+        val stage: Int,
+        val title: String,
+        val limitStatus: Int,
+        val isGraduated: Boolean = false,
+        val lockReason: String = ""
+    )
+
+    data class SecondMapDetails(
+        val code: Int,
+        val currentStage: Int,
+        val lastSubEvent: Long,
+        val stages: List<SchoolStageInfo>,
+        val power: Long = 0L,
+        val intel: Long = 0L,
+        val charm: Long = 0L
+    )
+
+    data class LikeMember(
+        val uin: Long,
+        val nick: String,
+        val headerUrl: String,
+        val timestamp: Long,
+        val desc: String,
+        val canLikeBack: Boolean,
+        val petId: String = ""
+    )
+
+    data class PetAttributes(
+        val energy: Float,
+        val maxEnergy: Float = 100f,
+        val clean: Float,
+        val maxClean: Float = 100f,
+        val mood: Float = 0f
+    )
+
+    data class BathItemConfig(
+        val itemId: String,
+        val name: String,
+        val gold: Int,
+        val cleanValue: Int,
+        val defaultPurchaseCount: Int
+    )
+
+    data class BathResult(
+        val code: Int,
+        val newClean: Int,
+        val addedClean: Int,
+        val remainBalance: Int,
+        val isFullClean: Boolean,
+        val errorMsg: String? = null
+    )
+
+    data class FriendCoinBagInfo(
+        val friendUin: Long,
+        val friendNick: String,
+        val friendPetId: String,
+        val petNick: String,
+        val coinbagId: String,
+        val isSelf: Boolean = false
+    )
+
+    data class SnatchCoinBagResult(
+        val code: Int,
+        val coinbagId: String,
+        val gotGold: Long,
+        val status: Int,
+        val alreadyOpened: Boolean,
+        val errorMsg: String? = null
+    )
+
     data class ProcessStoryFatigueResult(
         val code: Int,
         val isFatigued: Boolean,
@@ -39,12 +115,55 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
         val bodyNote: String? = null,
         val storyText: String? = null
     )
-    data class HireableFriend(val uin: Long, val friendNick: String, val petNick: String, val petId: String, val power: Long = 0L, val intel: Long = 0L, val charm: Long = 0L, val isIdle: Boolean = true, val remainingSec: Long = 0L) { val totalAttr: Long get() = power + intel + charm }
+
+    data class HireableFriend(
+        val uin: Long,
+        val friendNick: String,
+        val petNick: String,
+        val petId: String,
+        val power: Long = 0L,
+        val intel: Long = 0L,
+        val charm: Long = 0L,
+        val isIdle: Boolean = true,
+        val remainingSec: Long = 0L
+    ) {
+        val totalAttr: Long get() = power + intel + charm
+    }
+
     data class FoodInventoryItem(val itemId: String, val name: String, val balance: Int, val energyValue: Int = 20)
-    data class FeedDetailResult(val code: Int, val feedState: Int = 0, val tipText: String? = null, val errorMsg: String? = null)
-    data class PkStatusInfo(val canPk: Boolean, val rawStatus: Int, val ongoingStoryId: String? = null, val remainingSec: Long = 0L)
-    data class PkBattleResult(val code: Int, val storyId: String?, val myPower: Int = 0, val oppPower: Int = 0, val myNick: String = "", val oppNick: String = "", val isWin: Boolean = false, val leftDurationSec: Long = 0L, val errorMsg: String? = null)
-    data class PkSettleResult(val code: Int, val goldEarned: Long = 0L, val title: String? = null, val desc: String? = null, val errorMsg: String? = null)
+    data class FeedDetailResult(
+        val code: Int,
+        val feedState: Int = 0,
+        val tipText: String? = null,
+        val errorMsg: String? = null
+    )
+
+    data class PkStatusInfo(
+        val canPk: Boolean,
+        val rawStatus: Int,
+        val ongoingStoryId: String? = null,
+        val remainingSec: Long = 0L
+    )
+
+    data class PkBattleResult(
+        val code: Int,
+        val storyId: String?,
+        val myPower: Int = 0,
+        val oppPower: Int = 0,
+        val myNick: String = "",
+        val oppNick: String = "",
+        val isWin: Boolean = false,
+        val leftDurationSec: Long = 0L,
+        val errorMsg: String? = null
+    )
+
+    data class PkSettleResult(
+        val code: Int,
+        val goldEarned: Long = 0L,
+        val title: String? = null,
+        val desc: String? = null,
+        val errorMsg: String? = null
+    )
 
     companion object {
         private const val TAG = "QQPetDirectBridge"
@@ -119,9 +238,6 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
     val isReady: Boolean
         get() = channel.isReady
 
-    var isInternalSending: Boolean
-        get() = channel.isInternalSending
-        set(value) { channel.isInternalSending = value }
 
     private val bathClient = PetBathProtocolClient(channel) { clean ->
         cachedPetAttributes?.let { cachedPetAttributes = it.copy(clean = clean.toFloat()) }
@@ -254,7 +370,11 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
     fun settleStory(storyId: String, petId: String, callback: (code: Int, rawData: ByteArray?) -> Unit) =
         careerClient.settleStory(storyId, petId, callback)
 
-    fun recallStory(storyId: String, petId: String, callback: (code: Int, rawData: ByteArray?, errorMsg: String?) -> Unit) =
+    fun recallStory(
+        storyId: String,
+        petId: String,
+        callback: (code: Int, rawData: ByteArray?, errorMsg: String?) -> Unit
+    ) =
         careerClient.recallStory(storyId, petId, callback)
 
     fun startAdventure(

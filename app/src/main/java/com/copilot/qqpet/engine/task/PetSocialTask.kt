@@ -34,7 +34,8 @@ object PetSocialTask {
                     }
                 }
             } ?: Pair(-99, emptyList())
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Pair(-99, emptyList())
         }
 
@@ -48,6 +49,7 @@ object PetSocialTask {
                 }
             } ?: Pair(-99, "超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             Pair(-99, t.message)
         }
 
@@ -143,6 +145,7 @@ object PetSocialTask {
                 }
             } ?: QQPetDirectBridge.SnatchCoinBagResult(-99, bagId, 0L, 0, false, "超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             QQPetDirectBridge.SnatchCoinBagResult(-99, bagId, 0L, 0, false, t.message)
         }
 
@@ -168,6 +171,7 @@ object PetSocialTask {
                 }
             } ?: FriendCoinBagsPage(-99, emptyList(), 0, false, "", "超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             FriendCoinBagsPage(-99, emptyList(), 0, false, "", t.message)
         }
 
@@ -213,7 +217,8 @@ object PetSocialTask {
                     }
                 }
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
 

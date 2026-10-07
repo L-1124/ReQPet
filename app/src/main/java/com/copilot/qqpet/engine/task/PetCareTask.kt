@@ -27,7 +27,8 @@ object PetCareTask {
                     }
                 }
             } ?: Triple(-99, 0, 0)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Triple(-99, 0, 0)
         }
 
@@ -40,7 +41,8 @@ object PetCareTask {
                     }
                 }
             } ?: Pair(-99, null)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Pair(-99, null)
         }
 
@@ -58,7 +60,8 @@ object PetCareTask {
                     }
                 }
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
 
@@ -74,7 +77,8 @@ object PetCareTask {
                     }
                 }
             } ?: Pair(-99, emptyList())
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Pair(-99, emptyList())
         }
 
@@ -90,7 +94,8 @@ object PetCareTask {
                     }
                 }
             } ?: Pair(-99, emptyMap())
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Pair(-99, emptyMap())
         }
 
@@ -111,6 +116,7 @@ object PetCareTask {
                 }
             } ?: Triple(-99, 0, "超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             Triple(-99, 0, t.message)
         }
 
@@ -131,6 +137,7 @@ object PetCareTask {
                 }
             } ?: QQPetDirectBridge.BathResult(-99, -1, 0, -1, false, "超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             QQPetDirectBridge.BathResult(-99, -1, 0, -1, false, t.message)
         }
 
@@ -149,7 +156,8 @@ object PetCareTask {
                         }
                     }
                 }
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e}
             delay(randomJitter(360L, 840L))
             withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
@@ -158,7 +166,8 @@ object PetCareTask {
                     }
                 }
             } ?: Pair(-99, null)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Pair(-99, null)
         }
 
@@ -178,6 +187,7 @@ object PetCareTask {
                 }
             } ?: Pair(-99, "超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             Pair(-99, t.message)
         }
 
@@ -291,7 +301,8 @@ object PetCareTask {
         if (!loopRes.success) {
             return QQPetDirectBridge.BathResult(loopRes.code, loopRes.curClean, loopRes.totalAdded, loopRes.balance, false, loopRes.errorMsg)
         }
-        try { bathAwait(bridge, petId) } catch (_: Throwable) {}
+        try { bathAwait(bridge, petId) } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e}
         queryPetAttributesAwait(bridge, petId)
         return QQPetDirectBridge.BathResult(0, loopRes.curClean, loopRes.totalAdded, loopRes.balance, loopRes.curClean >= target.maxClean, null)
     }

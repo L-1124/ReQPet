@@ -10,7 +10,6 @@ import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.ThreadLocalRandom
 import kotlin.coroutines.resume
 
 /**
@@ -67,6 +66,7 @@ object PetFriendCareTask {
             onLog("[好友照料汇总] 本轮共检测 ${summary.checkedCount} 位好友，成功喂食 ${summary.fedCount} 位、洗澡 ${summary.bathedCount} 位！")
             summary
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             EngineLog.w("PetFriendCareTask", "自动照料好友宠物异常: ${t.message}")
             if (params.isManual) onLog.warn("[好友照料] 执行异常: ${t.message}")
             CareResultSummary()
@@ -97,13 +97,15 @@ object PetFriendCareTask {
         onLog("[雇佣照料] 「$friendName」· $petName：体力 $curEnergy/$maxEnergy，清洁 $curClean/$maxClean")
         if (curEnergy < params.energyThreshold && curEnergy < maxEnergy) {
             onLog("[雇佣照料] 体力低于 ${params.energyThreshold}，开始补到不低于该值")
-            val req = FriendFeedRequest(params.bridge, params.ownPetId, friend, params.energyThreshold, curEnergy, maxEnergy)
+            val req =
+                FriendFeedRequest(params.bridge, params.ownPetId, friend, params.energyThreshold, curEnergy, maxEnergy)
             val (ok, newEnergy) = feedFriendWithAutoBuyAwait(req, onLog)
             if (ok) onLog("[雇佣照料] 已帮「$friendName」把体力补到 $newEnergy/$maxEnergy")
         }
         if (curClean < params.cleanThreshold && curClean < maxClean) {
             onLog("[雇佣照料] 清洁低于 ${params.cleanThreshold}，开始补到不低于该值")
-            val req = FriendBathRequest(params.bridge, params.ownPetId, friend, params.cleanThreshold, curClean, maxClean)
+            val req =
+                FriendBathRequest(params.bridge, params.ownPetId, friend, params.cleanThreshold, curClean, maxClean)
             val bathRes = bathFriendWithAutoBuyAwait(req, onLog)
             if (bathRes.code == 0 && bathRes.addedClean > 0) {
                 onLog("[雇佣照料] 已帮「$friendName」把清洁补到 ${bathRes.newClean}/$maxClean")
@@ -114,7 +116,12 @@ object PetFriendCareTask {
     private suspend fun resolveTargetFriends(params: FriendCareParams): List<QQPetDirectBridge.HireableFriend> {
         val cached = PetAccountGateway.loadCachedHireableFriends(params.context)
         val sourceList = if (cached.isNotEmpty()) cached else {
-            PetWorkTask.fetchAllHireableFriendsAwait(params.context, params.bridge, PetAdventureEngine.currentActiveUin, false)
+            PetWorkTask.fetchAllHireableFriendsAwait(
+                params.context,
+                params.bridge,
+                PetAdventureEngine.currentActiveUin,
+                false
+            )
         }
         val validFriends = sourceList.filter { it.uin > 0L && it.petId.isNotBlank() && it.petId != params.ownPetId }
         // 单轮平摊最多巡检 3 位好友，手动立即照料巡检 12 位，避免时序聚类
@@ -126,7 +133,9 @@ object PetFriendCareTask {
         friends: List<QQPetDirectBridge.HireableFriend>,
         onLog: TaskLogger
     ): CareResultSummary {
-        var checked = 0; var fed = 0; var bathed = 0
+        var checked = 0;
+        var fed = 0;
+        var bathed = 0
         for (friend in friends) {
             val attrs = PetCareTask.queryPetAttributesAwait(params.bridge, friend.petId, isSelf = false)
             if (attrs == null) {
@@ -137,7 +146,7 @@ object PetFriendCareTask {
             val (didFeed, didBath) = inspectAndCareFriend(params, friend, attrs, onLog)
             if (didFeed) fed++
             if (didBath) bathed++
-            delay(ThreadLocalRandom.current().nextLong(1500L, 2500L))
+            delay(randomJitter(1500L, 2500L))
         }
         return CareResultSummary(checked, fed, bathed)
     }
@@ -148,8 +157,10 @@ object PetFriendCareTask {
         attrs: QQPetDirectBridge.PetAttributes,
         onLog: TaskLogger
     ): Pair<Boolean, Boolean> {
-        val curEnergy = attrs.energy.toInt(); val maxEnergy = attrs.maxEnergy.toInt().coerceAtLeast(100)
-        val curClean = attrs.clean.toInt(); val maxClean = attrs.maxClean.toInt().coerceAtLeast(100)
+        val curEnergy = attrs.energy.toInt();
+        val maxEnergy = attrs.maxEnergy.toInt().coerceAtLeast(100)
+        val curClean = attrs.clean.toInt();
+        val maxClean = attrs.maxClean.toInt().coerceAtLeast(100)
         val friendName = friend.friendNick.ifEmpty { friend.uin.toString() }
         val petName = friend.petNick.ifEmpty { "小宠" }
         val needFeed = curEnergy in 0 until params.energyThreshold && curEnergy < maxEnergy
@@ -159,20 +170,23 @@ object PetFriendCareTask {
             val suffix = if (!needFeed && !needBath) " (状态健康，无需照料)" else ""
             onLog("[好友检测] 「$friendName」· $petName：体力 $curEnergy/$maxEnergy，清洁 $curClean/$maxClean$suffix")
         }
-        var fedOk = false; var bathOk = false
+        var fedOk = false;
+        var bathOk = false
         if (needFeed) {
             onLog("[好友喂食] 「$friendName」的「$petName」体力偏低，开始自动投喂...")
-            val req = FriendFeedRequest(params.bridge, params.ownPetId, friend, params.energyThreshold, curEnergy, maxEnergy)
+            val req =
+                FriendFeedRequest(params.bridge, params.ownPetId, friend, params.energyThreshold, curEnergy, maxEnergy)
             val (ok, newEnergy) = feedFriendWithAutoBuyAwait(req, onLog)
             if (ok) {
                 fedOk = true
                 onLog("[好友喂食] 已帮好友「$friendName」补充体力至 $newEnergy/$maxEnergy")
             }
-            delay(ThreadLocalRandom.current().nextLong(2000L, 3500L))
+            delay(randomJitter(2000L, 3500L))
         }
         if (needBath) {
             onLog("[好友洗澡] 「$friendName」的「$petName」清洁偏低，开始自动搓澡...")
-            val req = FriendBathRequest(params.bridge, params.ownPetId, friend, params.cleanThreshold, curClean, maxClean)
+            val req =
+                FriendBathRequest(params.bridge, params.ownPetId, friend, params.cleanThreshold, curClean, maxClean)
             val bathRes = bathFriendWithAutoBuyAwait(req, onLog)
             if (bathRes.code == 0 && bathRes.addedClean > 0) {
                 bathOk = true
@@ -187,9 +201,11 @@ object PetFriendCareTask {
         onLog: TaskLogger
     ): Pair<Boolean, Int> {
         val friendName = req.friend.friendNick.ifEmpty { req.friend.uin.toString() }
-        val petLabel = if (req.friend.petNick.isNotEmpty()) "${friendName}的「${req.friend.petNick}」" else "好友「$friendName」的宠物"
+        val petLabel =
+            if (req.friend.petNick.isNotEmpty()) "${friendName}的「${req.friend.petNick}」" else "好友「$friendName」的宠物"
         var foodItemId = ensureFoodInventory(req.bridge, req.ownPetId, petLabel, onLog)
-        var curEnergy = req.startEnergy; var feedCount = 0
+        var curEnergy = req.startEnergy;
+        var feedCount = 0
 
         while (curEnergy < req.targetThreshold && curEnergy < req.maxEnergy && feedCount < 8) {
             var res = feedDetailedAwait(req.bridge, req.friend.petId, req.friend.uin.toString(), foodItemId)
@@ -212,7 +228,7 @@ object PetFriendCareTask {
                 curEnergy = (curEnergy + 10).coerceAtMost(req.maxEnergy)
                 onLog("[好友投喂] 成功投喂 1 份爱心饼干 -> 估计体力 $curEnergy（阈值 ${req.targetThreshold}）")
                 if (curEnergy >= req.targetThreshold || curEnergy >= req.maxEnergy) break
-                delay(ThreadLocalRandom.current().nextLong(1200L, 2000L))
+                delay(randomJitter(1200L, 2000L))
             } else {
                 onLog("[好友投喂] 投喂回包: code=${res.code} ${res.tipText ?: res.errorMsg ?: ""}")
                 break
@@ -247,7 +263,8 @@ object PetFriendCareTask {
         onLog: TaskLogger
     ): QQPetDirectBridge.BathResult {
         val friendName = req.friend.friendNick.ifEmpty { req.friend.uin.toString() }
-        val petLabel = if (req.friend.petNick.isNotEmpty()) "${friendName}的「${req.friend.petNick}」" else "好友「$friendName」的宠物"
+        val petLabel =
+            if (req.friend.petNick.isNotEmpty()) "${friendName}的「${req.friend.petNick}」" else "好友「$friendName」的宠物"
         val (_, configs) = PetCareTask.fetchBathItemConfigAwait(req.bridge)
         val (_, inventory) = PetCareTask.fetchBathInventoryAwait(req.bridge)
         val chosenConfig = configs.firstOrNull { it.cleanValue > 0 } ?: configs.firstOrNull()
@@ -255,7 +272,8 @@ object PetFriendCareTask {
         val itemName = chosenConfig?.name ?: "香皂片"
         var balance = inventory[itemId] ?: 0
         var curClean = req.startClean.coerceAtLeast(0)
-        var totalAdded = 0; var steps = 0
+        var totalAdded = 0;
+        var steps = 0
 
         while (curClean < req.targetThreshold && curClean < req.maxClean && steps < 10) {
             steps++
@@ -268,17 +286,23 @@ object PetFriendCareTask {
             }
             val res = PetCareTask.doBathOnceAwait(req.bridge, req.friend.petId, itemId, 1, req.friend.uin.toString())
             if (res.code != 0) {
-                if (balance > 0 && steps == 1) { balance = 0; continue }
+                if (balance > 0 && steps == 1) {
+                    balance = 0; continue
+                }
                 onLog("[好友洗澡] 帮$petLabel 搓澡回包: code=${res.code} ${res.errorMsg ?: ""}")
                 return QQPetDirectBridge.BathResult(res.code, curClean, totalAdded, balance, false, res.errorMsg)
             }
             curClean = res.newClean; totalAdded += res.addedClean; balance = res.remainBalance
             onLog("[好友搓澡] 帮$petLabel 消耗 1 份$itemName (+${res.addedClean}) -> 清洁度 $curClean/${req.maxClean}")
             if (curClean >= req.targetThreshold || res.isFullClean || curClean >= req.maxClean) break
-            delay(ThreadLocalRandom.current().nextLong(1200L, 2000L))
+            delay(randomJitter(1200L, 2000L))
         }
         if (totalAdded > 0) {
-            try { PetCareTask.bathAwait(req.bridge, req.friend.petId, req.friend.uin.toString()) } catch (_: Throwable) {}
+            try {
+                PetCareTask.bathAwait(req.bridge, req.friend.petId, req.friend.uin.toString())
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            }
         }
         return QQPetDirectBridge.BathResult(0, curClean, totalAdded, balance, curClean >= req.maxClean, null)
     }

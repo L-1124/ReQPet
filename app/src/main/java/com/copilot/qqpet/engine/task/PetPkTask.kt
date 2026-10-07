@@ -80,7 +80,8 @@ object PetPkTask {
                     }
                 }
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
 
@@ -97,7 +98,8 @@ object PetPkTask {
                     }
                 }
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             null
         }
 

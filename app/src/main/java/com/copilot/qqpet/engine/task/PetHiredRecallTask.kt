@@ -54,6 +54,7 @@ object PetHiredRecallTask {
                 }
             } ?: Pair(-99, "超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             Pair(-99, t.message)
         }
 
@@ -71,7 +72,8 @@ object PetHiredRecallTask {
                     }
                 }
             } ?: Pair(-99, null)
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Pair(-99, null)
         }
 

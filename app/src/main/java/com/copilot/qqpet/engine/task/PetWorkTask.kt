@@ -88,6 +88,7 @@ object PetWorkTask {
                 }
             } ?: Triple(-99, null, "网络响应超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             Triple(-99, null, t.message)
         }
 
@@ -174,7 +175,8 @@ object PetWorkTask {
                     bridge.querySecondMapInfoDetails(eventType, petId) { if (cont.isActive) cont.resume(it) }
                 }
             } ?: QQPetDirectBridge.SecondMapDetails(-99, 0, 0L, emptyList())
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             QQPetDirectBridge.SecondMapDetails(-99, 0, 0L, emptyList())
         }
 
@@ -254,6 +256,7 @@ object PetWorkTask {
                 }
             } ?: PetFriendsPageResult(-99, emptyList(), false, "", "超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             PetFriendsPageResult(-99, emptyList(), false, "", t.message)
         }
 

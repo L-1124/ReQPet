@@ -10,7 +10,6 @@ import com.copilot.qqpet.engine.state.RosterStore
 import com.copilot.qqpet.engine.resilience.RateLimitExceededException
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.delay
-import java.util.concurrent.ThreadLocalRandom
 
 /**
  * 负责小宠主动串门送心、陌生人蓄水池巡检与每日点赞配额调度
@@ -88,7 +87,8 @@ object PetActiveVisitTask {
                     RosterStore.recordStrangersToPool(context, currentUin, newStrangers)
                 }
             }
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
         }
     }
 
@@ -115,7 +115,7 @@ object PetActiveVisitTask {
                         AccountSessionStore.markFriendLikedToday(context, currentUin, t.uin)
                         successCount++
                         onLog("[主动串门] 成功串门踩踩$label (${t.uin})！")
-                        delay(ThreadLocalRandom.current().nextLong(3000L, 5000L))
+                        delay(randomJitter(3000L, 5000L))
                     }
 
                     136202 -> {

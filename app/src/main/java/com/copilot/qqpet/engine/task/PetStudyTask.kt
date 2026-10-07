@@ -33,6 +33,7 @@ object PetStudyTask {
                 }
             } ?: Triple(-99, null, "网络响应超时")
         } catch (t: Throwable) {
+            if (t is kotlinx.coroutines.CancellationException) throw t
             Triple(-99, null, t.message)
         }
 

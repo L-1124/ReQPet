@@ -9,6 +9,8 @@ import com.copilot.qqpet.engine.model.StudyDispatchParam
 import com.copilot.qqpet.engine.model.WorkDispatchParam
 import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.protocol.QQPetDirectBridge
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 /**
@@ -79,7 +81,7 @@ object PetCycleDispatcher {
                             petId,
                             PetAdventureEngine.currentActiveUin,
                             PetAdventureEngine.enableClaimCoinBag
-                        ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                        ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                     }
                     showToast(context, "已发起探险收益结算")
                 } ?: showToast(context, "当前暂无待结算任务")
@@ -111,13 +113,13 @@ object PetCycleDispatcher {
                     bridge,
                     petId,
                     PetAdventureEngine.prefCareEnergyThreshold
-                ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                 PetCareTask.bathWithAutoBuyAwait(
                     context,
                     bridge,
                     petId,
                     PetAdventureEngine.prefCareCleanThreshold
-                ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                 showToast(context, "已触发小宠进食与洗澡巡检")
                 true
             }
@@ -128,7 +130,7 @@ object PetCycleDispatcher {
                     bridge,
                     petId,
                     PetAdventureEngine.prefCareEnergyThreshold
-                ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                 showToast(context, "已触发小宠进食补充体力")
                 true
             }
@@ -139,7 +141,7 @@ object PetCycleDispatcher {
                     bridge,
                     petId,
                     PetAdventureEngine.prefCareCleanThreshold
-                ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                 showToast(context, "已触发小宠沐浴恢复清洁")
                 true
             }
@@ -154,7 +156,12 @@ object PetCycleDispatcher {
                     isManual = true
                 )
                 val summary =
-                    PetFriendCareTask.executeAutoFriendCare(params) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                    PetFriendCareTask.executeAutoFriendCare(params) { level, msg ->
+                        PetAdventureEngine.sendLog(
+                            level,
+                            msg
+                        )
+                    }
                 val msg = if (summary.checkedCount > 0) {
                     "好友照料完成：喂食 ${summary.fedCount} 位，洗澡 ${summary.bathedCount} 位"
                 } else {
@@ -184,7 +191,8 @@ object PetCycleDispatcher {
                     cachedFriends = friends,
                     isManual = true
                 )
-                val count = PetSocialTask.executeAutoLikeBack(params) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                val count =
+                    PetSocialTask.executeAutoLikeBack(params) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                 val msg = if (count > 0) "成功回赠 $count 位来访小伙伴" else "暂无可回踩的来访记录，详情见日志"
                 showToast(context, msg)
                 true
@@ -201,7 +209,7 @@ object PetCycleDispatcher {
                     enableStrangers = PetAdventureEngine.prefActiveVisitStrangers,
                     dailyLimit = PetAdventureEngine.prefActiveVisitDailyLimit,
                     isManual = true
-                ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                 showToast(context, "已触发主动串门送心")
                 true
             }
@@ -213,7 +221,7 @@ object PetCycleDispatcher {
                     petId,
                     PetAdventureEngine.currentActiveUin,
                     true
-                ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                 showToast(context, if (count > 0) "成功拆开 $count 个金币福袋！" else "当前暂无可领取的金币福袋")
                 true
             }
@@ -236,7 +244,7 @@ object PetCycleDispatcher {
                     candidates,
                     myTotal,
                     0L
-                ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                 showToast(context, "自动 PK 挑战已执行 (今日第 $count 场)")
                 true
             }
@@ -245,11 +253,12 @@ object PetCycleDispatcher {
         }
     }
 
-    private fun showToast(context: Context, text: String) {
-        android.os.Handler(android.os.Looper.getMainLooper()).post {
+    private suspend fun showToast(context: Context, text: String) {
+        withContext(Dispatchers.Main) {
             try {
                 android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
-            } catch (_: Throwable) {
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             }
         }
     }
@@ -269,7 +278,12 @@ object PetCycleDispatcher {
             learnedStudySubEvent = PetAdventureEngine.learnedStudySubEvent,
             learnedStudyName = PetAdventureEngine.learnedStudyName
         )
-        val res = PetStudyTask.executeAdaptiveStudy(bridge, petId, param) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+        val res = PetStudyTask.executeAdaptiveStudy(bridge, petId, param) { level, msg ->
+            PetAdventureEngine.sendLog(
+                level,
+                msg
+            )
+        }
         if (res.isSuccess) {
             PetAdventureEngine.lastActiveStoryId = res.storyId
             PetAdventureEngine.currentTaskTypeName = "进阶修习中 (${res.courseName ?: "学园课程"})"
@@ -277,7 +291,6 @@ object PetCycleDispatcher {
                 System.currentTimeMillis() + TimeConfigManager.getCurrentDuration("STUDY") * 1000L
             PetAdventureEngine.currentStatusText = "正在进修 ${res.courseName ?: "学园课程"}"
             PetAdventureEngine.sendLog(
-                context,
                 "[开课成功] 顺利开启 ${res.courseName}！StoryID: ${res.storyId}，学分高速增长中"
             )
             PetAdventureEngine.studyAttributeCursor++
@@ -285,13 +298,15 @@ object PetCycleDispatcher {
         }
         if (res.isFatigued && PetAdventureEngine.enableFatigueToAdventure) {
             PetAdventureEngine.sendLog(
-                context,
                 "[疲惫避让] 学园课程标记为疲惫 (${res.fatigueTip ?: "收益降低"})，智能避让转入森林探险..."
             )
             PetAdventureDispatch.dispatchAdventure(context, bridge, petId)
             return true
         }
-        PetAdventureEngine.sendLog(context, EngineLog.Level.WARN, "[学业调度] 本轮选课未成功开课 (${res.errorMsg ?: "服务端拒绝"})")
+        PetAdventureEngine.sendLog(
+            EngineLog.Level.WARN,
+            "[学业调度] 本轮选课未成功开课 (${res.errorMsg ?: "服务端拒绝"})"
+        )
         return false
     }
 
@@ -307,7 +322,7 @@ object PetCycleDispatcher {
             currentUin = PetAdventureEngine.currentActiveUin,
             enableHireFriend = PetAdventureEngine.enableHireFriend,
             cachedFriends = PetAdventureEngine.cachedHireableFriends
-        ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+        ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
 
         val param = WorkDispatchParam(
             workMode = PetAdventureEngine.prefWorkMode,
@@ -322,7 +337,7 @@ object PetCycleDispatcher {
             learnedWorkName = PetAdventureEngine.learnedWorkName
         )
         val res = PetAdaptiveWorkTask.executeAdaptiveWork(context, bridge, petId, param) { level, msg ->
-            PetAdventureEngine.sendLog(context, level, msg)
+            PetAdventureEngine.sendLog(level, msg)
         }
         if (res.isSuccess) {
             PetAdventureEngine.lastActiveStoryId = res.storyId
@@ -337,7 +352,6 @@ object PetCycleDispatcher {
             if (res.hiredFriend != null) {
                 val hiredName = res.hiredFriend.friendNick.ifEmpty { res.hiredFriend.uin.toString() }
                 PetAdventureEngine.sendLog(
-                    context,
                     "[雇佣打工成功] 顺利雇佣好友「$hiredName」协同开工 ${res.placeName} - ${res.jobName}！StoryID: ${res.storyId}"
                 )
                 if (PetAdventureEngine.enableFriendCare) {
@@ -351,11 +365,10 @@ object PetCycleDispatcher {
                             isManual = false
                         ),
                         res.hiredFriend
-                    ) { level, msg -> PetAdventureEngine.sendLog(context, level, msg) }
+                    ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
                 }
             } else {
                 PetAdventureEngine.sendLog(
-                    context,
                     "[打工成功] 顺利开工 ${res.placeName} - ${res.jobName}！StoryID: ${res.storyId}，勤劳致富中"
                 )
             }
@@ -364,7 +377,6 @@ object PetCycleDispatcher {
         }
         if (res.isFatigued && PetAdventureEngine.enableFatigueToAdventure) {
             PetAdventureEngine.sendLog(
-                context,
                 "[疲惫避让] 打工岗位标记为疲惫 (${res.fatigueTip ?: "收益降低"})，智能避让转入森林探险..."
             )
             PetAdventureDispatch.dispatchAdventure(context, bridge, petId)
@@ -378,7 +390,10 @@ object PetCycleDispatcher {
             return false
         }
         if (res.jobName == null && res.code != 0) return false
-        PetAdventureEngine.sendLog(context, EngineLog.Level.WARN, "[打工调度] 本轮打工未成功开工 (${res.errorMsg ?: "服务端拒绝"})")
+        PetAdventureEngine.sendLog(
+            EngineLog.Level.WARN,
+            "[打工调度] 本轮打工未成功开工 (${res.errorMsg ?: "服务端拒绝"})"
+        )
         return false
     }
 }

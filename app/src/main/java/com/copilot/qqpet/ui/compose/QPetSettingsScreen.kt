@@ -78,30 +78,34 @@ fun QPetSettingsScreen(state: SettingsState, onBack: () -> Unit) {
         ) {
             item {
                 SectionHeader("总开关")
-                SettingsCard {
-                    ToggleRow(
-                        title = "全自动托管",
-                        subtitle = "默认关闭；关闭时模块不发起任何请求，下面的功能开关也不会生效",
-                        checked = state.bool(PreferencesHelper.KEY_MASTER_ENABLED, false),
-                        onCheckedChange = { state.setBool(PreferencesHelper.KEY_MASTER_ENABLED, it) }
-                    )
+                SettingsGroup {
+                    item {
+                        ToggleRow(
+                            title = "全自动托管",
+                            subtitle = "默认关闭；关闭时模块不发起任何请求，下面的功能开关也不会生效",
+                            checked = state.bool(PreferencesHelper.KEY_MASTER_ENABLED, false),
+                            onCheckedChange = { state.setBool(PreferencesHelper.KEY_MASTER_ENABLED, it) }
+                        )
+                    }
                 }
             }
             item {
                 SectionHeader("运行状态")
-                SettingsCard {
-                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                        Text(
-                            text = state.statusText,
-                            style = MaterialTheme.typography.titleMediumEmphasized,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "小宠资质 · ${state.attributesText}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
+                SettingsGroup {
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text(
+                                text = state.statusText,
+                                style = MaterialTheme.typography.titleMediumEmphasized,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "小宠资质 · ${state.attributesText}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                     }
                 }
             }

@@ -32,8 +32,8 @@ import com.copilot.qqpet.ui.compose.ActionRow
 import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.ExpandablePanel
 import com.copilot.qqpet.ui.compose.SectionHeader
-import com.copilot.qqpet.ui.compose.SettingsCard
 import com.copilot.qqpet.ui.compose.SegmentedChoiceRow
+import com.copilot.qqpet.ui.compose.SettingsGroup
 import com.copilot.qqpet.ui.compose.SettingsState
 import com.copilot.qqpet.ui.compose.ToggleRow
 import com.copilot.qqpet.ui.compose.dialog.HireWhitelistDialog
@@ -70,24 +70,27 @@ fun CareerSection(state: SettingsState) {
     }
 
     SectionHeader("自动轮转调度")
-    SettingsCard {
-        ToggleRow(
-            title = "进阶学力研修",
-            checked = studyEnabled,
-            onCheckedChange = { state.setBool(PreferencesHelper.KEY_STUDY, it) },
-            subtitle = schoolStageSubtitle(state, schoolDetails)
-        )
-        ExpandablePanel(studyEnabled) {
+    SettingsGroup {
+        item {
+            ToggleRow(
+                title = "进阶学力研修",
+                checked = studyEnabled,
+                onCheckedChange = { state.setBool(PreferencesHelper.KEY_STUDY, it) },
+                subtitle = schoolStageSubtitle(state, schoolDetails)
+            )
+        }
+        expandablePanel(studyEnabled) {
             StudyPanel(state = state, details = schoolDetails)
         }
-        CardDivider()
-        ToggleRow(
-            title = "全自动打工派遣",
-            checked = workEnabled,
-            onCheckedChange = { state.setBool(PreferencesHelper.KEY_WORK, it) },
-            subtitle = workSubtitle(state, workPlaces)
-        )
-        ExpandablePanel(workEnabled) {
+        item {
+            ToggleRow(
+                title = "全自动打工派遣",
+                checked = workEnabled,
+                onCheckedChange = { state.setBool(PreferencesHelper.KEY_WORK, it) },
+                subtitle = workSubtitle(state, workPlaces)
+            )
+        }
+        expandablePanel(workEnabled) {
             WorkPanel(
                 state = state,
                 workPlaces = workPlaces,
@@ -97,7 +100,7 @@ fun CareerSection(state: SettingsState) {
                     refreshWorkJobs(context = context, scope = scope, state = state, careerId = careerId)
                 }
             )
-            CardDivider()
+            Spacer(modifier = Modifier.height(4.dp))
             ToggleRow(
                 title = "打工自动雇佣好友",
                 checked = state.bool(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, false),
@@ -105,15 +108,16 @@ fun CareerSection(state: SettingsState) {
                 subtitle = "仅在已勾选的好友中，默认雇佣空闲且收益最高的好友"
             )
             ActionRow(
-                title = "选择雇佣好友白名单 (支持名字/QQ号搜索)",
+                title = "选择雇佣好友白名单",
                 onClick = { showHireWhitelist = true },
                 subtitle = hireWhitelistSummary(context),
-                trailing = "勾选"
+                trailing = "管理"
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
-        CardDivider()
-        HiredRecallPanel(state = state)
+        item {
+            HiredRecallPanel(state = state)
+        }
     }
 
     if (showHireWhitelist) {

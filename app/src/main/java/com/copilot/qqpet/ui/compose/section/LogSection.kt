@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.ui.compose.SectionHeader
-import com.copilot.qqpet.ui.compose.SettingsCard
+import com.copilot.qqpet.ui.compose.SettingsGroup
 import com.copilot.qqpet.ui.compose.SettingsState
 
 private const val MAX_RENDER_LINES = 80
@@ -61,67 +61,69 @@ fun LogSection(state: SettingsState) {
     }
 
     SectionHeader("运行日志")
-    SettingsCard {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            SelectionContainer {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(132.dp)
-                        .padding(end = 36.dp),
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                ) {
-                    val visible = lines.takeLast(MAX_RENDER_LINES)
-                    if (visible.isEmpty()) {
-                        item(key = "placeholder") {
-                            Text(
-                                text = PLACEHOLDER,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        itemsIndexed(visible) { _, entry ->
-                            Text(
-                                text = "${entry.time} ${entry.message}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                lineHeight = 15.sp,
-                                color = when (entry.level) {
-                                    EngineLog.Level.ERROR -> MaterialTheme.colorScheme.error
-                                    EngineLog.Level.WARN -> MaterialTheme.colorScheme.tertiary
-                                    else -> MaterialTheme.colorScheme.onSurface
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 1.dp)
-                            )
+    SettingsGroup {
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                SelectionContainer {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(132.dp)
+                            .padding(end = 36.dp),
+                        verticalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        val visible = lines.takeLast(MAX_RENDER_LINES)
+                        if (visible.isEmpty()) {
+                            item(key = "placeholder") {
+                                Text(
+                                    text = PLACEHOLDER,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            itemsIndexed(visible) { _, entry ->
+                                Text(
+                                    text = "${entry.time} ${entry.message}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    color = when (entry.level) {
+                                        EngineLog.Level.ERROR -> MaterialTheme.colorScheme.error
+                                        EngineLog.Level.WARN -> MaterialTheme.colorScheme.tertiary
+                                        else -> MaterialTheme.colorScheme.onSurface
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 1.dp)
+                                )
+                            }
                         }
                     }
                 }
-            }
-            IconButton(
-                onClick = { state.clearLogs() },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(y = (-6).dp)
-                    .size(28.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Delete,
-                    contentDescription = "清空日志",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
+                IconButton(
+                    onClick = { state.clearLogs() },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(y = (-6).dp)
+                        .size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = "清空日志",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }

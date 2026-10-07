@@ -69,7 +69,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 import kotlin.math.roundToInt
@@ -80,25 +82,110 @@ fun SectionHeader(text: String) {
         text = text,
         style = MaterialTheme.typography.titleMediumEmphasized,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)
+        modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 6.dp)
     )
+}
+
+class SettingsGroupScope {
+    private val items = mutableListOf<@Composable () -> Unit>()
+
+    fun item(content: @Composable () -> Unit) {
+        items.add(content)
+    }
+
+    fun <T> items(list: List<T>, itemContent: @Composable (T) -> Unit) {
+        for (el in list) {
+            items.add { itemContent(el) }
+        }
+    }
+
+    fun expandableItem(visible: Boolean, content: @Composable () -> Unit) {
+        items.add {
+            AnimatedVisibility(
+                visible = visible,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                content()
+            }
+        }
+    }
+
+    fun expandablePanel(visible: Boolean, content: @Composable ColumnScope.() -> Unit) {
+        items.add {
+            AnimatedVisibility(
+                visible = visible,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth(), content = content)
+            }
+        }
+    }
+
+    internal fun getItems() = items
+}
+
+@Composable
+fun SettingsGroup(
+    modifier: Modifier = Modifier,
+    spacing: Dp = 3.dp,
+    outerCornerRadius: Dp = 20.dp,
+    innerCornerRadius: Dp = 4.dp,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
+    content: SettingsGroupScope.() -> Unit
+) {
+    val scope = SettingsGroupScope().apply(content)
+    val items = scope.getItems()
+    if (items.isEmpty()) return
+
+    val total = items.size
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        items.forEachIndexed { index, itemContent ->
+            val shape = when {
+                total <= 1 -> RoundedCornerShape(outerCornerRadius)
+                index == 0 -> RoundedCornerShape(
+                    topStart = outerCornerRadius,
+                    topEnd = outerCornerRadius,
+                    bottomStart = innerCornerRadius,
+                    bottomEnd = innerCornerRadius
+                )
+
+                index == total - 1 -> RoundedCornerShape(
+                    topStart = innerCornerRadius,
+                    topEnd = innerCornerRadius,
+                    bottomStart = outerCornerRadius,
+                    bottomEnd = outerCornerRadius
+                )
+
+                else -> RoundedCornerShape(innerCornerRadius)
+            }
+            Surface(
+                shape = shape,
+                color = containerColor,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                itemContent()
+            }
+        }
+    }
 }
 
 @Composable
 fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.largeIncreased,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth(), content = content)
+    SettingsGroup(modifier = modifier) {
+        item {
+            Column(modifier = Modifier.fillMaxWidth(), content = content)
+        }
     }
 }
 
 @Composable
 fun CardDivider(startPadding: Int = 16) {
-    Spacer(modifier = Modifier.height(8.dp))
+    Spacer(modifier = Modifier.height(4.dp))
 }
 
 @Composable
@@ -274,16 +361,17 @@ fun SliderRow(
                     onValueChange(dragValue.roundToInt())
                 }
             },
-            track = { sliderState ->
+            track = { state ->
                 SliderDefaults.Track(
-                    sliderState = sliderState,
-                    colors = SliderDefaults.colors()
+                    sliderState = state,
+                    drawStopIndicator = null
                 )
             },
-            thumb = { sliderState ->
-                SliderDefaults.Thumb(
-                    interactionSource = interactionSource,
-                    colors = SliderDefaults.colors()
+            thumb = {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
                 )
             }
         )

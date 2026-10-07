@@ -19,9 +19,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.SectionHeader
-import com.copilot.qqpet.ui.compose.SettingsCard
+import com.copilot.qqpet.ui.compose.SettingsGroup
 import com.copilot.qqpet.ui.compose.SettingsState
 import com.copilot.qqpet.ui.compose.dialog.ConfirmDialog
 import androidx.compose.ui.platform.LocalContext
@@ -102,10 +101,9 @@ fun ActionSection(state: SettingsState) {
     var pending by remember { mutableStateOf<ActionItemDef?>(null) }
 
     SectionHeader("手动即时指令")
-    SettingsCard {
-        ACTION_ITEMS.forEachIndexed { index, item ->
+    SettingsGroup {
+        items(ACTION_ITEMS) { item ->
             ActionCommandRow(item) { pending = item }
-            if (index != ACTION_ITEMS.lastIndex) CardDivider()
         }
     }
 

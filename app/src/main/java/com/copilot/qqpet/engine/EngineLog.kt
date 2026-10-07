@@ -14,31 +14,59 @@ object EngineLog {
     const val CAPACITY = 200
 
     private val timeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
-    private val buffer = ArrayDeque<String>()
-    private val listeners = CopyOnWriteArrayList<(String) -> Unit>()
+    private val buffer = ArrayDeque<LogEntry>()
+    private val listeners = CopyOnWriteArrayList<(LogEntry) -> Unit>()
 
-    fun i(message: String) = write(message)
-    fun w(message: String) = write(message)
-    fun e(message: String) = write(message)
+    fun i(message: String) = write(Level.INFO, TAG, message)
+    fun w(message: String) = write(Level.WARN, TAG, message)
+    fun e(message: String) = write(Level.ERROR, TAG, message)
 
-    private fun write(message: String) {
-        val line = synchronized(buffer) {
-            val stamped = "[${LocalTime.now().format(timeFormatter)}] $message"
+    /** 带来源标签的输出：来源与级别随条目结构化保留 */
+    fun d(tag: String, message: String) = write(Level.DEBUG, tag, message)
+    fun i(tag: String, message: String) = write(Level.INFO, tag, message)
+    fun w(tag: String, message: String) = write(Level.WARN, tag, message)
+    fun e(tag: String, message: String) = write(Level.ERROR, tag, message)
+
+    private fun write(level: Level, source: String, message: String) {
+        val entry = LogEntry(
+            time = LocalTime.now().format(timeFormatter),
+            level = level,
+            source = source,
+            message = message
+        )
+        val stamped = synchronized(buffer) {
             if (buffer.size >= CAPACITY) buffer.removeFirst()
-            buffer.addLast(stamped)
-            stamped
+            buffer.addLast(entry)
+            entry
         }
-        HookLog.log(TAG, message)
+        HookLog.log(TAG, "[${stamped.source}] ${stamped.message}")
         for (listener in listeners) {
-            try { listener(line) } catch (_: Throwable) {}
+            try {
+                listener(stamped)
+            } catch (_: Throwable) {
+            }
         }
     }
 
-    fun snapshot(): List<String> = synchronized(buffer) { buffer.toList() }
+    fun snapshot(): List<LogEntry> = synchronized(buffer) { buffer.toList() }
 
     fun clear() = synchronized(buffer) { buffer.clear() }
 
-    fun addListener(listener: (String) -> Unit) { listeners.addIfAbsent(listener) }
+    fun addListener(listener: (LogEntry) -> Unit) {
+        listeners.addIfAbsent(listener)
+    }
 
-    fun removeListener(listener: (String) -> Unit) { listeners.remove(listener) }
+    fun removeListener(listener: (LogEntry) -> Unit) {
+        listeners.remove(listener)
+    }
+
+    enum class Level { DEBUG, INFO, WARN, ERROR }
 }
+
+/** 结构化日志条目：级别与来源供 UI 着色与过滤，time 为渲染用时分秒文本 */
+data class LogEntry(
+    val time: String,
+    val level: EngineLog.Level,
+    val source: String,
+    val message: String
+)

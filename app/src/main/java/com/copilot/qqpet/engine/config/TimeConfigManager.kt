@@ -1,6 +1,6 @@
 package com.copilot.qqpet.engine.config
 
-import android.util.Log
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.model.StoryStatusResult
 import com.copilot.qqpet.engine.task.PetWorkTask
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -62,7 +62,7 @@ object TimeConfigManager {
             // 重新加载配置
             reloadConfiguredDurations()
 
-            Log.d(TAG, "[$taskType] Extracted duration: ${remainingSec}s from server response (StoryID: $storyId)")
+            EngineLog.d("TimeConfigManager", "[$taskType] Extracted duration: ${remainingSec}s from server response (StoryID: $storyId)")
         }
     }
 
@@ -75,7 +75,7 @@ object TimeConfigManager {
             val result = PetWorkTask.queryStoryStatusAwait(bridge, petId)
             extractAndConfigureDuration(result)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to reload durations from server: ${e.message}")
+            EngineLog.w("TimeConfigManager", "Failed to reload durations from server: ${e.message}")
         }
     }
 
@@ -114,7 +114,7 @@ object TimeConfigManager {
             "ADVENTURE" -> configuredDurations.copy(adventure = durationSec)
             else -> throw IllegalArgumentException("Unknown task type: $taskType")
         }
-        Log.i(TAG, "Manually set $type duration to ${durationSec}s")
+        EngineLog.i("TimeConfigManager", "Manually set $type duration to ${durationSec}s")
     }
 
     /**
@@ -144,7 +144,7 @@ object TimeConfigManager {
      */
     fun clearCache() {
         durationCache.clear()
-        Log.d(TAG, "Time config cache cleared")
+        EngineLog.d("TimeConfigManager", "Time config cache cleared")
     }
 
     private fun reloadConfiguredDurations() {
@@ -158,13 +158,10 @@ object TimeConfigManager {
             adventure = adventureDuration
         )
 
-        Log.d(
-            TAG,
-            "Reloaded durations: study=${studyDuration}s, work=${workDuration}s, adventure=${adventureDuration}s"
+        EngineLog.d("TimeConfigManager", "Reloaded durations: study=${studyDuration}s, work=${workDuration}s, adventure=${adventureDuration}s"
         )
     }
 
-    private const val TAG = "TimeConfigManager"
 }
 
 /**

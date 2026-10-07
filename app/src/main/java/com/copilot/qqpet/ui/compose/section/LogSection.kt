@@ -82,14 +82,18 @@ fun LogSection(state: SettingsState) {
                     )
                 }
             } else {
-                itemsIndexed(visible) { _, line ->
+                itemsIndexed(visible) { _, entry ->
                     Text(
-                        text = line,
+                        text = "${entry.time} ${entry.message}",
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
                         lineHeight = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = when (entry.level) {
+                            EngineLog.Level.ERROR -> MaterialTheme.colorScheme.error
+                            EngineLog.Level.WARN -> MaterialTheme.colorScheme.tertiary
+                            else -> MaterialTheme.colorScheme.onSurface
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 10.dp, vertical = 1.dp)

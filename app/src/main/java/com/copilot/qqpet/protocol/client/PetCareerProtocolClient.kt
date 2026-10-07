@@ -1,8 +1,8 @@
 package com.copilot.qqpet.protocol.client
 
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.engine.utils.PetPureCalculations
-import com.copilot.qqpet.hook.HookLog as Log
 import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.ProtoWireText
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -83,10 +83,10 @@ class PetCareerProtocolClient(
                 val hiredByCopy = PetPureCalculations.hiredByFriendEvidence(storyText) != null
                 val isHired = hiredByCopy || PetPureCalculations.isEmployedByFriend(employedUin, selfUin)
                 val note = describeHireBody(data)
-                Log.i(TAG, "queryProcessStoryInfo: storyId=$storyId, fatigued=$fatigued, employed=$employedUin, self=$selfUin, hiredByCopy=$hiredByCopy")
+                EngineLog.i("PetCareerClient", "queryProcessStoryInfo: storyId=$storyId, fatigued=$fatigued, employed=$employedUin, self=$selfUin, hiredByCopy=$hiredByCopy")
                 callback(ProcessStoryFatigueResult(0, fatigued, displayTip, eventType, null, isHired, employedUin, note, storyText))
             } else {
-                Log.w(TAG, "queryProcessStoryInfo 失败: code=$code, err=$errorMsg")
+                EngineLog.w("PetCareerClient", "queryProcessStoryInfo 失败: code=$code, err=$errorMsg")
                 val note = "bytes=${data?.size ?: -1} err=${errorMsg ?: "无"} ${ProtoWire.outline(data, 400)}"
                 callback(ProcessStoryFatigueResult(code, false, null, 0, errorMsg, false, 0L, note))
             }
@@ -296,7 +296,7 @@ class PetCareerProtocolClient(
                 onSelectEventsFatigue(fatigued, tip)
                 callback(0, list, data, null)
             } else {
-                Log.w(TAG, "querySelectEvents 失败: code=$code, err=$errorMsg")
+                EngineLog.w("PetCareerClient", "querySelectEvents 失败: code=$code, err=$errorMsg")
                 callback(code, emptyList(), data, errorMsg)
             }
         }

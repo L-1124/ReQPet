@@ -1,6 +1,6 @@
 package com.copilot.qqpet.engine.state
 
-import android.util.Log
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.model.StoryStatusResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -70,7 +70,7 @@ class OutdoorStatusMonitor(
                     // 成功轮询后重置失败计数
                     resetFailureCount()
                 } catch (e: Exception) {
-                    Log.w(TAG, "状态监控异常：${e.message}")
+                    EngineLog.w("OutdoorStatusMonitor", "状态监控异常：${e.message}")
                     incrementFailureCount()
 
                     if (failureCount >= MAX_FAILURE_BEFORE_OFFLINE) {
@@ -102,7 +102,7 @@ class OutdoorStatusMonitor(
             }
             true
         } catch (e: Exception) {
-            Log.w(TAG, "同步状态查询失败：${e.message}")
+            EngineLog.w("OutdoorStatusMonitor", "同步状态查询失败：${e.message}")
             false
         }
     }
@@ -152,7 +152,7 @@ class OutdoorStatusMonitor(
      */
     fun forceIdle() {
         transitionTo(AdventureState.Idle)
-        Log.i(TAG, "强制设置为空闲状态")
+        EngineLog.i("OutdoorStatusMonitor", "强制设置为空闲状态")
     }
 
     /**
@@ -160,7 +160,7 @@ class OutdoorStatusMonitor(
      */
     fun forceOffline() {
         transitionTo(AdventureState.Offline)
-        Log.i(TAG, "强制设置为离线状态")
+        EngineLog.i("OutdoorStatusMonitor", "强制设置为离线状态")
     }
 
     /**
@@ -176,7 +176,7 @@ class OutdoorStatusMonitor(
     internal fun incrementFailureCount() {
         failureCount++
         if (failureCount >= MAX_FAILURE_BEFORE_OFFLINE) {
-            Log.w(TAG, "连续 $failureCount 次查询失败，标记为离线")
+            EngineLog.w("OutdoorStatusMonitor", "连续 $failureCount 次查询失败，标记为离线")
         }
     }
 
@@ -232,13 +232,12 @@ class OutdoorStatusMonitor(
     private fun transitionTo(newState: AdventureState) {
         val oldState = _statusFlow.value
         if (oldState != newState) {
-            Log.d(TAG, "状态切换：$oldState → $newState")
+            EngineLog.d("OutdoorStatusMonitor", "状态切换：$oldState → $newState")
             _statusFlow.value = newState
         }
     }
 
     companion object {
-        private const val TAG = "OutdoorStatusMonitor"
         private const val MAX_FAILURE_BEFORE_OFFLINE = 5
 
         @Volatile

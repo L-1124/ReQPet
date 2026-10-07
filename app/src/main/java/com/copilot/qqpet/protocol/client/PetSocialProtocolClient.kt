@@ -1,7 +1,7 @@
 package com.copilot.qqpet.protocol.client
 
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.AccountSessionGuard
-import com.copilot.qqpet.hook.HookLog as Log
 import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.ProtoWireText
 import com.copilot.qqpet.protocol.QQPetDirectBridge.HireableFriend
@@ -38,10 +38,10 @@ class PetSocialProtocolClient(
                 val memberList = parseLikeMembers(data)
                 val hasMore = (ProtoWire.firstVarint(data, 2) ?: 0L) != 0L
                 val nextExtra = ProtoWire.firstString(data, 5) ?: ""
-                Log.i(TAG, "fetchLikeList 回包: 解析到 ${memberList.size} 位访客, hasMore=$hasMore")
+                EngineLog.i("PetSocialClient", "fetchLikeList 回包: 解析到 ${memberList.size} 位访客, hasMore=$hasMore")
                 callback(0, memberList, hasMore, nextExtra, data, null)
             } else {
-                Log.w(TAG, "fetchLikeList 失败: code=$code, err=$errorMsg")
+                EngineLog.w("PetSocialClient", "fetchLikeList 失败: code=$code, err=$errorMsg")
                 callback(code, emptyList(), false, "", data, errorMsg)
             }
         }
@@ -89,7 +89,7 @@ class PetSocialProtocolClient(
     ) {
         val body = ProtoWire.message().writeVarint(1, targetUin).toByteArray()
         channel.sendOidb("OidbSvcTrpcTcp.0x985b_0", 39003, 0, body) { code, data, errorMsg ->
-            Log.i(TAG, "sendLike 结果: uin=$targetUin, code=$code, err=$errorMsg")
+            EngineLog.i("PetSocialClient", "sendLike 结果: uin=$targetUin, code=$code, err=$errorMsg")
             callback(code, data, errorMsg)
         }
     }
@@ -120,10 +120,10 @@ class PetSocialProtocolClient(
                 val (bagList, totalFriends) = parseFriendCoinBags(data)
                 val nextCookie = ProtoWire.firstString(data, 2) ?: ""
                 val hasMore = (ProtoWire.firstVarint(data, 3) ?: 0L) != 0L
-                Log.i(TAG, "fetchFriendCoinBags: 本页好友=$totalFriends, 发现福袋=${bagList.size}, hasMore=$hasMore")
+                EngineLog.i("PetSocialClient", "fetchFriendCoinBags: 本页好友=$totalFriends, 发现福袋=${bagList.size}, hasMore=$hasMore")
                 callback(0, bagList, totalFriends, hasMore, nextCookie, null)
             } else {
-                Log.w(TAG, "fetchFriendCoinBags 失败: code=$code, err=$errorMsg")
+                EngineLog.w("PetSocialClient", "fetchFriendCoinBags 失败: code=$code, err=$errorMsg")
                 callback(code, emptyList(), 0, false, "", errorMsg)
             }
         }
@@ -152,7 +152,7 @@ class PetSocialProtocolClient(
             if (coinbagId.isNotEmpty()) {
                 val isSelf = (currentOwnUinStr.isNotEmpty() && friendUin.toString() == currentOwnUinStr) ||
                     (selfNodeBytes != null && nodeBytes.contentEquals(selfNodeBytes)) || (friendUin == 0L && friendNick.isEmpty())
-                Log.i(TAG, "发现地面福袋: uin=$friendUin, nick=$friendNick, bagId=$coinbagId, isSelf=$isSelf, currentUin=$currentOwnUinStr")
+                EngineLog.i("PetSocialClient", "发现地面福袋: uin=$friendUin, nick=$friendNick, bagId=$coinbagId, isSelf=$isSelf, currentUin=$currentOwnUinStr")
                 if (isSelf) onOwnBagFound(coinbagId)
                 bagList.add(FriendCoinBagInfo(friendUin, if (isSelf) "自己小窝" else friendNick, friendPetId, petNick, coinbagId, isSelf))
             }
@@ -171,10 +171,10 @@ class PetSocialProtocolClient(
                 val list = parseHireableFriends(data, currentOwnUin)
                 val nextCookie = ProtoWire.firstString(data, 2) ?: ""
                 val hasMore = (ProtoWire.firstVarint(data, 3) ?: 0L) != 0L
-                Log.i(TAG, "fetchPetFriendsPage: 解析到 ${list.size} 位好友, hasMore=$hasMore")
+                EngineLog.i("PetSocialClient", "fetchPetFriendsPage: 解析到 ${list.size} 位好友, hasMore=$hasMore")
                 callback(0, list, hasMore, nextCookie, null)
             } else {
-                Log.w(TAG, "fetchPetFriendsPage 失败: code=$code, err=$errorMsg")
+                EngineLog.w("PetSocialClient", "fetchPetFriendsPage 失败: code=$code, err=$errorMsg")
                 callback(code, emptyList(), false, "", errorMsg)
             }
         }
@@ -218,11 +218,11 @@ class PetSocialProtocolClient(
                 val bagId = parseGroundCoinBagId(data)
                 if (!bagId.isNullOrEmpty()) {
                     onOwnBagFound(bagId)
-                    Log.i(TAG, "🧧 [0x9acb_0] 捕获到自家地面钱袋: $bagId")
+                    EngineLog.i("PetSocialClient", "🧧 [0x9acb_0] 捕获到自家地面钱袋: $bagId")
                 }
                 callback(0, bagId, null)
             } else {
-                Log.w(TAG, "fetchOwnGroundCoinBag 失败: code=$code, err=$errorMsg")
+                EngineLog.w("PetSocialClient", "fetchOwnGroundCoinBag 失败: code=$code, err=$errorMsg")
                 callback(code, null, errorMsg)
             }
         }
@@ -268,10 +268,10 @@ class PetSocialProtocolClient(
                     }
                     gotGold = sum
                 }
-                Log.i(TAG, "snatchCoinBag: bagId=$coinbagId, gotGold=$gotGold, status=$status")
+                EngineLog.i("PetSocialClient", "snatchCoinBag: bagId=$coinbagId, gotGold=$gotGold, status=$status")
                 callback(SnatchCoinBagResult(0, coinbagId, gotGold, status, alreadyOpened, null))
             } else {
-                Log.w(TAG, "snatchCoinBag 失败: bagId=$coinbagId, code=$code, err=$errorMsg")
+                EngineLog.w("PetSocialClient", "snatchCoinBag 失败: bagId=$coinbagId, code=$code, err=$errorMsg")
                 callback(SnatchCoinBagResult(code, coinbagId, 0L, 0, false, errorMsg))
             }
         }

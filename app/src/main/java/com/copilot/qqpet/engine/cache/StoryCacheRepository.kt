@@ -1,6 +1,6 @@
 package com.copilot.qqpet.engine.cache
 
-import android.util.Log
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.state.StoryInfo
 
 /**
@@ -13,7 +13,6 @@ import com.copilot.qqpet.engine.state.StoryInfo
  */
 object StoryCacheRepository {
 
-    private const val TAG = "StoryCacheRepo"
     private const val STORY_CACHE_TTL_MS = 10_000L // 10 秒 TTL，外出状态变化频繁
 
     private var cacheManager: LRUCacheManager? = null
@@ -35,12 +34,12 @@ object StoryCacheRepository {
         // 检查缓存（TTL=10 秒，因为外出状态变化较快）
         val cached = cm.get<StoryInfo>(cacheKey, STORY_CACHE_TTL_MS)
         if (cached != null) {
-            Log.d(TAG, "Story cache HIT: $petId (${formatRemainingTime(cached.remainingSec)})")
+            EngineLog.d("StoryCacheRepo", "Story cache HIT: $petId (${formatRemainingTime(cached.remainingSec)})")
             return cached
         }
 
         // 缓存未命中，执行查询并刷新缓存
-        Log.d(TAG, "Story cache MISS: fetching fresh data for $petId...")
+        EngineLog.d("StoryCacheRepo", "Story cache MISS: fetching fresh data for $petId...")
 
         try {
             val freshStory = queryFunction()
@@ -48,12 +47,12 @@ object StoryCacheRepository {
             if (freshStory != null) {
                 // 写入缓存
                 cm.put(cacheKey, freshStory, STORY_CACHE_TTL_MS)
-                Log.d(TAG, "Cached story: ${formatRemainingTime(freshStory.remainingSec)}")
+                EngineLog.d("StoryCacheRepo", "Cached story: ${formatRemainingTime(freshStory.remainingSec)}")
             }
 
             return freshStory
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to refresh story info: ${e.message}")
+            EngineLog.w("StoryCacheRepo", "Failed to refresh story info: ${e.message}")
             return null
         }
     }
@@ -82,7 +81,7 @@ object StoryCacheRepository {
     fun clearForPet(petId: String) {
         val cacheKey = "story_$petId"
         cacheManager?.remove(cacheKey)
-        Log.d(TAG, "Cleared story cache for pet: $petId")
+        EngineLog.d("StoryCacheRepo", "Cleared story cache for pet: $petId")
     }
 
     /**
@@ -90,7 +89,7 @@ object StoryCacheRepository {
      */
     fun clearAll() {
         cacheManager?.invalidate("story_")
-        Log.i(TAG, "Cleared all story caches")
+        EngineLog.i("StoryCacheRepo", "Cleared all story caches")
     }
 
     /**
@@ -98,7 +97,7 @@ object StoryCacheRepository {
      */
     fun clearForPets(petIds: Collection<String>) {
         petIds.forEach { clearForPet(it) }
-        Log.d(TAG, "Cleared story cache for ${petIds.size} pets")
+        EngineLog.d("StoryCacheRepo", "Cleared story cache for ${petIds.size} pets")
     }
 
     /**

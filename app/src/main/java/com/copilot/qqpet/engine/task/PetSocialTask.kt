@@ -1,7 +1,7 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
-import android.util.Log
 import com.copilot.qqpet.engine.ActiveVisitHelper
 import com.copilot.qqpet.engine.state.AccountSessionStore
 import com.copilot.qqpet.engine.state.RosterStore
@@ -17,7 +17,6 @@ import kotlin.coroutines.resume
  */
 object PetSocialTask {
 
-    private const val TAG = "PetSocialTask"
 
     private const val NETWORK_TIMEOUT_MS = 8000L
 
@@ -258,7 +257,7 @@ object PetSocialTask {
             // 速率限制已处理，不再捕获
             throw e
         } catch (e: Exception) {
-            Log.w(TAG, "福袋领取异常：${e.message}")
+            EngineLog.w("PetSocialTask", "福袋领取异常：${e.message}")
             return 0
         }
     }

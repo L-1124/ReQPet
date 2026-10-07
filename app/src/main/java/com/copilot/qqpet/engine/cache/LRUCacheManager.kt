@@ -1,7 +1,7 @@
 package com.copilot.qqpet.engine.cache
 
+import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
-import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -20,8 +20,6 @@ class LRUCacheManager(
     private val context: Context? = null
 ) {
     companion object {
-        @PublishedApi
-        internal const val TAG = "LRUCacheManager"
         const val DEFAULT_MAX_SIZE = 500
         const val DEFAULT_TTL_MS = 5 * 60 * 1000L // 默认 5 分钟 TTL
     }
@@ -80,10 +78,10 @@ class LRUCacheManager(
         require(value != null) { "Cache value cannot be null" }
 
         cache[key] = CachedEntry(value, System.currentTimeMillis(), ttlMillis)
-        Log.d(TAG, "LRU put: $key (TTL=${ttlMillis / 1000}s)")
+        EngineLog.d("LRUCacheManager", "LRU put: $key (TTL=${ttlMillis / 1000}s)")
 
         if (cache.size > maxSize) {
-            Log.w(TAG, "Cache size exceeded max ($maxSize), triggering eviction")
+            EngineLog.w("LRUCacheManager", "Cache size exceeded max ($maxSize), triggering eviction")
         }
     }
 
@@ -93,7 +91,7 @@ class LRUCacheManager(
     fun remove(key: String): Boolean {
         val removed = cache.remove(key) != null
         if (removed) {
-            Log.d(TAG, "LRU remove: $key")
+            EngineLog.d("LRUCacheManager", "LRU remove: $key")
         }
         return removed
     }
@@ -108,7 +106,7 @@ class LRUCacheManager(
         if (keysToRemove.isNotEmpty()) {
             keysToRemove.forEach { key ->
                 cache.remove(key)
-                Log.d(TAG, "LRU invalidate pattern [$pattern]: $key")
+                EngineLog.d("LRUCacheManager", "LRU invalidate pattern [$pattern]: $key")
             }
         }
     }
@@ -118,7 +116,7 @@ class LRUCacheManager(
      */
     fun clear() {
         cache.clear()
-        Log.i(TAG, "LRU cache cleared completely")
+        EngineLog.i("LRUCacheManager", "LRU cache cleared completely")
     }
 
     /**

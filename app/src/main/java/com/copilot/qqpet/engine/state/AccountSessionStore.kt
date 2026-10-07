@@ -1,7 +1,7 @@
 package com.copilot.qqpet.engine.state
 
+import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
-import android.util.Log
 import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.engine.cache.LRUCacheManager
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -13,7 +13,6 @@ import java.util.Calendar
  */
 object AccountSessionStore {
 
-    private const val TAG = "AccountSessionStore"
 
     @Volatile
     private var cacheManager: LRUCacheManager? = null
@@ -104,7 +103,7 @@ object AccountSessionStore {
             }
 
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to sync liked uins: ${e.message}")
+            EngineLog.w("AccountSessionStore", "Failed to sync liked uins: ${e.message}")
         }
     }
 
@@ -156,7 +155,7 @@ object AccountSessionStore {
                 .putString(csvKey, csv)
                 .apply()
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to persist liked uin: ${e.message}")
+            EngineLog.w("AccountSessionStore", "Failed to persist liked uin: ${e.message}")
         }
     }
 
@@ -218,7 +217,7 @@ object AccountSessionStore {
             }
 
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to sync claimed bags: ${e.message}")
+            EngineLog.w("AccountSessionStore", "Failed to sync claimed bags: ${e.message}")
         }
     }
 
@@ -266,7 +265,7 @@ object AccountSessionStore {
                 .putBoolean(AccountSessionGuard.scopedKey("key_coinbag_limit", uin), true)
                 .apply()
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to persist coin bag limit: ${e.message}")
+            EngineLog.w("AccountSessionStore", "Failed to persist coin bag limit: ${e.message}")
         }
     }
 
@@ -310,7 +309,7 @@ object AccountSessionStore {
                 .putBoolean(limitKey, limitReached || isCoinBagLimitReachedToday(context, uin))
                 .apply()
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to persist coin bag handled: ${e.message}")
+            EngineLog.w("AccountSessionStore", "Failed to persist coin bag handled: ${e.message}")
         }
     }
 
@@ -322,7 +321,7 @@ object AccountSessionStore {
         cacheManager?.invalidate("claimed_bags_")
         cacheManager?.invalidate("coin_bag_limit_")
 
-        Log.d(TAG, "Cleared account-bound memory cache for all users")
+        EngineLog.d("AccountSessionStore", "Cleared account-bound memory cache for all users")
     }
 
     fun saveScopedPetId(context: Context, petId: String, runtimeUin: String? = null) {

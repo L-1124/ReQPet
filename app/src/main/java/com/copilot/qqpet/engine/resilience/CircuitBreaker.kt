@@ -1,6 +1,5 @@
 package com.copilot.qqpet.engine.resilience
 
-import android.util.Log
 import com.copilot.qqpet.engine.EngineLog
 import kotlinx.coroutines.delay
 import java.util.concurrent.ConcurrentHashMap
@@ -190,11 +189,11 @@ class CircuitBreaker(
                 // 更新故障计数
                 val count = failureCount.incrementAndGet()
 
-                Log.w(TAG, "[$name] Failure #$count recorded: ${e.message}")
+                EngineLog.w("CircuitBreaker", "[$name] Failure #$count recorded: ${e.message}")
 
                 // 检查是否达到熔断阈值
                 if (count >= config.failureThreshold) {
-                    Log.w(TAG, "[$name] Triggering circuit breaker OPEN after $count failures")
+                    EngineLog.w("CircuitBreaker", "[$name] Triggering circuit breaker OPEN after $count failures")
                     transitionTo(CircuitState.Open)
                     lastFailureTime = System.currentTimeMillis()
                 }
@@ -202,14 +201,14 @@ class CircuitBreaker(
 
             is CircuitState.HalfOpen -> {
                 // 在半开状态下失败，立即回到打开状态
-                Log.w(TAG, "[$name] Failure in HALF_OPEN state, transitioning to OPEN")
+                EngineLog.w("CircuitBreaker", "[$name] Failure in HALF_OPEN state, transitioning to OPEN")
                 transitionTo(CircuitState.Open)
                 lastFailureTime = System.currentTimeMillis()
             }
 
             is CircuitState.Open -> {
                 // 已经在打开状态，记录但不影响状态
-                Log.w(TAG, "[$name] Failure while OPEN (suppressed)")
+                EngineLog.w("CircuitBreaker", "[$name] Failure while OPEN (suppressed)")
             }
         }
 
@@ -227,7 +226,7 @@ class CircuitBreaker(
         block: suspend () -> T
     ): T {
         if (!allowRequest()) {
-            Log.w(TAG, "[$name] Circuit breaker is OPEN, using fallback")
+            EngineLog.w("CircuitBreaker", "[$name] Circuit breaker is OPEN, using fallback")
             throw CircuitOpenException("Circuit breaker for $name is open")
         }
 
@@ -239,7 +238,7 @@ class CircuitBreaker(
             val shouldContinue = recordFailure(e)
 
             if (!shouldContinue) {
-                Log.w(TAG, "[$name] Circuit breaker tripped, using fallback")
+                EngineLog.w("CircuitBreaker", "[$name] Circuit breaker tripped, using fallback")
                 return fallback()
             }
 
@@ -262,7 +261,7 @@ class CircuitBreaker(
 
         for (attempt in 0..maxRetries) {
             if (!allowRequest()) {
-                Log.w(TAG, "[$name] Circuit breaker is OPEN, skipping retry #$attempt")
+                EngineLog.w("CircuitBreaker", "[$name] Circuit breaker is OPEN, skipping retry #$attempt")
                 return fallback()
             }
 
@@ -277,7 +276,7 @@ class CircuitBreaker(
                 val shouldContinue = recordFailure(e)
 
                 if (!shouldContinue || attempt == maxRetries) {
-                    Log.w(TAG, "[$name] All retries exhausted or circuit opened, using fallback")
+                    EngineLog.w("CircuitBreaker", "[$name] All retries exhausted or circuit opened, using fallback")
                     return fallback()
                 }
 
@@ -290,12 +289,12 @@ class CircuitBreaker(
                     attempt = attempt
                 )
 
-                Log.d(TAG, "[$name] Retrying after ${delayMs}ms due to: ${e.message}")
+                EngineLog.d("CircuitBreaker", "[$name] Retrying after ${delayMs}ms due to: ${e.message}")
                 delay(delayMs)
             }
         }
 
-        Log.e(TAG, "[$name] Loop completed unexpectedly, using fallback")
+        EngineLog.e("CircuitBreaker", "[$name] Loop completed unexpectedly, using fallback")
         return fallback()
     }
 
@@ -332,7 +331,7 @@ class CircuitBreaker(
     private fun transitionTo(newState: CircuitState) {
         val oldState = stateRef.getAndSet(newState)
         if (oldState != newState) {
-            Log.i(TAG, "[$name] State transition: $oldState → $newState")
+            EngineLog.i("CircuitBreaker", "[$name] State transition: $oldState → $newState")
         }
     }
 
@@ -353,7 +352,4 @@ class CircuitBreaker(
         recentSuccesses.set(0)
     }
 
-    companion object {
-        private const val TAG = "CircuitBreaker"
-    }
 }

@@ -1,7 +1,7 @@
 package com.copilot.qqpet.engine.metrics
 
+import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
-import android.util.Log
 import com.copilot.qqpet.protocol.channel.ProtocolBreakers
 import java.util.concurrent.ConcurrentHashMap
 
@@ -90,7 +90,7 @@ class EngineMetricsImpl private constructor(
     private val metricsCounter = MetricsCounter
 
     init {
-        Log.i(TAG, "EngineMetrics initialized")
+        EngineLog.i("EngineMetrics", "EngineMetrics initialized")
     }
 
     override fun recordTaskCompletion(
@@ -114,7 +114,7 @@ class EngineMetricsImpl private constructor(
             if (history.size > 100) history.removeAt(0)
         }
 
-        Log.d(TAG, "[$taskType] Completed: ${durationMs}ms, success=$success, retries=$retryCount")
+        EngineLog.d("EngineMetrics", "[$taskType] Completed: ${durationMs}ms, success=$success, retries=$retryCount")
     }
 
     override fun recordCircuitBreakerTripped(breakerName: String) {
@@ -295,7 +295,6 @@ class EngineMetricsImpl private constructor(
     }
 
     companion object {
-        private const val TAG = "EngineMetrics"
 
         // Singleton instance (lazy initialized)
         @Volatile

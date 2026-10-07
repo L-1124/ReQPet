@@ -1,7 +1,7 @@
 package com.copilot.qqpet.engine.task
 
+import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
-import android.util.Log
 import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -15,7 +15,6 @@ import kotlin.coroutines.resume
  * 负责养宠好友宠物的代喂与代搓澡日常照料任务
  */
 object PetFriendCareTask {
-    private const val TAG = "PetFriendCareTask"
     private const val NETWORK_TIMEOUT_MS = 8000L
 
     data class FriendCareParams(
@@ -66,7 +65,7 @@ object PetFriendCareTask {
             onLog("🎉 [好友照料汇总] 本轮共检测 ${summary.checkedCount} 位好友，成功喂食 ${summary.fedCount} 位、洗澡 ${summary.bathedCount} 位！")
             summary
         } catch (t: Throwable) {
-            Log.w(TAG, "自动照料好友宠物异常: ${t.message}")
+            EngineLog.w("PetFriendCareTask", "自动照料好友宠物异常: ${t.message}")
             if (params.isManual) onLog("⚠️ [好友照料] 执行异常: ${t.message}")
             CareResultSummary()
         }

@@ -1,7 +1,7 @@
 package com.copilot.qqpet.engine.cache
 
+import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
-import android.util.Log
 import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.engine.task.PetWorkTask
 import com.copilot.qqpet.engine.state.AccountSessionStore
@@ -41,13 +41,13 @@ object FriendCacheRepository {
         if (!forceRefresh) {
             val cached = cm.get<List<QQPetDirectBridge.HireableFriend>>(cacheKey, FRIEND_CACHE_TTL_MS)
             if (cached != null && cached.isNotEmpty()) {
-                Log.d(TAG, "Friend cache HIT: $currentUin (${cached.size} friends)")
+                EngineLog.d("FriendCacheRepo", "Friend cache HIT: $currentUin (${cached.size} friends)")
                 return cached
             }
         }
 
         // 缓存未命中或强制刷新，从服务器拉取新鲜数据
-        Log.d(TAG, "Friend cache MISS or FORCE_REFRESH: fetching fresh data...")
+        EngineLog.d("FriendCacheRepo", "Friend cache MISS or FORCE_REFRESH: fetching fresh data...")
 
         try {
             val freshList = RosterStore.loadCachedHireableFriends(context, currentUin)
@@ -75,7 +75,7 @@ object FriendCacheRepository {
                 return freshList
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch hireable friends: ${e.message}")
+            EngineLog.w("FriendCacheRepo", "Failed to fetch hireable friends: ${e.message}")
         }
 
         return emptyList()
@@ -97,7 +97,7 @@ object FriendCacheRepository {
         val matched = allFriends.filter { it.uin in selectedUins && it.petId.isNotBlank() }.toMutableList()
 
         if (matched.isEmpty()) {
-            Log.d(TAG, "No matching whitelist friends found")
+            EngineLog.d("FriendCacheRepo", "No matching whitelist friends found")
             return emptyList()
         }
 
@@ -116,7 +116,7 @@ object FriendCacheRepository {
                     }
                     delay(1000L) // 避免过快请求
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to enrich friend details: ${e.message}")
+                    EngineLog.w("FriendCacheRepo", "Failed to enrich friend details: ${e.message}")
                 }
             }
         }
@@ -130,7 +130,7 @@ object FriendCacheRepository {
     fun clearForUser(context: Context, currentUin: String) {
         cacheManager?.invalidate("hireable_friends_$currentUin")
         RosterStore.saveCachedHireableFriends(context, currentUin, emptyList())
-        Log.d(TAG, "Cleared friend cache for user: $currentUin")
+        EngineLog.d("FriendCacheRepo", "Cleared friend cache for user: $currentUin")
     }
 
     /**
@@ -138,7 +138,7 @@ object FriendCacheRepository {
      */
     fun clearAll() {
         cacheManager?.clear()
-        Log.i(TAG, "Cleared all friend caches")
+        EngineLog.i("FriendCacheRepo", "Cleared all friend caches")
     }
 
     /**
@@ -152,7 +152,6 @@ object FriendCacheRepository {
         )
     }
 
-    private const val TAG = "FriendCacheRepo"
     const val FRIEND_CACHE_TTL_MS = 5 * 60 * 1000L // 5 分钟
 }
 

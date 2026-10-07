@@ -1,7 +1,6 @@
 package com.copilot.qqpet.engine.state
 
 import android.content.Context
-import android.util.Log
 import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
@@ -14,7 +13,6 @@ import com.copilot.qqpet.ui.PreferencesHelper
  */
 object RosterStore {
 
-    private const val TAG = "RosterStore"
 
     fun loadSavedHireFriendUins(context: Context, uin: String): Set<Long> {
         return try {

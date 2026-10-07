@@ -1,11 +1,11 @@
 package com.copilot.qqpet.protocol.channel
 
+import com.copilot.qqpet.engine.EngineLog
 import android.content.Context
 import android.util.Base64
 import com.copilot.qqpet.RuntimeSwitches
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.AccountSessionGuard
-import com.copilot.qqpet.hook.HookLog as Log
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
@@ -119,9 +119,7 @@ class OidbChannel(
                         if (observerCls == null) {
                             observerCls = targetMethod.parameterTypes[4]
                         }
-                        Log.i(
-                            TAG,
-                            "🎯 动态多源自适应命中 QQ 宠物原生发包代理类: $className, 发包方法: ${targetMethod.name}"
+                        EngineLog.i("OidbChannel", "🎯 动态多源自适应命中 QQ 宠物原生发包代理类: $className, 发包方法: ${targetMethod.name}"
                         )
                         return Triple(cls, targetMethod, observerCls)
                     }
@@ -188,15 +186,15 @@ class OidbChannel(
                     sendOidbMethod = method
                     isReady = true
                     com.copilot.qqpet.protocol.DeviceTrace.bind(context)
-                    Log.d(TAG, "✅ 成功反射挂载 QQ 宠物原生发包代理: ${cls.name}")
+                    EngineLog.d("OidbChannel", "✅ 成功反射挂载 QQ 宠物原生发包代理: ${cls.name}")
                 } else {
-                    Log.e(TAG, "❌ 实例化 QQ 宠物发包代理类失败: ${cls.name}")
+                    EngineLog.e("OidbChannel", "❌ 实例化 QQ 宠物发包代理类失败: ${cls.name}")
                 }
             } else {
-                Log.e(TAG, "❌ 未能在任何可用 ClassLoader 中动态发现实现 PetPbDelegate 的发包代理类")
+                EngineLog.e("OidbChannel", "❌ 未能在任何可用 ClassLoader 中动态发现实现 PetPbDelegate 的发包代理类")
             }
         } catch (t: Throwable) {
-            Log.e(TAG, "反射 QQ 发包代理失败: ${t.message}", t)
+            EngineLog.e("OidbChannel", "反射 QQ 发包代理失败: ${t.javaClass.simpleName}: ${t.message}")
         }
     }
 
@@ -283,17 +281,17 @@ class OidbChannel(
     ): Int {
         val requestId = requestTracker.register(commandName)
         requestTracker.sweepExpired().forEach {
-            Log.d(TAG, "请求 #${it.id} ${it.command} 超时未回包，配对已释放")
+            EngineLog.d("OidbChannel", "请求 #${it.id} ${it.command} 超时未回包，配对已释放")
         }
         if (!RuntimeSwitches.masterEnabled) {
-            Log.w(TAG, "总开关未开启：拦截发包 $commandName")
+            EngineLog.w("OidbChannel", "总开关未开启：拦截发包 $commandName")
             deliverOnce(requestId, commandName, callback, MASTER_OFF_CODE, null, "总开关未开启")
             return requestId
         }
 
         // 熔断器打开时快速失败，不发反射包，避免持续冲击故障域
         if (!ProtocolBreakers.allowSend(commandName)) {
-            Log.w(TAG, "熔断器打开：快速失败 $commandName")
+            EngineLog.w("OidbChannel", "熔断器打开：快速失败 $commandName")
             deliverOnce(requestId, commandName, callback, ProtocolBreakers.FAST_FAIL_CODE, null, "协议域熔断中")
             return requestId
         }
@@ -317,7 +315,7 @@ class OidbChannel(
                 if (invokedMethod.name == "equals") return@newProxyInstance args?.getOrNull(0) === proxy
                 if (args != null && args.isNotEmpty()) {
                     if (!requestTracker.tryDeliver(requestId)) {
-                        Log.w(TAG, "丢弃重复或迟到的回包 #$requestId $commandName")
+                        EngineLog.w("OidbChannel", "丢弃重复或迟到的回包 #$requestId $commandName")
                         return@newProxyInstance null
                     }
                     val code = (args[0] as? Number)?.toInt() ?: -1
@@ -330,7 +328,7 @@ class OidbChannel(
             }
             method.invoke(instance, request, commandName, command, subCommand, observer)
         } catch (t: Throwable) {
-            Log.e(TAG, "sendOidb 执行反射调用异常: ${t.message}", t)
+            EngineLog.e("OidbChannel", "sendOidb 执行反射调用异常: ${t.javaClass.simpleName}: ${t.message}")
             deliverOnce(requestId, commandName, callback, -2, null, t.message)
         } finally {
             isInternalSending = false
@@ -348,7 +346,7 @@ class OidbChannel(
         errorMsg: String?
     ) {
         if (!requestTracker.tryDeliver(requestId)) {
-            Log.w(TAG, "丢弃重复或迟到的结果 #$requestId $commandName")
+            EngineLog.w("OidbChannel", "丢弃重复或迟到的结果 #$requestId $commandName")
             return
         }
         invokeCallback(commandName, requestId, callback, code, data, errorMsg)
@@ -371,7 +369,7 @@ class OidbChannel(
         try {
             callback(code, data, errorMsg)
         } catch (t: Throwable) {
-            Log.e(TAG, "回包处理异常 #$requestId $commandName: ${t.message}", t)
+            EngineLog.e("OidbChannel", "回包处理异常 #$requestId $commandName: ${t.javaClass.simpleName}: ${t.message}")
         }
     }
 }

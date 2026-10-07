@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.EngineLog
+import com.copilot.qqpet.engine.LogEntry
 import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.engine.metrics.EngineMetrics
@@ -44,12 +45,12 @@ class SettingsState(
     val engineMetrics: EngineMetrics? = runCatching {
         engine?.let { EngineMetricsImpl.getInstance(context) }
     }.getOrNull()
-    var logLines by mutableStateOf<List<String>>(emptyList())
+    var logLines by mutableStateOf<List<LogEntry>>(emptyList())
         private set
     var pkBlacklistSummary by mutableStateOf("")
         private set
 
-    private val logListener: (String) -> Unit = { refreshLogs() }
+    private val logListener: (LogEntry) -> Unit = { refreshLogs() }
 
     private var lastPrefsVersion: Long = Long.MIN_VALUE
     private var lastPkSummaryKey: Pair<String, String>? = null

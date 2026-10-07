@@ -8,7 +8,6 @@ import com.copilot.qqpet.engine.model.*
 import com.copilot.qqpet.engine.state.AccountSessionStore
 import com.copilot.qqpet.engine.task.*
 import com.copilot.qqpet.engine.utils.PetPureCalculations
-import com.copilot.qqpet.hook.HookLog as Log
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.util.UiDescUtils
@@ -27,97 +26,158 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
         var cachedPetId: String? = null
         var lastActiveStoryId: String? = null
 
-        @Volatile var lastReportedOngoingStoryId: String? = null
-        @Volatile var currentActiveUin: String = ""
+        @Volatile
+        var lastReportedOngoingStoryId: String? = null
+        @Volatile
+        var currentActiveUin: String = ""
 
-        @Volatile var isLoopRunning = false
-        @Volatile var lastFatigueSwitchTimeMillis = 0L
+        @Volatile
+        var isLoopRunning = false
+        @Volatile
+        var lastFatigueSwitchTimeMillis = 0L
 
-        @Volatile var masterEnabled = false
-        @Volatile var enableStudy = false
+        @Volatile
+        var masterEnabled = false
+        @Volatile
+        var enableStudy = false
 
-        @Volatile var enableWork = false
-        @Volatile var enableCare = false
+        @Volatile
+        var enableWork = false
+        @Volatile
+        var enableCare = false
 
-        @Volatile var enableAdventure = false
-        @Volatile var enableSettle = false
+        @Volatile
+        var enableAdventure = false
+        @Volatile
+        var enableSettle = false
 
-        @Volatile var enableLikeBack = false
-        @Volatile var enableClaimCoinBag = false
+        @Volatile
+        var enableLikeBack = false
+        @Volatile
+        var enableClaimCoinBag = false
 
-        @Volatile var enableFatigueToAdventure = false
-        @Volatile var enableAutoPk = false
+        @Volatile
+        var enableFatigueToAdventure = false
+        @Volatile
+        var enableAutoPk = false
 
-        @Volatile var lastPkTimeMillis = 0L
-        @Volatile var pkCooldownMillis = 60 * 1000L
+        @Volatile
+        var lastPkTimeMillis = 0L
+        @Volatile
+        var pkCooldownMillis = 60 * 1000L
 
-        @Volatile var prefHumanLikeSleep = true
-        @Volatile var prefNightSleepMode = true
+        @Volatile
+        var prefHumanLikeSleep = true
+        @Volatile
+        var prefNightSleepMode = true
 
-        @Volatile var prefScreenOffSilent = true
-        @Volatile var prefHideQQSettingEntry = false
+        @Volatile
+        var prefScreenOffSilent = true
+        @Volatile
+        var prefHideQQSettingEntry = false
 
-        @Volatile var prefDebugLog = false
-        @Volatile var enableHireFriend = false
+        @Volatile
+        var prefDebugLog = false
+        @Volatile
+        var enableHireFriend = false
 
-        @Volatile var prefHireFriendUinsCsv: String = ""
-        @Volatile var prefPkBlacklistUinsCsv: String = ""
+        @Volatile
+        var prefHireFriendUinsCsv: String = ""
+        @Volatile
+        var prefPkBlacklistUinsCsv: String = ""
 
-        @Volatile var prefHiredRecallProgress = 72
-        @Volatile var enableActiveVisit = false
+        @Volatile
+        var prefHiredRecallProgress = 72
+        @Volatile
+        var enableActiveVisit = false
 
-        @Volatile var prefActiveVisitFriends = true
-        @Volatile var prefActiveVisitStrangers = true
+        @Volatile
+        var prefActiveVisitFriends = true
+        @Volatile
+        var prefActiveVisitStrangers = true
 
-        @Volatile var prefActiveVisitDailyLimit = 20
-        @Volatile var lastActiveVisitTimeMillis = 0L
+        @Volatile
+        var prefActiveVisitDailyLimit = 20
+        @Volatile
+        var lastActiveVisitTimeMillis = 0L
 
-        @Volatile var cachedHireableFriends: List<QQPetDirectBridge.HireableFriend> = emptyList()
-        @Volatile var enableFriendCare = false
+        @Volatile
+        var cachedHireableFriends: List<QQPetDirectBridge.HireableFriend> = emptyList()
+        @Volatile
+        var enableFriendCare = false
 
-        @Volatile var prefFriendCareEnergyThreshold = 60
-        @Volatile var prefFriendCareCleanThreshold = 60
+        @Volatile
+        var prefFriendCareEnergyThreshold = 60
+        @Volatile
+        var prefFriendCareCleanThreshold = 60
 
-        @Volatile var currentStatusText = "全自动守护中 · 一刻不停三维轮转"
-        @Volatile var currentTaskEndTimeMillis = 0L
+        @Volatile
+        var currentStatusText = "全自动守护中 · 一刻不停三维轮转"
+        @Volatile
+        var currentTaskEndTimeMillis = 0L
 
-        @Volatile var currentTaskTypeName = "进阶修习中"
-        @Volatile var roundRobinCursor = 0
+        @Volatile
+        var currentTaskTypeName = "进阶修习中"
+        @Volatile
+        var roundRobinCursor = 0
 
-        @Volatile var studyAttributeCursor = 0
-        @Volatile var workJobCursor = 0
+        @Volatile
+        var studyAttributeCursor = 0
+        @Volatile
+        var workJobCursor = 0
 
-        @Volatile var prefStudyMode = 0
-        @Volatile var prefWorkMode = 0
+        @Volatile
+        var prefStudyMode = 0
+        @Volatile
+        var prefWorkMode = 0
 
-        @Volatile var prefCustomSchoolStage = 0
-        @Volatile var prefCustomCourseSubject = 0
+        @Volatile
+        var prefCustomSchoolStage = 0
+        @Volatile
+        var prefCustomCourseSubject = 0
 
-        @Volatile var prefCustomCourseDuration = 0
-        @Volatile var prefCustomWorkType = 0
+        @Volatile
+        var prefCustomCourseDuration = 0
+        @Volatile
+        var prefCustomWorkType = 0
 
-        @Volatile var prefCustomWorkDuration = 0
-        @Volatile var prefCareEnergyThreshold = 60
+        @Volatile
+        var prefCustomWorkDuration = 0
+        @Volatile
+        var prefCareEnergyThreshold = 60
 
-        @Volatile var prefCareCleanThreshold = 60
-        @Volatile var lastCareTimeMillis = 0L
+        @Volatile
+        var prefCareCleanThreshold = 60
+        @Volatile
+        var lastCareTimeMillis = 0L
 
-        @Volatile var lastLikeBackTimeMillis = 0L
-        @Volatile var lastCoinBagTimeMillis = 0L
+        @Volatile
+        var lastLikeBackTimeMillis = 0L
+        @Volatile
+        var lastCoinBagTimeMillis = 0L
 
-        @Volatile var lastOwnPetCheckMillis = 0L
-        @Volatile var cachedSchoolDetails: QQPetDirectBridge.SecondMapDetails? = null
+        @Volatile
+        var lastOwnPetCheckMillis = 0L
+        @Volatile
+        var cachedSchoolDetails: QQPetDirectBridge.SecondMapDetails? = null
 
-        @Volatile var cachedSchoolCourses: List<QQPetDirectBridge.SelectEvent>? = null
-        @Volatile var cachedWorkPlaces: QQPetDirectBridge.SecondMapDetails? = null
+        @Volatile
+        var cachedSchoolCourses: List<QQPetDirectBridge.SelectEvent>? = null
+        @Volatile
+        var cachedWorkPlaces: QQPetDirectBridge.SecondMapDetails? = null
 
-        @Volatile var cachedWorkJobs: List<QQPetDirectBridge.SelectEvent>? = null
-        @Volatile var learnedStudySubEvent: Long? = null
+        @Volatile
+        var cachedWorkJobs: List<QQPetDirectBridge.SelectEvent>? = null
+        @Volatile
+        var learnedStudySubEvent: Long? = null
 
-        @Volatile var learnedStudyName: String? = null
-        @Volatile var learnedWorkSubEvent: Long? = null
+        @Volatile
+        var learnedStudyName: String? = null
+        @Volatile
+        var learnedWorkSubEvent: Long? = null
 
-        @Volatile var learnedWorkName: String? = null
+        @Volatile
+        var learnedWorkName: String? = null
 
         fun clearAccountBoundMemoryCache(context: Context) {
             AccountSessionStore.clearAccountBoundMemoryCache(context); cachedSchoolDetails = null; cachedWorkPlaces =
@@ -199,7 +259,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
                     executeMasterCycle(context)
                 } catch (t: Throwable) {
                     if (t is CancellationException) throw t
-                    Log.e(TAG, "主循环异常: ${t.message}")
+                    EngineLog.e(TAG, "主循环异常: ${t.javaClass.simpleName}: ${t.message}")
                     15000L
                 }
                 delay(delayMs)

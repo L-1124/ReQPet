@@ -1,6 +1,6 @@
 package com.copilot.qqpet.protocol.client
 
-import com.copilot.qqpet.hook.HookLog as Log
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.ProtoWireText
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -27,7 +27,7 @@ class PetCareProtocolClient(
             var petId: String? = null
             if (code == 0 && data != null) {
                 val allStrings = ProtoWireText.extractAllStrings(data)
-                Log.i(TAG, "0x95e1_0 回包所有字符串: $allStrings")
+                EngineLog.i("PetCareClient", "0x95e1_0 回包所有字符串: $allStrings")
                 val petBytes = ProtoWire.firstBytes(data, 1)
                 petId = ProtoWire.firstString(petBytes, 101)
                 val bagFromPet = ProtoWire.firstString(ProtoWire.firstBytes(petBytes, 21), 1)?.trim().orEmpty()
@@ -35,7 +35,7 @@ class PetCareProtocolClient(
                 val ownBag = bagFromPet.ifEmpty { bagFromRoot }
                 if (ownBag.isNotEmpty()) {
                     onOwnBagFound(ownBag)
-                    Log.i(TAG, "🧧 [0x95e1_0] 在本人主宠资料中捕获到地面福袋: $ownBag")
+                    EngineLog.i("PetCareClient", "🧧 [0x95e1_0] 在本人主宠资料中捕获到地面福袋: $ownBag")
                 }
             }
             callback(code, petId, data)
@@ -57,13 +57,13 @@ class PetCareProtocolClient(
                     val strVal = first?.javaClass?.getField("a")?.get(first) as? String
                     val fId = strVal?.toLongOrNull()
                     if (fId != null && fId > 0L) {
-                        Log.d(TAG, "从 PetHomeResourceManager 成功解析到动态 foodId: $fId")
+                        EngineLog.d("PetCareClient", "从 PetHomeResourceManager 成功解析到动态 foodId: $fId")
                         return fId
                     }
                 }
             }
         } catch (t: Throwable) {
-            Log.w(TAG, "从 PetHomeResourceManager 获取动态 foodId 失败: ${t.message}")
+            EngineLog.w("PetCareClient", "从 PetHomeResourceManager 获取动态 foodId 失败: ${t.message}")
         }
         return DEFAULT_FOOD_ID
     }
@@ -136,7 +136,7 @@ class PetCareProtocolClient(
                 val rawTip = ProtoWire.firstString(data, 3)
                 tipText = if (!rawTip.isNullOrBlank()) rawTip else null
             }
-            Log.i(TAG, "🥣 feedDetailed 回包: petId=$petId, code=$code, feedState=$feedState, tip=$tipText")
+            EngineLog.i("PetCareClient", "🥣 feedDetailed 回包: petId=$petId, code=$code, feedState=$feedState, tip=$tipText")
             callback(FeedDetailResult(code, feedState, tipText, err))
         }
     }
@@ -161,9 +161,9 @@ class PetCareProtocolClient(
                         items.add(FoodInventoryItem(itemId, name, balance, if (energyVal > 0) energyVal else 20))
                     }
                 }
-                Log.i(TAG, "🥣 fetchFoodInventory 成功: remain=$remain, total=$total, items=${items.size}")
+                EngineLog.i("PetCareClient", "🥣 fetchFoodInventory 成功: remain=$remain, total=$total, items=${items.size}")
             } else {
-                Log.w(TAG, "🥣 fetchFoodInventory 失败: code=$code, err=$err")
+                EngineLog.w("PetCareClient", "🥣 fetchFoodInventory 失败: code=$code, err=$err")
             }
             callback(code, remain, total, items)
         }
@@ -175,11 +175,11 @@ class PetCareProtocolClient(
             if (code == 0 && data != null) {
                 val remain = (ProtoWire.firstVarint(data, 1) ?: 0L).toInt()
                 val total = (ProtoWire.firstVarint(data, 2) ?: 0L).toInt()
-                Log.i(TAG, "📊 查询喂食状态回包: remain=$remain, total=$total")
+                EngineLog.i("PetCareClient", "📊 查询喂食状态回包: remain=$remain, total=$total")
                 callback(0, remain, total)
                 return@sendOidb
             }
-            Log.w(TAG, "📊 查询喂食状态失败: code=$code, err=$err")
+            EngineLog.w("PetCareClient", "📊 查询喂食状态失败: code=$code, err=$err")
             callback(code, 0, 0)
         }
     }
@@ -213,12 +213,12 @@ class PetCareProtocolClient(
                         onAttributesUpdated(attrs)
                         captureOwnBagFromProfile(data, displayBytes)
                     }
-                    Log.i(TAG, "📊 实时三围: energy=${attrs.energy}/${attrs.maxEnergy}, clean=${attrs.clean}/${attrs.maxClean}")
+                    EngineLog.i("PetCareClient", "📊 实时三围: energy=${attrs.energy}/${attrs.maxEnergy}, clean=${attrs.clean}/${attrs.maxClean}")
                     callback(0, attrs)
                     return@sendOidb
                 }
             }
-            Log.w(TAG, "📊 查询实时三围失败 (petId=$petId): code=$code, err=$err")
+            EngineLog.w("PetCareClient", "📊 查询实时三围失败 (petId=$petId): code=$code, err=$err")
             callback(code, null)
         }
     }
@@ -247,7 +247,7 @@ class PetCareProtocolClient(
         val ownBag = bagFromRoot.ifEmpty { bagFromDisplay }
         if (ownBag.isNotEmpty()) {
             onOwnBagFound(ownBag)
-            Log.i(TAG, "🧧 [0x96f2_1] 实时捕获到地面福袋: $ownBag")
+            EngineLog.i("PetCareClient", "🧧 [0x96f2_1] 实时捕获到地面福袋: $ownBag")
         }
     }
 
@@ -263,14 +263,14 @@ class PetCareProtocolClient(
             .writeString(3, itemType)
             .toByteArray()
         channel.sendOidb("OidbSvcTrpcTcp.0x99df_1", 39391, 1, body) { code, data, errorMsg ->
-            Log.i(TAG, "buyFood 回包: code=$code, err=$errorMsg")
+            EngineLog.i("PetCareClient", "buyFood 回包: code=$code, err=$errorMsg")
             callback(code, data, errorMsg)
         }
     }
 
     fun refreshProfile(callback: ((code: Int) -> Unit)? = null) {
         channel.sendOidb("OidbSvcTrpcTcp.0x99f2_1", 39410, 1, ByteArray(0)) { code, _, _ ->
-            Log.d(TAG, "refreshProfile 回包: code=$code")
+            EngineLog.d("PetCareClient", "refreshProfile 回包: code=$code")
             callback?.invoke(code)
         }
     }
@@ -309,7 +309,7 @@ class PetCareProtocolClient(
                 return attrs
             }
         } catch (t: Throwable) {
-            Log.w(TAG, "反射读取宠物属性异常: ${t.message}")
+            EngineLog.w("PetCareClient", "反射读取宠物属性异常: ${t.message}")
         }
         return null
     }

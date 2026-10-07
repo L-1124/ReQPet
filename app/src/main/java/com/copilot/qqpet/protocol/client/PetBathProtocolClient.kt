@@ -1,6 +1,6 @@
 package com.copilot.qqpet.protocol.client
 
-import com.copilot.qqpet.hook.HookLog as Log
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.channel.OidbChannel
 import com.copilot.qqpet.protocol.model.BathItemConfig
@@ -100,9 +100,9 @@ class PetBathProtocolClient(
                         list.add(BathItemConfig(itemId, name, gold, cleanVal, defBuy))
                     }
                 }
-                Log.i(TAG, "🧼 fetchBathItemConfig 成功: count=${list.size}")
+                EngineLog.i("PetBathClient", "🧼 fetchBathItemConfig 成功: count=${list.size}")
             } else {
-                Log.w(TAG, "🧼 fetchBathItemConfig 失败: code=$code, err=$err")
+                EngineLog.w("PetBathClient", "🧼 fetchBathItemConfig 失败: code=$code, err=$err")
             }
             callback(code, list)
         }
@@ -121,9 +121,9 @@ class PetBathProtocolClient(
                         map[itemId] = balance
                     }
                 }
-                Log.i(TAG, "🧼 fetchBathInventory 成功: balances=$map")
+                EngineLog.i("PetBathClient", "🧼 fetchBathInventory 成功: balances=$map")
             } else {
-                Log.w(TAG, "🧼 fetchBathInventory 失败: code=$code, err=$err")
+                EngineLog.w("PetBathClient", "🧼 fetchBathInventory 失败: code=$code, err=$err")
             }
             callback(code, map)
         }
@@ -158,7 +158,7 @@ class PetBathProtocolClient(
             val orderResult = if (code == 0 && data != null) {
                 (ProtoWire.firstVarint(data, 1) ?: 0L).toInt()
             } else 0
-            Log.i(TAG, "🛒 buyBathItem 回包: code=$code, orderResult=$orderResult, err=$err")
+            EngineLog.i("PetBathClient", "🛒 buyBathItem 回包: code=$code, orderResult=$orderResult, err=$err")
             callback(code, orderResult, err)
         }
     }
@@ -186,10 +186,10 @@ class PetBathProtocolClient(
                 if (petUin.isEmpty()) {
                     onCleanUpdated(newClean)
                 }
-                Log.i(TAG, "🧼 doBathOnce 成功: newClean=$newClean, added=$addedClean, remain=$remainBalance")
+                EngineLog.i("PetBathClient", "🧼 doBathOnce 成功: newClean=$newClean, added=$addedClean, remain=$remainBalance")
                 callback(BathResult(0, newClean, addedClean, remainBalance, isFullClean, null))
             } else {
-                Log.w(TAG, "🧼 doBathOnce 失败: code=$code, err=$err")
+                EngineLog.w("PetBathClient", "🧼 doBathOnce 失败: code=$code, err=$err")
                 callback(BathResult(code, -1, 0, -1, false, err))
             }
         }

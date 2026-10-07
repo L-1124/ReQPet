@@ -1,6 +1,6 @@
 package com.copilot.qqpet.protocol.utils
 
-import com.copilot.qqpet.hook.HookLog as Log
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.protocol.QQPetDirectBridge.PetAttributes
 
@@ -32,7 +32,7 @@ object PetCostAttributeParser {
             val mood = old?.mood ?: 100f
             val attrs = PetAttributes(newEnergy, maxEnergy, newClean, maxClean, mood)
             QQPetDirectBridge.cachedPetAttributes = attrs
-            Log.d(TAG, "从 cost 同步三围: 体力=$newEnergy/$maxEnergy, 清洁=$newClean/$maxClean")
+            EngineLog.d("PetCostAttributeParser", "从 cost 同步三围: 体力=$newEnergy/$maxEnergy, 清洁=$newClean/$maxClean")
             return attrs
         }
         return null

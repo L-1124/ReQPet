@@ -1,6 +1,6 @@
 package com.copilot.qqpet.protocol.client
 
-import com.copilot.qqpet.hook.HookLog as Log
+import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.channel.OidbChannel
 import com.copilot.qqpet.protocol.model.PkBattleResult
@@ -37,10 +37,10 @@ class PetPkProtocolClient(
                 val countDown = ProtoWire.firstVarint(pkStatusBytes, 3) ?: 0L
                 val storyId = ProtoWire.firstString(pkStatusBytes, 5)
                 val canPk = (rawStatus == 100 || rawStatus == 300)
-                Log.i(TAG, "queryFriendPkStatus: uin=$friendUin, rawStatus=$rawStatus, canPk=$canPk, storyId=$storyId")
+                EngineLog.i("PetPkClient", "queryFriendPkStatus: uin=$friendUin, rawStatus=$rawStatus, canPk=$canPk, storyId=$storyId")
                 callback(0, PkStatusInfo(canPk, rawStatus, storyId, countDown), null)
             } else {
-                Log.w(TAG, "queryFriendPkStatus 回包: code=$code, err=$errorMsg")
+                EngineLog.w("PetPkClient", "queryFriendPkStatus 回包: code=$code, err=$errorMsg")
                 callback(code, null, errorMsg)
             }
         }
@@ -68,10 +68,10 @@ class PetPkProtocolClient(
         channel.sendOidb("OidbSvcTrpcTcp.0x975e_1", 38750, 1, body) { code, data, errorMsg ->
             if (code == 0 && data != null) {
                 val res = parsePkBattleResult(data)
-                Log.i(TAG, "startPkBattle: storyId=${res.storyId}, win=${res.isWin}, left=${res.leftDurationSec}s")
+                EngineLog.i("PetPkClient", "startPkBattle: storyId=${res.storyId}, win=${res.isWin}, left=${res.leftDurationSec}s")
                 callback(res)
             } else {
-                Log.w(TAG, "startPkBattle 回包失败: code=$code, err=$errorMsg")
+                EngineLog.w("PetPkClient", "startPkBattle 回包失败: code=$code, err=$errorMsg")
                 callback(PkBattleResult(code, null, errorMsg = errorMsg))
             }
         }
@@ -107,10 +107,10 @@ class PetPkProtocolClient(
         channel.sendOidb("OidbSvcTrpcTcp.0x9760_1", 38752, 1, body) { code, data, errorMsg ->
             if (code == 0 && data != null) {
                 val res = parsePkSettleResult(storyId, data)
-                Log.i(TAG, "settlePkBattle 成功: storyId=$storyId, gold=${res.goldEarned}")
+                EngineLog.i("PetPkClient", "settlePkBattle 成功: storyId=$storyId, gold=${res.goldEarned}")
                 callback(res)
             } else {
-                Log.w(TAG, "settlePkBattle 回包: storyId=$storyId, code=$code, err=$errorMsg")
+                EngineLog.w("PetPkClient", "settlePkBattle 回包: storyId=$storyId, code=$code, err=$errorMsg")
                 callback(PkSettleResult(code, 0L, null, null, errorMsg))
             }
         }

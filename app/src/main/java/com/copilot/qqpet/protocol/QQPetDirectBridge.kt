@@ -1,7 +1,6 @@
 package com.copilot.qqpet.protocol
 
 import android.content.Context
-import com.copilot.qqpet.hook.HookLog as Log
 import com.copilot.qqpet.protocol.channel.OidbChannel
 import com.copilot.qqpet.protocol.client.PetBathProtocolClient
 import com.copilot.qqpet.protocol.client.PetCareProtocolClient

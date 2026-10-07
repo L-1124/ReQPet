@@ -146,7 +146,7 @@ private fun StudyPanel(state: SettingsState, details: QQPetDirectBridge.SecondMa
         )
         OptionLabel("专攻科目")
         SegmentedChoiceRow(
-            options = listOf("智能轮换", "智力", "力量", "魅力"),
+            options = listOf("轮换", "智力", "力量", "魅力"),
             selectedIndex = state.int(PreferencesHelper.KEY_COURSE_SUBJECT, 0),
             onSelect = { state.setInt(PreferencesHelper.KEY_COURSE_SUBJECT, it) },
             modifier = Modifier.padding(vertical = 4.dp)

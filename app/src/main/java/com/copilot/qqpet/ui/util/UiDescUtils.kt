@@ -88,7 +88,11 @@ object UiDescUtils {
         return stageItems
     }
 
-    fun getWorkTypeDesc(careerId: Int, placeTitle: String? = null, workDetails: QQPetDirectBridge.SecondMapDetails? = null): String {
+    fun getWorkTypeDesc(
+        careerId: Int,
+        placeTitle: String? = null,
+        workDetails: QQPetDirectBridge.SecondMapDetails? = null
+    ): String {
         if (careerId <= 0) {
             val starTower = workDetails?.stages?.find { it.stage == 3 }
             return if (starTower != null && starTower.limitStatus == 0) {
@@ -120,7 +124,8 @@ object UiDescUtils {
                 val rawTitle = s.title.trim()
                 val realTitle = if (rawTitle.isNotEmpty() && rawTitle != "???") rawTitle else "隐藏职业"
                 val displayTitle = if (isLocked) "$realTitle(锁)" else realTitle
-                val tip = if (isLocked) (if (s.lockReason.isNotEmpty()) s.lockReason else "还没有解锁这个职业") else null
+                val tip =
+                    if (isLocked) (if (s.lockReason.isNotEmpty()) s.lockReason else "还没有解锁这个职业") else null
                 list.add(WorkPlaceOption(s.stage, displayTitle, enabled = !isLocked, disabledTip = tip))
             }
         } else {
@@ -149,7 +154,7 @@ object UiDescUtils {
         1 -> "智力"
         2 -> "力量"
         3 -> "魅力"
-        else -> "智能轮换"
+        else -> "轮换"
     }
 
     fun courseDurationLabel(duration: Int): String = when (duration) {

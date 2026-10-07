@@ -1,13 +1,18 @@
 package com.copilot.qqpet.ui.compose.section
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import com.copilot.qqpet.ui.PreferencesHelper
+import com.copilot.qqpet.ui.compose.CardDivider
+import com.copilot.qqpet.ui.compose.ExpandablePanel
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SettingsGroup
 import com.copilot.qqpet.ui.compose.SettingsState
@@ -33,23 +38,21 @@ fun DailySection(state: SettingsState) {
                         state.int(PreferencesHelper.KEY_CARE_CLEAN_THRESHOLD, 60)
                     )
                 )
-            }
-            if (careEnabled) {
-                item {
+                ExpandablePanel(careEnabled) {
+                    CardDivider()
                     ThresholdSliderRow(
                         state = state,
                         key = PreferencesHelper.KEY_CARE_ENERGY_THRESHOLD,
                         title = "进食体力阈值",
                         defaultValue = 60
                     )
-                }
-                item {
                     ThresholdSliderRow(
                         state = state,
                         key = PreferencesHelper.KEY_CARE_CLEAN_THRESHOLD,
                         title = "洗澡清洁阈值",
                         defaultValue = 60
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
                 }
             }
             item {

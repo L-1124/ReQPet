@@ -78,9 +78,11 @@ fun CareerSection(state: SettingsState) {
                 onCheckedChange = { state.setBool(PreferencesHelper.KEY_STUDY, it) },
                 subtitle = schoolStageSubtitle(state, schoolDetails)
             )
-        }
-        expandablePanel(studyEnabled) {
-            StudyPanel(state = state, details = schoolDetails)
+            ExpandablePanel(studyEnabled) {
+                CardDivider()
+                StudyPanel(state = state, details = schoolDetails)
+                Spacer(modifier = Modifier.height(6.dp))
+            }
         }
         item {
             ToggleRow(
@@ -89,31 +91,32 @@ fun CareerSection(state: SettingsState) {
                 onCheckedChange = { state.setBool(PreferencesHelper.KEY_WORK, it) },
                 subtitle = workSubtitle(state, workPlaces)
             )
-        }
-        expandablePanel(workEnabled) {
-            WorkPanel(
-                state = state,
-                workPlaces = workPlaces,
-                workJobs = workJobs,
-                onWorkTypeSelected = { careerId ->
-                    state.setInt(PreferencesHelper.KEY_WORK_TYPE, careerId)
-                    refreshWorkJobs(context = context, scope = scope, state = state, careerId = careerId)
-                }
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            ToggleRow(
-                title = "打工自动雇佣好友",
-                checked = state.bool(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, false),
-                onCheckedChange = { state.setBool(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, it) },
-                subtitle = "仅在已勾选的好友中，默认雇佣空闲且收益最高的好友"
-            )
-            ActionRow(
-                title = "选择雇佣好友白名单",
-                onClick = { showHireWhitelist = true },
-                subtitle = hireWhitelistSummary(context),
-                trailing = "管理"
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            ExpandablePanel(workEnabled) {
+                CardDivider()
+                WorkPanel(
+                    state = state,
+                    workPlaces = workPlaces,
+                    workJobs = workJobs,
+                    onWorkTypeSelected = { careerId ->
+                        state.setInt(PreferencesHelper.KEY_WORK_TYPE, careerId)
+                        refreshWorkJobs(context = context, scope = scope, state = state, careerId = careerId)
+                    }
+                )
+                CardDivider()
+                ToggleRow(
+                    title = "打工自动雇佣好友",
+                    checked = state.bool(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, false),
+                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, it) },
+                    subtitle = "仅在已勾选的好友中，默认雇佣空闲且收益最高的好友"
+                )
+                ActionRow(
+                    title = "选择雇佣好友白名单",
+                    onClick = { showHireWhitelist = true },
+                    subtitle = hireWhitelistSummary(context),
+                    trailing = "管理"
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+            }
         }
         item {
             HiredRecallPanel(state = state)

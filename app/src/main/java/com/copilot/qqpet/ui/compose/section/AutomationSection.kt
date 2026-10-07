@@ -1,7 +1,10 @@
 package com.copilot.qqpet.ui.compose.section
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -77,22 +80,22 @@ fun AutomationSection(state: SettingsState) {
                         state.int(PreferencesHelper.KEY_FRIEND_CARE_CLEAN_THRESHOLD, 60)
                     )
                 )
-            }
-            expandableItem(friendCareEnabled) {
-                FriendCareThresholdSliderRow(
-                    state = state,
-                    key = PreferencesHelper.KEY_FRIEND_CARE_ENERGY_THRESHOLD,
-                    title = "体力阈值",
-                    defaultValue = 60
-                )
-            }
-            expandableItem(friendCareEnabled) {
-                FriendCareThresholdSliderRow(
-                    state = state,
-                    key = PreferencesHelper.KEY_FRIEND_CARE_CLEAN_THRESHOLD,
-                    title = "清洁阈值",
-                    defaultValue = 60
-                )
+                ExpandablePanel(friendCareEnabled) {
+                    CardDivider()
+                    FriendCareThresholdSliderRow(
+                        state = state,
+                        key = PreferencesHelper.KEY_FRIEND_CARE_ENERGY_THRESHOLD,
+                        title = "体力阈值",
+                        defaultValue = 60
+                    )
+                    FriendCareThresholdSliderRow(
+                        state = state,
+                        key = PreferencesHelper.KEY_FRIEND_CARE_CLEAN_THRESHOLD,
+                        title = "清洁阈值",
+                        defaultValue = 60
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
             }
 
             val activeVisitEnabled = state.bool(PreferencesHelper.KEY_ACTIVE_VISIT_ENABLED, false)
@@ -106,37 +109,36 @@ fun AutomationSection(state: SettingsState) {
                     },
                     subtitle = "主动串门送心，支持全量养宠好友与全自动随机陌生小宠"
                 )
-            }
-            expandableItem(activeVisitEnabled) {
-                ToggleRow(
-                    title = "主动踩全部好友",
-                    checked = state.bool(PreferencesHelper.KEY_ACTIVE_VISIT_FRIENDS, true),
-                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_ACTIVE_VISIT_FRIENDS, it) },
-                    subtitle = "每天自动遍历好友小宠小窝，主动串门送心续火花"
-                )
-            }
-            expandableItem(activeVisitEnabled) {
-                ToggleRow(
-                    title = "主动踩随机陌生人",
-                    checked = state.bool(PreferencesHelper.KEY_ACTIVE_VISIT_STRANGERS, true),
-                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_ACTIVE_VISIT_STRANGERS, it) },
-                    subtitle = "自动从活跃陌生小宠池每日洗牌随机抽取串门，引流回踩"
-                )
-            }
-            expandableItem(activeVisitEnabled) {
-                val limit = state.int(PreferencesHelper.KEY_ACTIVE_VISIT_DAILY_LIMIT, 20)
-                val limitIndex = ACTIVE_VISIT_LIMITS.indexOf(limit).let { if (it >= 0) it else 1 }
-                ChoiceToggleRow(
-                    title = "单日主动串门安全上限",
-                    options = ACTIVE_VISIT_LIMIT_LABELS,
-                    selectedIndex = limitIndex,
-                    onSelect = {
-                        state.setInt(
-                            PreferencesHelper.KEY_ACTIVE_VISIT_DAILY_LIMIT,
-                            ACTIVE_VISIT_LIMITS.getOrElse(it) { 20 }
-                        )
-                    }
-                )
+                ExpandablePanel(activeVisitEnabled) {
+                    CardDivider()
+                    ToggleRow(
+                        title = "主动踩全部好友",
+                        checked = state.bool(PreferencesHelper.KEY_ACTIVE_VISIT_FRIENDS, true),
+                        onCheckedChange = { state.setBool(PreferencesHelper.KEY_ACTIVE_VISIT_FRIENDS, it) },
+                        subtitle = "每天自动遍历好友小宠小窝，主动串门送心续火花"
+                    )
+                    CardDivider()
+                    ToggleRow(
+                        title = "主动踩随机陌生人",
+                        checked = state.bool(PreferencesHelper.KEY_ACTIVE_VISIT_STRANGERS, true),
+                        onCheckedChange = { state.setBool(PreferencesHelper.KEY_ACTIVE_VISIT_STRANGERS, it) },
+                        subtitle = "自动从活跃陌生小宠池每日洗牌随机抽取串门，引流回踩"
+                    )
+                    val limit = state.int(PreferencesHelper.KEY_ACTIVE_VISIT_DAILY_LIMIT, 20)
+                    val limitIndex = ACTIVE_VISIT_LIMITS.indexOf(limit).let { if (it >= 0) it else 1 }
+                    ChoiceToggleRow(
+                        title = "单日主动串门安全上限",
+                        options = ACTIVE_VISIT_LIMIT_LABELS,
+                        selectedIndex = limitIndex,
+                        onSelect = {
+                            state.setInt(
+                                PreferencesHelper.KEY_ACTIVE_VISIT_DAILY_LIMIT,
+                                ACTIVE_VISIT_LIMITS.getOrElse(it) { 20 }
+                            )
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
             }
 
             val autoPkEnabled = state.bool(PreferencesHelper.KEY_AUTO_PK, false)
@@ -150,14 +152,16 @@ fun AutomationSection(state: SettingsState) {
                     },
                     subtitle = "每日自动与好友或访客PK 10场，三维筛查稳赢挑战，冷却1~3分钟"
                 )
-            }
-            expandableItem(autoPkEnabled) {
-                ActionRow(
-                    title = "PK 免战黑名单",
-                    subtitle = state.pkBlacklistSummary,
-                    trailing = "管理",
-                    onClick = { showPkBlacklist = true }
-                )
+                ExpandablePanel(autoPkEnabled) {
+                    CardDivider()
+                    ActionRow(
+                        title = "PK 免战黑名单",
+                        subtitle = state.pkBlacklistSummary,
+                        trailing = "管理",
+                        onClick = { showPkBlacklist = true }
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
             }
 
             item {

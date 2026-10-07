@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Card
@@ -184,9 +185,16 @@ fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope
 }
 
 @Composable
-fun CardDivider(startPadding: Int = 16) {
-    Spacer(modifier = Modifier.height(4.dp))
+fun CardDivider(startPadding: Dp = 16.dp) {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = startPadding, end = 16.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    )
 }
+
+@Composable
+fun CardDivider(startPadding: Int) = CardDivider(startPadding = startPadding.dp)
 
 @Composable
 fun ToggleRow(

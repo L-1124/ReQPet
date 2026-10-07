@@ -6,6 +6,7 @@ import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.engine.model.PetFriendsPageResult
 import com.copilot.qqpet.engine.model.StoryStatusResult
 import com.copilot.qqpet.engine.state.AccountSessionStore
+import com.copilot.qqpet.engine.state.RosterStore
 import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -72,7 +73,14 @@ object PetWorkTask {
         try {
             withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
-                    bridge.startWork(petId, jobName, page, subEventType, hiredPetId, hiredUin) { code, storyId, _, errorMsg ->
+                    bridge.startWork(
+                        petId,
+                        jobName,
+                        page,
+                        subEventType,
+                        hiredPetId,
+                        hiredUin
+                    ) { code, storyId, _, errorMsg ->
                         if (cont.isActive) cont.resume(Triple(code, storyId, errorMsg))
                     }
                 }
@@ -134,7 +142,7 @@ object PetWorkTask {
         onLog: (String) -> Unit
     ): List<QQPetDirectBridge.HireableFriend> {
         if (!enableHireFriend) return emptyList()
-        val selectedUins = AccountSessionStore.loadSavedHireFriendUins(context, currentUin)
+        val selectedUins = RosterStore.loadSavedHireFriendUins(context, currentUin)
         if (selectedUins.isEmpty()) {
             onLog("ℹ️ [打工雇佣] 已开启雇佣好友，但当前未勾选好友白名单，本次执行单人打工")
             return emptyList()
@@ -188,7 +196,12 @@ object PetWorkTask {
                 suspendCancellableCoroutine { cont ->
                     bridge.querySelectEvents(page, petId, schoolStage, careerType) { code, events, raw, err ->
                         done.set(true)
-                        val note = "code=$code 岗位=${events.size} err=${err ?: "无"} bytes=${raw?.size ?: -1} ${ProtoWire.outline(raw, 220)}"
+                        val note = "code=$code 岗位=${events.size} err=${err ?: "无"} bytes=${raw?.size ?: -1} ${
+                            ProtoWire.outline(
+                                raw,
+                                220
+                            )
+                        }"
                         if (cont.isActive) cont.resume(Pair(code, events) to note)
                     }
                 }
@@ -259,7 +272,8 @@ object PetWorkTask {
     suspend fun fetchAllHireableFriendsAwait(
         context: Context, bridge: QQPetDirectBridge, currentUin: String, enrichSelectedAndTop: Boolean = true
     ): List<QQPetDirectBridge.HireableFriend> {
-        val existingMap = AccountSessionStore.loadCachedHireableFriends(context, currentUin).associateBy { it.uin }.toMutableMap()
+        val existingMap =
+            RosterStore.loadCachedHireableFriends(context, currentUin).associateBy { it.uin }.toMutableMap()
         val mergedMap = LinkedHashMap<Long, QQPetDirectBridge.HireableFriend>()
         var cookie = ""
         var pageCount = 0
@@ -270,14 +284,24 @@ object PetWorkTask {
             for (f in page.friends) {
                 if (f.uin <= 0L || f.uin.toString() == currentUin) continue
                 val old = existingMap[f.uin]
-                mergedMap[f.uin] = old?.let { f.copy(friendNick = f.friendNick.ifEmpty { it.friendNick }, petNick = f.petNick.ifEmpty { it.petNick }, power = it.power, intel = it.intel, charm = it.charm, isIdle = it.isIdle, remainingSec = it.remainingSec) } ?: f
+                mergedMap[f.uin] = old?.let {
+                    f.copy(
+                        friendNick = f.friendNick.ifEmpty { it.friendNick },
+                        petNick = f.petNick.ifEmpty { it.petNick },
+                        power = it.power,
+                        intel = it.intel,
+                        charm = it.charm,
+                        isIdle = it.isIdle,
+                        remainingSec = it.remainingSec
+                    )
+                } ?: f
             }
             if (!page.hasMore || page.nextCookie.isEmpty() || page.nextCookie == cookie) break
             cookie = page.nextCookie
             delay(1000L)
         }
         if (mergedMap.isEmpty() && existingMap.isNotEmpty()) mergedMap.putAll(existingMap)
-        val selectedUins = AccountSessionStore.loadSavedHireFriendUins(context, currentUin)
+        val selectedUins = RosterStore.loadSavedHireFriendUins(context, currentUin)
         if (enrichSelectedAndTop && mergedMap.isNotEmpty()) {
             val toEnrich = selectedUins.filter { mergedMap.containsKey(it) }.take(5)
             for (u in toEnrich) {
@@ -289,7 +313,7 @@ object PetWorkTask {
                 .thenByDescending { it.totalAttr }
                 .thenBy { it.uin }
         )
-        AccountSessionStore.saveCachedHireableFriends(context, currentUin, sortedList)
+        RosterStore.saveCachedHireableFriends(context, currentUin, sortedList)
         return sortedList
     }
 

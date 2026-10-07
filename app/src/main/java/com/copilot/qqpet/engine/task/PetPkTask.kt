@@ -1,8 +1,10 @@
 package com.copilot.qqpet.engine.task
 
 import android.content.Context
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.engine.state.AccountSessionStore
+import com.copilot.qqpet.engine.state.RosterStore
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -36,7 +38,7 @@ object PetPkTask {
         val list = mutableListOf<CandidateItem>()
         val seenUins = mutableSetOf<Long>()
         val ownUin = currentUin.toLongOrNull() ?: 0L
-        val friends = if (cachedFriends.isNotEmpty()) cachedFriends else PetAdventureEngine.loadCachedHireableFriends(context)
+        val friends = if (cachedFriends.isNotEmpty()) cachedFriends else PetAccountGateway.loadCachedHireableFriends(context)
 
         for (f in friends) {
             if (f.uin <= 0L || f.uin == ownUin || seenUins.contains(f.uin) || f.petId.isBlank() || f.petId == ownPetId) continue
@@ -170,7 +172,7 @@ object PetPkTask {
         val currentCount = AccountSessionStore.getDailyPkCount(context, currentUin)
         if (currentCount >= 10) return currentCount
         val pool = if (specificTargetUin > 0L) candidates.filter { it.uin == specificTargetUin } else candidates
-        val blacklist = AccountSessionStore.loadSavedPkBlacklistUins(context, currentUin)
+        val blacklist = RosterStore.loadSavedPkBlacklistUins(context, currentUin)
 
         for (cand in pool) {
             if (!com.copilot.qqpet.engine.utils.PetPureCalculations.canChallengePkOpponent(

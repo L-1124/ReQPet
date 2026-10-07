@@ -2,6 +2,7 @@ package com.copilot.qqpet.engine.task
 
 import android.content.Context
 import android.util.Log
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.delay
@@ -110,7 +111,7 @@ object PetFriendCareTask {
     }
 
     private suspend fun resolveTargetFriends(params: FriendCareParams): List<QQPetDirectBridge.HireableFriend> {
-        val cached = PetAdventureEngine.loadCachedHireableFriends(params.context)
+        val cached = PetAccountGateway.loadCachedHireableFriends(params.context)
         val sourceList = if (cached.isNotEmpty()) cached else {
             PetWorkTask.fetchAllHireableFriendsAwait(params.context, params.bridge, PetAdventureEngine.currentActiveUin, false)
         }

@@ -32,12 +32,16 @@ class HookEntry : XposedModule() {
         @Volatile
         private var isSplashHooked = false
         private var isReadySignalled = false
+
         @Volatile
         private var loginPollJob: Job? = null
+
         @Volatile
         var globalEngine: PetAdventureEngine? = null
+
         @Volatile
         var globalBridge: QQPetDirectBridge? = null
+
         @Volatile
         var latestClassLoader: ClassLoader? = null
 
@@ -89,8 +93,14 @@ class HookEntry : XposedModule() {
         latestClassLoader = classLoader
         // 必须在任何"模块类继承宿主类"的解析发生之前完成，否则 NoClassDefFoundError 会被缓存
         val hostResolvable = HostClassLoaderBridge.install(javaClass.classLoader, classLoader)
-        HookLog.trace(TAG, "已注入 QQ 主进程 pid=${android.os.Process.myPid()} 宿主类解析=${if (hostResolvable) "OK" else "失败"}")
-        HookLog.log(TAG, "成功注入 QQ 主进程: $processName, PID=${android.os.Process.myPid()} (libxposed api=$apiVersion)")
+        HookLog.trace(
+            TAG,
+            "已注入 QQ 主进程 pid=${android.os.Process.myPid()} 宿主类解析=${if (hostResolvable) "OK" else "失败"}"
+        )
+        HookLog.log(
+            TAG,
+            "成功注入 QQ 主进程: $processName, PID=${android.os.Process.myPid()} (libxposed api=$apiVersion)"
+        )
         TinkerBlocker.install(classLoader)
 
         // 挂钩 1: BaseApplicationImpl.onCreate (获取真实分包完成后的 ClassLoader)
@@ -148,7 +158,11 @@ class HookEntry : XposedModule() {
                     }
                     if (globalBridge?.isReady != true) {
                         val appContext = activity.applicationContext ?: activity
-                        initEngineAndReceiver(appContext, activity.classLoader, "Activity.onCreate[${activity.javaClass.simpleName}]")
+                        initEngineAndReceiver(
+                            appContext,
+                            activity.classLoader,
+                            "Activity.onCreate[${activity.javaClass.simpleName}]"
+                        )
                     }
                 }
                 result
@@ -202,7 +216,8 @@ class HookEntry : XposedModule() {
 
             isSplashHooked = true
             HookLog.log(TAG, "已成功挂钩 SplashActivity 主界面保活与设置项注入 (libxposed)")
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
     }
 
     fun initEngineAndReceiver(context: Context, classLoader: ClassLoader, from: String): Boolean {
@@ -211,7 +226,14 @@ class HookEntry : XposedModule() {
         try {
             val prefs = appContext.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
             HookLog.isDebugEnabled = prefs.getBoolean(PreferencesHelper.KEY_DEBUG_LOG, false)
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
+
+        // 协议熔断器事件统一落入引擎指标
+        runCatching {
+            com.copilot.qqpet.protocol.channel.ProtocolBreakers.metrics =
+                com.copilot.qqpet.engine.metrics.EngineMetricsImpl.getInstance(appContext)
+        }
 
         if (globalEngine == null || globalBridge?.isReady != true) {
             try {
@@ -225,7 +247,10 @@ class HookEntry : XposedModule() {
                     } else {
                         globalEngine?.updateBridge(bridge)
                     }
-                    HookLog.log(TAG, "冒险探索发包内核就绪 (来源: $from, 类: ${QQPetDirectBridge.resolvedDelegateClass?.name})")
+                    HookLog.log(
+                        TAG,
+                        "冒险探索发包内核就绪 (来源: $from, 类: ${QQPetDirectBridge.resolvedDelegateClass?.name})"
+                    )
                 } else if (globalEngine == null) {
                     globalBridge = bridge
                     globalEngine = PetAdventureEngine(bridge).apply {

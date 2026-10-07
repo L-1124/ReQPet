@@ -1,6 +1,7 @@
 package com.copilot.qqpet.engine.task
 
 import android.content.Context
+import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.engine.state.AccountSessionStore
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -71,7 +72,7 @@ object PetMaintenanceCoordinator {
     private suspend fun checkLikeBackMaintenance(context: Context, bridge: QQPetDirectBridge, now: Long) {
         if (!PetAdventureEngine.enableLikeBack || (now - PetAdventureEngine.lastLikeBackTimeMillis <= LIKE_BACK_INTERVAL_MS)) return
         PetAdventureEngine.lastLikeBackTimeMillis = now
-        val friends = PetAdventureEngine.loadCachedHireableFriends(context)
+        val friends = PetAccountGateway.loadCachedHireableFriends(context)
         val params = PetSocialTask.LikeBackParams(
             context = context,
             bridge = bridge,
@@ -85,7 +86,7 @@ object PetMaintenanceCoordinator {
     private suspend fun checkActiveVisitMaintenance(context: Context, bridge: QQPetDirectBridge, now: Long) {
         if (!PetAdventureEngine.enableActiveVisit || (now - PetAdventureEngine.lastActiveVisitTimeMillis <= ACTIVE_VISIT_INTERVAL_MS)) return
         PetAdventureEngine.lastActiveVisitTimeMillis = now
-        val friends = PetAdventureEngine.loadCachedHireableFriends(context)
+        val friends = PetAccountGateway.loadCachedHireableFriends(context)
         PetActiveVisitTask.executeActiveVisitSession(
             context = context,
             bridge = bridge,
@@ -110,7 +111,7 @@ object PetMaintenanceCoordinator {
         } else {
             999999L
         }
-        val friends = PetAdventureEngine.loadCachedHireableFriends(context)
+        val friends = PetAccountGateway.loadCachedHireableFriends(context)
         val candidates = PetPkTask.collectPkCandidates(context, bridge, petId, PetAdventureEngine.currentActiveUin, friends)
         val newCount = PetPkTask.executeSinglePk(context, bridge, petId, PetAdventureEngine.currentActiveUin, candidates, myTotal) {
             PetAdventureEngine.sendLog(context, it)

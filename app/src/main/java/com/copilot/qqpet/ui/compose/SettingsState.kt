@@ -147,14 +147,11 @@ class SettingsState(
      * 外部写入（多入口/账号切换清库）通过 all 快照哈希变化发现，每秒仅一次浅读。
      */
     private fun syncExternalPrefsIfNeeded() {
-        val current = try {
-            prefs.all.hashCode().toLong()
-        } catch (_: Throwable) {
-            0L
-        }
+        val allEntries = runCatching { prefs.all }.getOrNull() ?: return
+        val current = allEntries.hashCode().toLong()
         if (current != lastPrefsVersion) {
             lastPrefsVersion = current
-            for ((key, value) in prefs.all) values[key] = value
+            for ((key, value) in allEntries) values[key] = value
         }
     }
 

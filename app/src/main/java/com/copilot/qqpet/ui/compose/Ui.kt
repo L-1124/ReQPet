@@ -169,7 +169,9 @@ fun SettingsGroup(
                 color = containerColor,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                itemContent()
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    itemContent()
+                }
             }
         }
     }

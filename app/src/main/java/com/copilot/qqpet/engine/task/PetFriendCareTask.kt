@@ -234,6 +234,9 @@ object PetFriendCareTask {
                 break
             }
         }
+        if (feedCount >= 8) {
+            onLog.warn("[好友投喂] 投喂轮数已达 8 次上限，停止继续投喂")
+        }
         return Pair(feedCount > 0, curEnergy)
     }
 
@@ -296,6 +299,9 @@ object PetFriendCareTask {
             onLog("[好友搓澡] 帮$petLabel 消耗 1 份$itemName (+${res.addedClean}) -> 清洁度 $curClean/${req.maxClean}")
             if (curClean >= req.targetThreshold || res.isFullClean || curClean >= req.maxClean) break
             delay(randomJitter(1200L, 2000L))
+        }
+        if (steps >= 10 && curClean < req.targetThreshold) {
+            onLog.warn("[好友洗澡] 洗澡步数已达 10 步上限，停止继续搓澡")
         }
         if (totalAdded > 0) {
             try {

@@ -142,6 +142,8 @@ object PetMaintenanceCoordinator {
         if (!PetAdventureEngine.enableAutoPk) return
         val dailyCount = AccountSessionStore.getDailyPkCount(context, PetAdventureEngine.currentActiveUin)
         if (dailyCount >= 10 || (now - PetAdventureEngine.lastPkTimeMillis < PetAdventureEngine.pkCooldownMillis)) return
+        val story = PetWorkTask.queryStoryStatusAwait(bridge, petId)
+        if (story.code == 0 && (story.remaining ?: 0L) > 0L) return
         PetAdventureEngine.lastPkTimeMillis = now
 
         val school = PetAdventureEngine.cachedSchoolDetails

@@ -8,7 +8,7 @@ import com.copilot.qqpet.protocol.QQPetDirectBridge
 /**
  * 时间配置管理器 - 从服务器响应中提取任务时长并支持运行时重载
  *
- * 解决硬编码时长问题（3600s/1800s），动态解析服务器返回的 duration 字段
+ * 解决硬编码时长问题（3600s/1800s），动态解析服务器返回的 total 字段
  */
 object TimeConfigManager {
 
@@ -40,12 +40,9 @@ object TimeConfigManager {
      * 从服务器响应中提取时长并更新配置
      */
     fun extractAndConfigureDuration(serverResponse: StoryStatusResult) {
-        if (serverResponse.remaining == null || serverResponse.storyId.isNullOrEmpty()) {
-            return
-        }
-
-        val storyId = serverResponse.storyId
-        val remainingSec = serverResponse.remaining
+        if (serverResponse.code != 0) return
+        val totalSec = serverResponse.total?.takeIf { it > 0L } ?: return
+        val storyId = serverResponse.storyId?.takeIf { it.isNotEmpty() } ?: return
 
         // 根据 StoryID 前缀判断任务类型
         val taskType = when {
@@ -56,13 +53,14 @@ object TimeConfigManager {
         }
 
         if (taskType != null) {
-            // 缓存该类型的时长
-            durationCache["${taskType}_"] = remainingSec
+            durationCache["${taskType}_"] = totalSec
+            configuredDurations = when (taskType) {
+                "STUDY" -> configuredDurations.copy(study = totalSec)
+                "WORK" -> configuredDurations.copy(work = totalSec)
+                else -> configuredDurations.copy(adventure = totalSec)
+            }
 
-            // 重新加载配置
-            reloadConfiguredDurations()
-
-            EngineLog.d("TimeConfigManager", "[$taskType] Extracted duration: ${remainingSec}s from server response (StoryID: $storyId)")
+            EngineLog.d("TimeConfigManager", "[$taskType] Extracted duration: ${totalSec}s from server response (StoryID: $storyId)")
         }
     }
 
@@ -140,27 +138,18 @@ object TimeConfigManager {
     }
 
     /**
-     * 清除所有缓存（强制下次从服务器获取）
+     * 清除缓存并恢复默认时长（强制下次从服务器获取）
      */
     fun clearCache() {
         durationCache.clear()
+        configuredDurations = TaskDurationConfig(
+            study = getDefaultValue("STUDY"),
+            work = getDefaultValue("WORK"),
+            adventure = getDefaultValue("ADVENTURE")
+        )
         EngineLog.d("TimeConfigManager", "Time config cache cleared")
     }
 
-    private fun reloadConfiguredDurations() {
-        val studyDuration = durationCache["STUDY_"] ?: getDefaultValue("STUDY")
-        val workDuration = durationCache["WORK_"] ?: getDefaultValue("WORK")
-        val adventureDuration = durationCache["ADVENTURE_"] ?: getDefaultValue("ADVENTURE")
-
-        configuredDurations = TaskDurationConfig(
-            study = studyDuration,
-            work = workDuration,
-            adventure = adventureDuration
-        )
-
-        EngineLog.d("TimeConfigManager", "Reloaded durations: study=${studyDuration}s, work=${workDuration}s, adventure=${adventureDuration}s"
-        )
-    }
 
 }
 

@@ -6,6 +6,8 @@ import java.util.Base64
 import com.copilot.qqpet.RuntimeSwitches
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.AccountSessionGuard
+import com.copilot.qqpet.hook.HookApi
+import io.github.libxposed.api.XposedInterface
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
@@ -187,6 +189,9 @@ class OidbChannel(
 
     private var delegateInstance: Any? = null
     private var sendOidbMethod: Method? = null
+
+    @Volatile
+    private var sendOidbInvoker: XposedInterface.Invoker<*, Method>? = null
     private var observerClass: Class<*>? = null
     private val requestTracker = RequestTracker()
 
@@ -216,6 +221,7 @@ class OidbChannel(
                 if (inst != null) {
                     delegateInstance = inst
                     sendOidbMethod = method
+                    sendOidbInvoker = HookApi.getMethodInvoker(method, XposedInterface.Invoker.Type.ORIGIN)
                     isReady = true
                     if (context != null) {
                         try {
@@ -371,7 +377,12 @@ class OidbChannel(
                 }
                 null
             }
-            method.invoke(instance, request, commandName, command, subCommand, observer)
+            val invoker = sendOidbInvoker
+            if (invoker != null) {
+                invoker.invoke(instance, request, commandName, command, subCommand, observer)
+            } else {
+                method.invoke(instance, request, commandName, command, subCommand, observer)
+            }
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
             EngineLog.e("OidbChannel", "sendOidb 执行反射调用异常: ${t.javaClass.simpleName}: ${t.message}")

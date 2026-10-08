@@ -16,15 +16,20 @@ object HookApi {
     private var deoptimizer: ((Executable) -> Boolean)? = null
 
     @Volatile
+    private var invokerFactory: ((Executable) -> XposedInterface.Invoker<*, *>?)? = null
+
+    @Volatile
     private var logger: ((Int, String, String) -> Unit)? = null
 
     fun attach(
         hooker: (Executable) -> XposedInterface.HookBuilder,
         deoptimizer: ((Executable) -> Boolean)? = null,
+        invokerFactory: ((Executable) -> XposedInterface.Invoker<*, *>?)? = null,
         logger: (Int, String, String) -> Unit
     ) {
         this.hooker = hooker
         this.deoptimizer = deoptimizer
+        this.invokerFactory = invokerFactory
         this.logger = logger
     }
 
@@ -48,6 +53,20 @@ object HookApi {
         builder.setPriority(priority)
         builder.setExceptionMode(exceptionMode)
         return builder
+    }
+
+    fun getInvoker(executable: Executable): XposedInterface.Invoker<*, *>? =
+        invokerFactory?.invoke(executable)
+
+    @Suppress("UNCHECKED_CAST")
+    fun getMethodInvoker(
+        method: java.lang.reflect.Method,
+        type: XposedInterface.Invoker.Type = XposedInterface.Invoker.Type.ORIGIN
+    ): XposedInterface.Invoker<*, java.lang.reflect.Method>? {
+        val invoker =
+            (invokerFactory?.invoke(method) as? XposedInterface.Invoker<*, java.lang.reflect.Method>) ?: return null
+        invoker.setType(type)
+        return invoker
     }
 
     fun log(priority: Int, tag: String, message: String) {

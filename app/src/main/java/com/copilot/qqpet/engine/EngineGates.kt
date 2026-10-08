@@ -26,6 +26,10 @@ internal object EngineGates {
     ): Long? {
         if (taskEndTime in 1..now) {
             PetAdventureEngine.sendLog("[静默放行] 在途任务已到期，放行主循环执行本轮结算与自理补状态")
+            RuntimeDiagnostics.event(
+                "stealth_pass", "cycle" to PetAdventureEngine.currentCycleId,
+                "reason" to "task_due", "task_end_ms" to taskEndTime
+            )
             return null
         }
         if (PetAdventureEngine.prefNightSleepMode && StealthScheduler.isNightSilentWindow(true)) {
@@ -33,12 +37,20 @@ internal object EngineGates {
             val s = StealthScheduler.clampSleepForPendingTask(baseSleep, taskEndTime, now)
             val desc = if (s < 3600_000L) "${(s + 59_999L) / 60_000L} 分钟" else "${s / 3600000L} 小时"
             PetAdventureEngine.sendLog("[夜间静默] 深夜防风控窗口中，预计 $desc 后恢复")
+            RuntimeDiagnostics.event(
+                "stealth_sleep", "cycle" to PetAdventureEngine.currentCycleId, "reason" to "night",
+                "base_ms" to baseSleep, "selected_ms" to s, "task_end_ms" to taskEndTime
+            )
             return s
         }
         if (PetAdventureEngine.prefScreenOffSilent && !StealthScheduler.isScreenInteractive(context)) {
             val baseSleep = StealthScheduler.calculateIdleCycleDelayMillis(PetAdventureEngine.prefHumanLikeSleep)
             val s = StealthScheduler.clampSleepForPendingTask(baseSleep, taskEndTime, now)
             PetAdventureEngine.sendLog("[熄屏静默] 屏幕已熄灭，拟人休眠 ${s / 1000L} 秒直至亮屏")
+            RuntimeDiagnostics.event(
+                "stealth_sleep", "cycle" to PetAdventureEngine.currentCycleId, "reason" to "screen_off",
+                "base_ms" to baseSleep, "selected_ms" to s, "task_end_ms" to taskEndTime
+            )
             return s
         }
         return null

@@ -19,6 +19,13 @@ class RequestTracker(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
         val taskId: String? = null
     )
 
+    enum class RejectionReason(val diagnosticName: String) {
+        GENERATION("generation"),
+        ACCOUNT("account"),
+        TIMEOUT("timeout"),
+        MISSING_OR_ALREADY_COMPLETED("missing_or_already_completed")
+    }
+
     private class Entry(
         val command: String,
         val createdAt: Long,
@@ -54,47 +61,54 @@ class RequestTracker(private val timeoutMs: Long = DEFAULT_TIMEOUT_MS) {
      * - 超过 [timeoutMs] 才到达的迟到回包（此时调用方早已放弃等待）；
      * - 传入了当前代数 [currentGeneration] 且条目代数与当前代数不匹配（跨代迟到回包）；
      * - 显式传入了当前 UIN [currentUin] 且绑定账号与当前 UIN 不匹配（含登出后的空 UIN）。
+     * [onRejected] 在原子消费之后通知具体拒绝原因；输给完成/清理/作废的竞争方只能报告 missing。
      */
     fun tryDeliver(
         id: Int,
         currentGeneration: Long? = null,
         currentUin: String? = null,
-        now: Long = System.currentTimeMillis()
-    ): Boolean = tryComplete(id, currentGeneration, currentUin, now)
+        now: Long = System.currentTimeMillis(),
+        onRejected: ((RejectionReason) -> Unit)? = null
+    ): Boolean = tryComplete(id, currentGeneration, currentUin, now, onRejected)
 
     /** 本地拒绝或发包失败不依赖当前账号，但仍遵守代数、超时及单次完成规则。 */
     fun tryCompleteLocal(
         id: Int,
         currentGeneration: Long? = null,
-        now: Long = System.currentTimeMillis()
-    ): Boolean = tryComplete(id, currentGeneration, currentUin = null, now = now)
+        now: Long = System.currentTimeMillis(),
+        onRejected: ((RejectionReason) -> Unit)? = null
+    ): Boolean = tryComplete(id, currentGeneration, currentUin = null, now = now, onRejected = onRejected)
 
     private fun tryComplete(
         id: Int,
         currentGeneration: Long?,
         currentUin: String?,
-        now: Long
+        now: Long,
+        onRejected: ((RejectionReason) -> Unit)?
     ): Boolean {
-        val entry = entries[id] ?: return false
-
-        // 验证当前代数：若传入了当前代数且不匹配，直接返回 false 并移除请求，丢弃迟到跨号/跨代回包
-        if (currentGeneration != null && entry.sessionGeneration != currentGeneration) {
-            entries.remove(id, entry)
+        val entry = entries[id]
+        if (entry == null) {
+            onRejected?.invoke(RejectionReason.MISSING_OR_ALREADY_COMPLETED)
             return false
         }
 
-        // null 表示调用方未提供账号；空字符串表示明确登出，不能接受绑定账号的回包。
-        if (currentUin != null && entry.accountUin.isNotEmpty() && entry.accountUin != currentUin) {
-            entries.remove(id, entry)
+        // 验证次序保持不变；只有原子移除的赢家能声明具体拒绝原因。
+        val rejection = when {
+            currentGeneration != null && entry.sessionGeneration != currentGeneration -> RejectionReason.GENERATION
+            // null 表示未提供账号；空字符串表示明确登出。
+            currentUin != null && entry.accountUin.isNotEmpty() && entry.accountUin != currentUin -> RejectionReason.ACCOUNT
+            now - entry.createdAt >= timeoutMs -> RejectionReason.TIMEOUT
+            else -> null
+        }
+        if (!entries.remove(id, entry)) {
+            onRejected?.invoke(RejectionReason.MISSING_OR_ALREADY_COMPLETED)
             return false
         }
-
-        if (now - entry.createdAt >= timeoutMs) {
-            entries.remove(id, entry)
+        if (rejection != null) {
+            onRejected?.invoke(rejection)
             return false
         }
-        // 原子消费条目，同时与批量作废、清理及本地/远程完成竞争。
-        return entries.remove(id, entry)
+        return true
     }
 
     /**

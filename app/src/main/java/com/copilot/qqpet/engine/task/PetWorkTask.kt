@@ -5,6 +5,7 @@ import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import android.content.Intent
 import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.engine.RuntimeDiagnostics
 import com.copilot.qqpet.engine.model.PetFriendsPageResult
 import com.copilot.qqpet.engine.model.StoryStatusResult
 import com.copilot.qqpet.engine.state.AccountSessionStore
@@ -21,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.copilot.qqpet.protocol.channel.ProtocolBreakers
@@ -34,6 +36,7 @@ object PetWorkTask {
     private const val NETWORK_TIMEOUT_MS = 8000L
     private val watchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val storyQueryMutex = Mutex()
+    private val storyQuerySequence = AtomicLong()
 
     val CANDIDATE_JOBS_CLERK = listOf(
         Triple("星尘魔法塔", 6400L, 6401L),
@@ -234,20 +237,55 @@ object PetWorkTask {
 
     suspend fun queryStoryStatusAwait(
         bridge: QQPetDirectBridge, petId: String, timeoutMs: Long = NETWORK_TIMEOUT_MS
-    ): StoryStatusResult = storyQueryMutex.withLock {
-        val waitMs = ProtocolBreakers.millisUntilNextQueryAllowed()
-        if (waitMs > 0L) delay(waitMs)
+    ): StoryStatusResult {
+        val queryId = storyQuerySequence.incrementAndGet()
+        val requestedAt = RuntimeDiagnostics.nowMs()
+        val transactionId = PetAdventureEngine.currentTransactionId
+        val cycleId = PetAdventureEngine.currentCycleId
+        var networkStartedAt = 0L
+        var acquiredAt = 0L
+        var resultCode: Int? = null
+        var outcome = "cancelled"
         try {
-            withTimeoutOrNull(timeoutMs) {
-                suspendCancellableCoroutine { cont ->
-                    bridge.queryStoryStatus(petId) { result ->
-                        if (cont.isActive) cont.resume(result)
-                    }
+            val result = storyQueryMutex.withLock {
+                acquiredAt = RuntimeDiagnostics.nowMs()
+                val waitMs = ProtocolBreakers.millisUntilNextQueryAllowed()
+                RuntimeDiagnostics.event(
+                    "query_wait", "query" to queryId, "transaction" to transactionId, "cycle" to cycleId,
+                    "pet_id" to RuntimeDiagnostics.id(petId), "mutex_wait_ms" to (acquiredAt - requestedAt),
+                    "rate_wait_ms" to waitMs
+                )
+                if (waitMs > 0L) delay(waitMs)
+                networkStartedAt = RuntimeDiagnostics.nowMs()
+                RuntimeDiagnostics.event(
+                    "query_start", "query" to queryId, "transaction" to transactionId, "cycle" to cycleId,
+                    "wait_ms" to (networkStartedAt - requestedAt), "timeout_ms" to timeoutMs
+                )
+                try {
+                    withTimeoutOrNull(timeoutMs) {
+                        suspendCancellableCoroutine { cont ->
+                            bridge.queryStoryStatus(petId) { status ->
+                                if (cont.isActive) cont.resume(status)
+                            }
+                        }
+                    } ?: StoryStatusResult(-99, null, null, null, bodyNote = "状态查询超时")
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    StoryStatusResult(-99, null, null, null, bodyNote = "状态查询异常 ${t.message ?: ""}")
                 }
-            } ?: StoryStatusResult(-99, null, null, null, bodyNote = "状态查询超时")
-        } catch (t: Throwable) {
-            if (t is CancellationException) throw t
-            StoryStatusResult(-99, null, null, null, bodyNote = "状态查询异常 ${t.message ?: ""}")
+            }
+            resultCode = result.code
+            outcome = if (result.code == 0) "completed" else "failed"
+            return result
+        } finally {
+            val finishedAt = RuntimeDiagnostics.nowMs()
+            RuntimeDiagnostics.event(
+                "query_end", "query" to queryId, "transaction" to transactionId, "cycle" to cycleId,
+                "code" to resultCode, "outcome" to outcome,
+                "total_ms" to (finishedAt - requestedAt),
+                "wait_ms" to ((if (networkStartedAt > 0L) networkStartedAt else finishedAt) - requestedAt),
+                "network_ms" to (if (networkStartedAt > 0L) finishedAt - networkStartedAt else 0L)
+            )
         }
     }
 

@@ -76,7 +76,7 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
         refreshing = true
         scope.launch {
             withContext(Dispatchers.IO) {
-                active.withAccountSession(context) {
+                active.withAccountSession(context, "friends_refresh") {
                     active.fetchAllHireableFriendsAwait(context, enrichSelectedAndTop = true)
                 }
             }
@@ -98,7 +98,7 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
         val active = HookEntry.globalEngine ?: return
         scope.launch {
             val updated = withContext(Dispatchers.IO) {
-                active.withAccountSession(context) {
+                active.withAccountSession(context, "friend_enrich") {
                     val enriched = active.enrichFriendDetailsAwait(friend)
                     val cached = PetAccountGateway.loadCachedHireableFriends(context).toMutableList()
                     val index = cached.indexOfFirst { it.uin == friend.uin }

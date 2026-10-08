@@ -126,7 +126,7 @@ fun PkBlacklistDialog(state: SettingsState, onDismiss: () -> Unit) {
         val active = HookEntry.globalEngine ?: return@LaunchedEffect
         val visitors = withContext(Dispatchers.IO) {
             try {
-                active.withAccountSession(context) {
+                active.withAccountSession(context, "pk_roster_refresh") {
                     val result = active.fetchLikeListAwait("")
                     if (result.first == 0) result.second else emptyList()
                 } ?: emptyList<QQPetDirectBridge.LikeMember>()

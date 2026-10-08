@@ -17,8 +17,6 @@ import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
-import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
-import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam
 import kotlinx.coroutines.*
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -279,6 +277,7 @@ class HookEntry : XposedModule() {
     @Synchronized
     fun initEngineAndReceiver(context: Context, classLoader: ClassLoader, from: String): Boolean {
         val appContext = context.applicationContext ?: context
+        com.copilot.qqpet.engine.RuntimeDiagnostics.bind(appContext)
 
         try {
             val prefs = appContext.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
@@ -376,55 +375,5 @@ class HookEntry : XposedModule() {
             HookLog.e(TAG, "检查登录状态异常", t)
         }
         return false
-    }
-
-    override fun onHotReloading(param: HotReloadingParam): Boolean {
-        HookLog.log(TAG, "检测到模块热重载请求，正在注销旧代任务并保存运行时状态...")
-        val state = Bundle().apply {
-            putString("active_uin", PetAdventureEngine.currentActiveUin)
-            putString("cached_pet_id", PetAdventureEngine.cachedPetId)
-            putString("last_story_id", PetAdventureEngine.lastActiveStoryId)
-            putLong("hot_reload_time", System.currentTimeMillis())
-        }
-        param.setSavedInstanceState(state)
-
-        loginPollJob?.cancel()
-        loginPollJob = null
-        globalEngine?.stopBackgroundLoop()
-        globalEngine = null
-        globalBridge = null
-        latestClassLoader = null
-        instance = null
-        isSplashHooked = false
-        isReadySignalled = false
-        return true
-    }
-
-    override fun onHotReloaded(param: HotReloadedParam) {
-        instance = this
-        processName = param.processName
-        HookApi.attach(
-            hooker = { executable -> hook(executable) },
-            deoptimizer = { executable -> deoptimize(executable) },
-            invokerFactory = { executable ->
-                when (executable) {
-                    is java.lang.reflect.Method -> getInvoker(executable)
-                    is java.lang.reflect.Constructor<*> -> getInvoker(executable)
-                    else -> null
-                }
-            },
-            logger = { priority, tag, message -> log(priority, tag, message) }
-        )
-        val state = param.savedInstanceState as? Bundle
-        if (state != null) {
-            val uin = state.getString("active_uin").orEmpty()
-            val petId = state.getString("cached_pet_id")
-            val storyId = state.getString("last_story_id")
-            if (uin.isNotEmpty()) PetAdventureEngine.currentActiveUin = uin
-            if (!petId.isNullOrEmpty()) PetAdventureEngine.cachedPetId = petId
-            if (!storyId.isNullOrEmpty()) PetAdventureEngine.lastActiveStoryId = storyId
-            HookLog.log(TAG, "热重载跨代状态已恢复: uin=$uin, petId=$petId, storyId=$storyId")
-        }
-        HookLog.trace(TAG, "新一代模块已成功热重载接管进程 ${param.processName}")
     }
 }

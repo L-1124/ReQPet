@@ -3,6 +3,7 @@ package com.copilot.qqpet.engine.task
 import android.content.Context
 import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.engine.RuntimeDiagnostics
 import com.copilot.qqpet.engine.config.TimeConfigManager
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -38,6 +39,12 @@ internal object PetAdventureDispatch {
             PetAdventureEngine.currentTaskEndTimeMillis =
                 System.currentTimeMillis() + TimeConfigManager.getCurrentDuration("ADVENTURE") * 1000L
             PetAdventureEngine.currentStatusText = "正在神秘森林探险寻宝中"
+            RuntimeDiagnostics.event(
+                "task_started", "transaction" to PetAdventureEngine.currentTransactionId,
+                "cycle" to PetAdventureEngine.currentCycleId, "kind" to "adventure",
+                "story_id" to RuntimeDiagnostics.id(storyId),
+                "task_end_ms" to PetAdventureEngine.currentTaskEndTimeMillis
+            )
             PetAdventureEngine.sendLog( "[探险成功] 顺利踏入神秘森林！StoryID: $storyId，奇遇宝藏探索中")
             return true
         }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.engine.RuntimeDiagnostics
 import com.copilot.qqpet.engine.config.TimeConfigManager
 import com.copilot.qqpet.engine.model.StudyDispatchParam
 import com.copilot.qqpet.engine.model.WorkDispatchParam
@@ -36,7 +37,14 @@ object PetCycleDispatcher {
         if (PetAdventureEngine.enableStudy) available.add("study")
         if (PetAdventureEngine.enableWork) available.add("work")
         if (PetAdventureEngine.enableAdventure) available.add("adventure")
-        if (available.isEmpty()) return 30000L
+        if (available.isEmpty()) {
+            RuntimeDiagnostics.event(
+                "dispatch_result", "cycle" to PetAdventureEngine.currentCycleId,
+                "transaction" to PetAdventureEngine.currentTransactionId,
+                "outcome" to "disabled", "sleep_ms" to 30_000L
+            )
+            return 30000L
+        }
 
         val attempts = available.size
         var dispatched = false
@@ -51,11 +59,22 @@ object PetCycleDispatcher {
 
         if (dispatched) {
             consecutiveFailureCount = 0
+            RuntimeDiagnostics.event(
+                "dispatch_result", "cycle" to PetAdventureEngine.currentCycleId,
+                "transaction" to PetAdventureEngine.currentTransactionId,
+                "outcome" to "started", "sleep_ms" to 5_000L
+            )
             return 5000L
         }
 
         consecutiveFailureCount++
         val backoff = calculateFailureBackoff(consecutiveFailureCount)
+        RuntimeDiagnostics.event(
+            "dispatch_result", "cycle" to PetAdventureEngine.currentCycleId,
+            "transaction" to PetAdventureEngine.currentTransactionId,
+            "outcome" to "failed", "attempts" to attempts,
+            "consecutive_failures" to consecutiveFailureCount, "sleep_ms" to backoff
+        )
         PetAdventureEngine.sendLog(
             EngineLog.Level.WARN,
             "[任务调度] 全量可用任务(共${attempts}项)均派遣失败(连续失败${consecutiveFailureCount}次)，实施退避 ${backoff / 1000L} 秒"
@@ -336,6 +355,12 @@ object PetCycleDispatcher {
             PetAdventureEngine.currentTaskEndTimeMillis =
                 System.currentTimeMillis() + TimeConfigManager.getCurrentDuration("STUDY") * 1000L
             PetAdventureEngine.currentStatusText = "正在进修 ${res.courseName ?: "学园课程"}"
+            RuntimeDiagnostics.event(
+                "task_started", "transaction" to PetAdventureEngine.currentTransactionId,
+                "cycle" to PetAdventureEngine.currentCycleId, "kind" to "study",
+                "story_id" to RuntimeDiagnostics.id(res.storyId),
+                "task_end_ms" to PetAdventureEngine.currentTaskEndTimeMillis
+            )
             PetAdventureEngine.sendLog(
                 "[开课成功] 顺利开启 ${res.courseName}！StoryID: ${res.storyId}，学分高速增长中"
             )
@@ -394,6 +419,12 @@ object PetCycleDispatcher {
                 System.currentTimeMillis() + TimeConfigManager.getCurrentDuration("WORK") * 1000L
             PetAdventureEngine.currentStatusText =
                 "正在 ${res.placeName ?: "小镇"} 进行 ${res.jobName ?: "兼职"}$hireSuffix"
+            RuntimeDiagnostics.event(
+                "task_started", "transaction" to PetAdventureEngine.currentTransactionId,
+                "cycle" to PetAdventureEngine.currentCycleId, "kind" to "work",
+                "story_id" to RuntimeDiagnostics.id(res.storyId), "hired" to (res.hiredFriend != null),
+                "task_end_ms" to PetAdventureEngine.currentTaskEndTimeMillis
+            )
             if (res.hiredFriend != null) {
                 val hiredName = res.hiredFriend.friendNick.ifEmpty { res.hiredFriend.uin.toString() }
                 PetAdventureEngine.sendLog(

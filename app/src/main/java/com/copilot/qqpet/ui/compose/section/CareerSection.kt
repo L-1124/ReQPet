@@ -369,7 +369,7 @@ private fun refreshWorkJobs(
     val active = HookEntry.globalEngine ?: return
     scope.launch {
         val jobs = withContext(Dispatchers.IO) {
-            active.withAccountSession(context) {
+            active.withAccountSession(context, "jobs_refresh") {
                 val petId = PetAdventureEngine.cachedPetId
                     ?: active.queryOwnPetAwait().second?.also { PetAdventureEngine.saveScopedPetId(context, it) }
                 if (petId.isNullOrEmpty()) return@withAccountSession null

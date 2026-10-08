@@ -61,11 +61,28 @@ internal object PetStoryHandlers {
                 PetAdventureEngine.prefHiredRecallProgress
             )
         ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
+        RuntimeDiagnostics.event(
+            "recall_decision", "transaction" to PetAdventureEngine.currentTransactionId,
+            "cycle" to PetAdventureEngine.currentCycleId, "story_id" to RuntimeDiagnostics.id(storyId),
+            "hired" to decision.isHired, "recalled" to decision.hasRecalled,
+            "threshold_percent" to PetAdventureEngine.prefHiredRecallProgress,
+            "remaining_s" to rem, "total_s" to total, "next_sleep_ms" to decision.nextSleepMillis
+        )
         if (decision.isHired) {
             if (decision.hasRecalled) {
                 PetAdventureEngine.markStoryRecalled(storyId)
+                RuntimeDiagnostics.event(
+                    "settlement_start", "transaction" to PetAdventureEngine.currentTransactionId,
+                    "cycle" to PetAdventureEngine.currentCycleId, "source" to "recall",
+                    "story_id" to RuntimeDiagnostics.id(storyId)
+                )
                 delay(randomJitter(480L, 1120L))
                 val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, storyId, petId)
+                RuntimeDiagnostics.event(
+                    "settlement_result", "transaction" to PetAdventureEngine.currentTransactionId,
+                    "cycle" to PetAdventureEngine.currentCycleId, "source" to "recall",
+                    "story_id" to RuntimeDiagnostics.id(storyId), "code" to code
+                )
                 decision = decision.copy(settled = code == 0)
                 if (decision.settled) PetAdventureEngine.clearSettledStory(storyId)
             }
@@ -104,7 +121,17 @@ internal object PetStoryHandlers {
         PetAdventureEngine.lastActiveStoryId = pendingId
         PetAdventureEngine.pendingSettlementStoryId = pendingId
         PetAdventureEngine.sendLog("[结算] 自动发起收益结算 (StoryID: $pendingId)...")
+        RuntimeDiagnostics.event(
+            "settlement_start", "transaction" to PetAdventureEngine.currentTransactionId,
+            "cycle" to PetAdventureEngine.currentCycleId, "story_id" to RuntimeDiagnostics.id(pendingId),
+            "source" to (if (story.isIdle) "pending_retry" else "server_ready")
+        )
         val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, pendingId, petId)
+        RuntimeDiagnostics.event(
+            "settlement_result", "transaction" to PetAdventureEngine.currentTransactionId,
+            "cycle" to PetAdventureEngine.currentCycleId, "source" to "automatic",
+            "story_id" to RuntimeDiagnostics.id(pendingId), "code" to code
+        )
         if (code == 0) {
             PetAdventureEngine.clearSettledStory(pendingId)
             PetAdventureEngine.sendLog("[结算] 收益结算成功！金币与经验已入账")

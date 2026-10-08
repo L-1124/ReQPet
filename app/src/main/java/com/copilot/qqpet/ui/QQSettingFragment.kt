@@ -88,7 +88,7 @@ class QQSettingFragment : QPublicBaseFragment() {
         val context = context ?: return
         val activeEngine = HookEntry.globalEngine ?: return
         CoroutineScope(Dispatchers.IO).launch {
-            activeEngine.withAccountSession(context) {
+            activeEngine.withAccountSession(context, "settings_refresh") {
                 val (_, remotePetId) = activeEngine.queryOwnPetAwait()
                 val petId = if (!remotePetId.isNullOrEmpty() &&
                     PetPureCalculations.shouldUpdateCachedPetId(PetAdventureEngine.cachedPetId, remotePetId)

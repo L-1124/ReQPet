@@ -1,6 +1,10 @@
 package com.copilot.qqpet.protocol
 
 import com.copilot.qqpet.protocol.channel.RequestTracker
+import com.copilot.qqpet.protocol.channel.RequestTracker.RejectionReason
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -225,5 +229,108 @@ class RequestTrackerTest {
 
         assertFalse(tracker.tryDeliver(id1, currentUin = "111"))
         assertTrue(tracker.tryDeliver(id3, currentUin = "222"))
+    }
+
+    @Test
+    fun `拒绝原因遵守代数账号超时优先级且消费后只能报告缺失`() {
+        val tracker = RequestTracker(timeoutMs = 1000L)
+        val reasons = mutableListOf<RejectionReason>()
+        val generation = tracker.register("cmd", sessionGeneration = 1L, accountUin = "111", now = 0L)
+        assertFalse(tracker.tryDeliver(generation, 2L, "222", 1000L, reasons::add))
+        assertFalse(tracker.tryDeliver(generation, 1L, "111", 999L, reasons::add))
+        val account = tracker.register("cmd", sessionGeneration = 1L, accountUin = "111", now = 0L)
+        assertFalse(tracker.tryDeliver(account, 1L, "", 1000L, reasons::add))
+        val timeout = tracker.register("cmd", sessionGeneration = 1L, accountUin = "111", now = 0L)
+        assertFalse(tracker.tryDeliver(timeout, 1L, "111", 1000L, reasons::add))
+
+        assertEquals(
+            listOf(
+                RejectionReason.GENERATION,
+                RejectionReason.MISSING_OR_ALREADY_COMPLETED,
+                RejectionReason.ACCOUNT,
+                RejectionReason.TIMEOUT
+            ),
+            reasons
+        )
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `本地完成忽略账号但准确报告代数超时及缺失`() {
+        val tracker = RequestTracker(timeoutMs = 1000L)
+        val reasons = mutableListOf<RejectionReason>()
+        val generation = tracker.register("cmd", sessionGeneration = 1L, now = 0L)
+        assertFalse(tracker.tryCompleteLocal(generation, 2L, 1000L, reasons::add))
+        val timeout = tracker.register("cmd", sessionGeneration = 1L, now = 0L)
+        assertFalse(tracker.tryCompleteLocal(timeout, 1L, 1000L, reasons::add))
+        val accepted = tracker.register("cmd", sessionGeneration = 1L, accountUin = "111", now = 0L)
+        assertTrue(tracker.tryCompleteLocal(accepted, 1L, 999L, reasons::add))
+        assertFalse(tracker.tryDeliver(accepted, 1L, "222", 999L, reasons::add))
+
+        assertEquals(
+            listOf(RejectionReason.GENERATION, RejectionReason.TIMEOUT, RejectionReason.MISSING_OR_ALREADY_COMPLETED),
+            reasons
+        )
+    }
+
+    @Test
+    fun `作废及清理后不保留拒绝原因墓碑`() {
+        val tracker = RequestTracker(timeoutMs = 1000L)
+        val reasons = mutableListOf<RejectionReason>()
+        val invalidated = tracker.register("cmd", sessionGeneration = 1L, now = 0L)
+        tracker.invalidateSession(1L)
+        assertFalse(tracker.tryDeliver(invalidated, 2L, "", 1000L, reasons::add))
+        val expired = tracker.register("cmd", now = 0L)
+        tracker.sweepExpired(1000L)
+        assertFalse(tracker.tryCompleteLocal(expired, now = 1000L, onRejected = reasons::add))
+        val cleared = tracker.register("cmd", now = 0L)
+        tracker.clear()
+        assertFalse(tracker.tryDeliver(cleared, now = 1L, onRejected = reasons::add))
+        assertEquals(List(3) { RejectionReason.MISSING_OR_ALREADY_COMPLETED }, reasons)
+    }
+
+    @Test
+    fun `成功回包不调用拒绝观察者且后续本地完成不能重复投递`() {
+        val tracker = RequestTracker()
+        val reasons = mutableListOf<RejectionReason>()
+        val id = tracker.register("cmd", sessionGeneration = 1L, accountUin = "111", now = 0L)
+        assertTrue(tracker.tryDeliver(id, 1L, "111", 1L, reasons::add))
+        assertTrue(reasons.isEmpty())
+        assertFalse(tracker.tryCompleteLocal(id, 1L, 1L, reasons::add))
+        assertEquals(listOf(RejectionReason.MISSING_OR_ALREADY_COMPLETED), reasons)
+    }
+
+    @Test
+    fun `回包本地完成和代数拒绝竞争时只有原子赢家能报告完成或具体拒绝`() {
+        val executor = Executors.newFixedThreadPool(3)
+        try {
+            repeat(50) {
+                val tracker = RequestTracker()
+                val id = tracker.register("cmd", sessionGeneration = 1L, accountUin = "111", now = 0L)
+                val ready = CountDownLatch(3)
+                val start = CountDownLatch(1)
+                val futures = (0..2).map { mode ->
+                    executor.submit(Callable {
+                        var rejection: RejectionReason? = null
+                        ready.countDown()
+                        start.await()
+                        val accepted = if (mode == 0) {
+                            tracker.tryCompleteLocal(id, 1L, 1L) { rejection = it }
+                        } else {
+                            tracker.tryDeliver(id, if (mode == 1) 1L else 2L, "111", 1L) { rejection = it }
+                        }
+                        accepted to rejection
+                    })
+                }
+                ready.await()
+                start.countDown()
+                val results = futures.map { it.get() }
+                assertEquals(1, results.count { it.first || it.second == RejectionReason.GENERATION })
+                assertEquals(2, results.count { it.second == RejectionReason.MISSING_OR_ALREADY_COMPLETED })
+                assertEquals(0, tracker.pendingCount())
+            }
+        } finally {
+            executor.shutdownNow()
+        }
     }
 }

@@ -17,6 +17,11 @@ object ProtocolBreakers {
 
     const val FAST_FAIL_CODE = -102
 
+    enum class SendRejectionReason(val diagnosticName: String) {
+        QUERY_RATE_LIMIT("query_rate_limit"),
+        CIRCUIT_OPEN("circuit_open")
+    }
+
     // 业务域常量：命令表见 OidbCommands 与各 ProtocolClient
     const val DOMAIN_CARE = "care"       // 喂食/洗澡/属性
     const val DOMAIN_CAREER = "career"   // 学业/打工/冒险/地图
@@ -96,7 +101,7 @@ object ProtocolBreakers {
      * 是否允许发送该命令；熔断器打开时快速失败，不发反射包。
      * 只读状态查询 (DOMAIN_QUERY) 免受断路器影响，但受最小 15 秒限流保护。
      */
-    fun allowSend(commandName: String): Boolean {
+    fun allowSend(commandName: String, onRejected: ((SendRejectionReason) -> Unit)? = null): Boolean {
         val domain = resolveDomain(commandName)
         if (domain == DOMAIN_QUERY) {
             val now = System.currentTimeMillis()
@@ -105,22 +110,25 @@ object ProtocolBreakers {
                     "ProtocolBreakers",
                     "状态查询触发最小 15 秒限流保护 (还需等待 ${millisUntilNextQueryAllowed(now)}ms)"
                 )
+                onRejected?.invoke(SendRejectionReason.QUERY_RATE_LIMIT)
                 return false
             }
             markQueryStoryStatus(now)
             return true
         }
         val breaker = manager.getOrCreate(domain, domainConfig)
-        return breaker.allowRequest()
+        val allowed = breaker.allowRequest()
+        if (!allowed) onRejected?.invoke(SendRejectionReason.CIRCUIT_OPEN)
+        return allowed
     }
 
     /**
      * 记录一次网络请求（回包阶段调用）：code==0 视为成功
      */
-    fun recordRequest(commandName: String, code: Int) {
+    fun recordRequest(commandName: String, code: Int, latencyMs: Long) {
         metrics?.recordNetworkRequest(
             endpoint = commandName,
-            latencyMs = 0L,
+            latencyMs = latencyMs,
             success = code == 0,
             errorCode = code.takeIf { it != 0 }
         )

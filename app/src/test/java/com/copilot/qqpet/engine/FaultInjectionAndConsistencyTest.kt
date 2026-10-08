@@ -65,11 +65,19 @@ class FaultInjectionAndConsistencyTest {
         }
         val noStory = statusReply(status = 0L)
         assertFalse(noStory.isReadyToSettle)
-        assertFalse(noStory.isIdle)
+        assertTrue(noStory.isIdle)
         assertNull(PetStoryHandlers.resolveSettlementStoryId(noStory))
+        val idleWithStoryId = PetCareerProtocolClient.parseStoryStatus(
+            0, ProtoWire.message().writeBytes(1, byteArrayOf()).writeString(2, "6400-story").toByteArray(), null
+        )
+        assertEquals(0L, idleWithStoryId.status)
+        assertNull(idleWithStoryId.remaining)
+        assertTrue(idleWithStoryId.isIdle)
         val noInfo = PetCareerProtocolClient.parseStoryStatus(
             0, ProtoWire.message().writeString(2, "6400-story").toByteArray(), null
         )
+        assertNull(noInfo.status)
+        assertFalse(noInfo.isIdle)
         assertNull(PetStoryHandlers.resolveSettlementStoryId(noInfo))
     }
 

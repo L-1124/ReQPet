@@ -51,7 +51,7 @@ data class StoryStatusResult(
         get() = hasStartedStory && remaining != null && remaining <= 0L
 
     val isIdle: Boolean
-        get() = code == 0 && status == 0L && storyId.isNullOrBlank()
+        get() = code == 0 && (storyId.isNullOrBlank() || status == 0L)
 }
 
 data class PetFriendsPageResult(

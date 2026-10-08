@@ -33,18 +33,18 @@ class PetCareerProtocolClient(
                 )
             }
             val info = ProtoWire.firstBytes(data, 1)
-            val status = when (val value = ProtoWire.firstVarint(info, 1) ?: 0L) {
+            val status = if (info == null) null else when (val value = ProtoWire.firstVarint(info, 1) ?: 0L) {
                 0L, 2L, 51L, 101L, 151L -> value
                 else -> 0L
             }
             return StoryStatusResult(
                 code = 0,
-                remaining = if (status != 0L) ProtoWire.firstVarint(info, 2) ?: 0L else null,
-                total = if (status != 0L) ProtoWire.firstVarint(info, 3) ?: 0L else null,
+                remaining = if (status != null && status != 0L) ProtoWire.firstVarint(info, 2) ?: 0L else null,
+                total = if (status != null && status != 0L) ProtoWire.firstVarint(info, 3) ?: 0L else null,
                 storyId = ProtoWire.firstString(data, 2),
                 status = status,
                 bodyNote = "bytes=${data.size} 子状态=$status ${ProtoWire.outline(data, 260)}",
-                startTimestamp = if (status != 0L) ProtoWire.firstVarint(info, 4) ?: 0L else null
+                startTimestamp = if (status != null && status != 0L) ProtoWire.firstVarint(info, 4) ?: 0L else null
             )
         }
     }

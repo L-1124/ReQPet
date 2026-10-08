@@ -126,8 +126,10 @@ fun PkBlacklistDialog(state: SettingsState, onDismiss: () -> Unit) {
         val active = HookEntry.globalEngine ?: return@LaunchedEffect
         val visitors = withContext(Dispatchers.IO) {
             try {
-                val result = active.fetchLikeListAwait("")
-                if (result.first == 0) result.second else emptyList<QQPetDirectBridge.LikeMember>()
+                active.withAccountSession(context) {
+                    val result = active.fetchLikeListAwait("")
+                    if (result.first == 0) result.second else emptyList()
+                } ?: emptyList<QQPetDirectBridge.LikeMember>()
             } catch (e: Throwable) {
             if (e is kotlinx.coroutines.CancellationException) throw e
                 emptyList<QQPetDirectBridge.LikeMember>()

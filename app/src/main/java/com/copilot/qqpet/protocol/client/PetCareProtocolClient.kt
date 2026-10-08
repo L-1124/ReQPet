@@ -8,6 +8,9 @@ import com.copilot.qqpet.protocol.QQPetDirectBridge.PetAttributes
 import com.copilot.qqpet.protocol.channel.OidbChannel
 import com.copilot.qqpet.protocol.model.FeedDetailResult
 import com.copilot.qqpet.protocol.model.FoodInventoryItem
+import com.copilot.qqpet.engine.AccountSessionGuard
+import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.engine.state.AccountSessionStore
 
 /**
  * 宠物基础照料与属性维护协议客户端 (投喂、食物商城、三围拉取与状态同步)
@@ -27,15 +30,40 @@ class PetCareProtocolClient(
             var petId: String? = null
             if (code == 0 && data != null) {
                 val allStrings = ProtoWireText.extractAllStrings(data)
-                EngineLog.i("PetCareClient", "0x95e1_0 回包所有字符串: $allStrings")
+                EngineLog.i(TAG, "0x95e1_0 回包所有字符串: $allStrings")
                 val petBytes = ProtoWire.firstBytes(data, 1)
-                petId = ProtoWire.firstString(petBytes, 101)
+                // DEF-22: 对齐宿主 UserPetManager.q()，优先提取 Tag 101 (c2.i)
+                var resolvedPetId = ProtoWire.firstString(petBytes, 101)?.takeIf { it.isNotBlank() }
+                if (resolvedPetId == null && petBytes != null) {
+                    // 若为空，兜底提取 Tag 4 Profile (c2.d) 嵌套下的 Tag 8 (c2.d.h)
+                    val profileBytes = ProtoWire.firstBytes(petBytes, 4)
+                    if (profileBytes != null) {
+                        resolvedPetId = ProtoWire.firstString(profileBytes, 8)?.takeIf { it.isNotBlank() }
+                        if (resolvedPetId != null) {
+                            EngineLog.i(TAG, "从 Tag 4 Profile 嵌套下的 Tag 8 成功兜底解析到老号 petId: $resolvedPetId")
+                        }
+                    }
+                }
+                // 顶层兜底（防止层级差异）
+                if (resolvedPetId == null) {
+                    val rootProfileBytes = ProtoWire.firstBytes(data, 4)
+                    if (rootProfileBytes != null) {
+                        resolvedPetId = ProtoWire.firstString(rootProfileBytes, 8)?.takeIf { it.isNotBlank() }
+                    }
+                    if (resolvedPetId == null) {
+                        resolvedPetId = ProtoWire.firstString(data, 101)?.takeIf { it.isNotBlank() }
+                    }
+                }
+                petId = resolvedPetId
+
                 val bagFromPet = ProtoWire.firstString(ProtoWire.firstBytes(petBytes, 21), 1)?.trim().orEmpty()
                 val bagFromRoot = ProtoWire.firstString(ProtoWire.firstBytes(data, 21), 1)?.trim().orEmpty()
                 val ownBag = bagFromPet.ifEmpty { bagFromRoot }
                 if (ownBag.isNotEmpty()) {
+                    val activeUin = PetAdventureEngine.currentActiveUin.ifEmpty { channel.resolveUin(petId.orEmpty()) }
+                    AccountSessionStore.saveGroundBagId(activeUin, ownBag)
                     onOwnBagFound(ownBag)
-                    EngineLog.i("PetCareClient", "[0x95e1_0] 在本人主宠资料中捕获到地面福袋: $ownBag")
+                    EngineLog.i(TAG, "[0x95e1_0] 在本人主宠资料中捕获到地面福袋: $ownBag (uin=$activeUin)")
                 }
             }
             callback(code, petId, data)
@@ -56,15 +84,15 @@ class PetCareProtocolClient(
                     val first = arr?.firstOrNull()
                     val strVal = first?.javaClass?.getField("a")?.get(first) as? String
                     val fId = strVal?.toLongOrNull()
-                    if (fId != null && fId > 0L) {
-                        EngineLog.d("PetCareClient", "从 PetHomeResourceManager 成功解析到动态 foodId: $fId")
+                    if (fId != null && fId == DEFAULT_FOOD_ID) {
+                        EngineLog.d(TAG, "从 PetHomeResourceManager 验证官方白名单 foodId: $fId")
                         return fId
                     }
                 }
             }
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
-            EngineLog.w("PetCareClient", "从 PetHomeResourceManager 获取动态 foodId 失败: ${t.message}")
+            EngineLog.w(TAG, "从 PetHomeResourceManager 获取动态 foodId 失败: ${t.message}")
         }
         return DEFAULT_FOOD_ID
     }
@@ -76,51 +104,91 @@ class PetCareProtocolClient(
         foodItemId: String = "",
         callback: (code: Int, rawData: ByteArray?, errorMsg: String?) -> Unit
     ) {
-        val targetFoodId = if (foodId > 0L) foodId else resolveFoodId()
-        var bodyBytes: ByteArray? = null
-        if (petUin.isEmpty() && foodItemId.isEmpty()) {
-            bodyBytes = tryReflectFeedBody(petId, targetFoodId)
-        }
+        // DEF-16: 食物 ID 严格锁定官方白名单 9990032L
+        val targetFoodId = if (foodId == DEFAULT_FOOD_ID) DEFAULT_FOOD_ID else resolveFoodId()
+        val bodyBytes = tryReflectFeedBody(petId, targetFoodId)
         if (bodyBytes == null) {
-            bodyBytes = buildProtoFeedBody(petId, targetFoodId, petUin, foodItemId)
+            // 若宿主反射未命中，严禁发送私造畸形字节流，直接执行 Safe-Fail 记录日志并安全退出
+            EngineLog.w(TAG, "feed: 宿主反射未命中，严格落实 Safe-Fail 静默安全退出，严禁私造字节流")
+            callback(-1, null, "feed 宿主反射未命中 (Safe-Fail)")
+            return
         }
         channel.sendOidb("OidbSvcTrpcTcp.0x992d_1", 39213, 1, bodyBytes, callback)
     }
 
+    private fun findFeedPbClass(): Class<*>? {
+        // 1. 优先从宿主业务门面 MainPageViewModel 推导形参类型
+        val vmClassNames = listOf(
+            "com.tencent.ergo.view.mainpage.MainPageViewModel",
+            "com.tencent.ergo.view.mainpage.viewmodel.MainPageViewModel"
+        )
+        for (vmName in vmClassNames) {
+            try {
+                val vmCls = channel.classLoader.loadClass(vmName)
+                val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
+                for (m in vmCls.declaredMethods) {
+                    for (paramType in m.parameterTypes) {
+                        if (nanoCls.isAssignableFrom(paramType)) {
+                            EngineLog.d(TAG, "从 MainPageViewModel 方法 ${m.name} 推导出 Nano PB 类: ${paramType.name}")
+                            return paramType
+                        }
+                    }
+                }
+            } catch (_: Throwable) {
+            }
+        }
+
+        // 2. 动态探测版本候选 Nano PB 类 (9.3.70 为 t64.b，旧版为 zh5.b)
+        val candidates = listOf("t64.b", "zh5.b")
+        for (candidate in candidates) {
+            try {
+                val cls = channel.classLoader.loadClass(candidate)
+                val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
+                if (nanoCls.isAssignableFrom(cls)) {
+                    return cls
+                }
+            } catch (_: Throwable) {
+            }
+        }
+
+        return null
+    }
+
     private fun tryReflectFeedBody(petId: String, targetFoodId: Long): ByteArray? {
         return try {
-            val bCls = channel.classLoader.loadClass("zh5.b")
+            val bCls = findFeedPbClass() ?: return null
             val bInst = bCls.getDeclaredConstructor().newInstance()
-            bCls.getField("a").set(bInst, "")
-            bCls.getField("b").set(bInst, "")
-            bCls.getField("c").set(bInst, "")
-            bCls.getField("d").set(bInst, petId)
-            bCls.getField("e").set(bInst, targetFoodId.toInt())
+            try {
+                bCls.getField("a").set(bInst, "")
+                bCls.getField("b").set(bInst, "")
+                bCls.getField("c").set(bInst, "")
+                bCls.getField("d").set(bInst, petId)
+                bCls.getField("e").set(bInst, targetFoodId.toInt())
+            } catch (_: NoSuchFieldException) {
+                // 自适应字段注入：若字母漂移，按类型特征注入 (最后一个 String 注入 petId，Int 注入 foodId)
+                val stringFields = bCls.fields.filter { it.type == String::class.java }
+                if (stringFields.isNotEmpty()) {
+                    stringFields.last().set(bInst, petId)
+                }
+                val intFields =
+                    bCls.fields.filter { it.type == Int::class.javaPrimitiveType || it.type == Long::class.javaPrimitiveType }
+                if (intFields.isNotEmpty()) {
+                    val f = intFields.first()
+                    if (f.type == Long::class.javaPrimitiveType) {
+                        f.set(bInst, targetFoodId)
+                    } else {
+                        f.set(bInst, targetFoodId.toInt())
+                    }
+                }
+            }
             val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
             val toByteArrayMethod = nanoCls.getMethod("toByteArray", nanoCls)
             toByteArrayMethod.invoke(null, bInst) as ByteArray
         } catch (e: Throwable) {
             if (e is kotlinx.coroutines.CancellationException) throw e
+            EngineLog.w(TAG, "反射构造喂食 PB 异常: ${e.message}")
             null
         }
-    }
-
-    private fun buildProtoFeedBody(petId: String, targetFoodId: Long, petUin: String, foodItemId: String): ByteArray {
-        val extBytes = ProtoWire.message()
-            .writeVarint(6, 1L)
-            .writeVarint(13, 0L)
-            .toByteArray()
-        val msg = ProtoWire.message()
-            .writeString(1, petUin)
-            .writeString(2, "")
-            .writeString(3, "")
-            .writeString(4, petId)
-            .writeVarint(5, targetFoodId)
-            .writeBytes(10, extBytes)
-        if (foodItemId.isNotEmpty()) {
-            msg.writeString(11, foodItemId)
-        }
-        return msg.toByteArray()
     }
 
     fun feedDetailed(
@@ -193,16 +261,19 @@ class PetCareProtocolClient(
     }
 
     private fun tryReflectFeedTimesBody(): ByteArray? {
-        return try {
-            val dCls = channel.classLoader.loadClass("zh5.d")
-            val dInst = dCls.getDeclaredConstructor().newInstance()
-            val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
-            val toByteArrayMethod = nanoCls.getMethod("toByteArray", nanoCls)
-            toByteArrayMethod.invoke(null, dInst) as ByteArray
-        } catch (e: Throwable) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            null
+        val candidates = listOf("t64.d", "zh5.d")
+        for (candidate in candidates) {
+            try {
+                val dCls = channel.classLoader.loadClass(candidate)
+                val dInst = dCls.getDeclaredConstructor().newInstance()
+                val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
+                val toByteArrayMethod = nanoCls.getMethod("toByteArray", nanoCls)
+                return toByteArrayMethod.invoke(null, dInst) as ByteArray
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            }
         }
+        return null
     }
 
     fun queryPetAttributes(
@@ -258,8 +329,10 @@ class PetCareProtocolClient(
         val bagFromDisplay = ProtoWire.firstString(ProtoWire.firstBytes(displayBytes, 21), 1)?.trim().orEmpty()
         val ownBag = bagFromRoot.ifEmpty { bagFromDisplay }
         if (ownBag.isNotEmpty()) {
+            val activeUin = PetAdventureEngine.currentActiveUin.ifEmpty { channel.getCurrentRuntimeUin() }
+            AccountSessionStore.saveGroundBagId(activeUin, ownBag)
             onOwnBagFound(ownBag)
-            EngineLog.i("PetCareClient", "[0x96f2_1] 实时捕获到地面福袋: $ownBag")
+            EngineLog.i("PetCareClient", "[0x96f2_1] 实时捕获到地面福袋: $ownBag (uin=$activeUin)")
         }
     }
 
@@ -269,15 +342,9 @@ class PetCareProtocolClient(
         itemType: String = "1",
         callback: (code: Int, rawData: ByteArray?, errorMsg: String?) -> Unit
     ) {
-        val body = ProtoWire.message()
-            .writeVarint(1, count)
-            .writeString(2, petId)
-            .writeString(3, itemType)
-            .toByteArray()
-        channel.sendOidb("OidbSvcTrpcTcp.0x99df_1", 39391, 1, body) { code, data, errorMsg ->
-            EngineLog.i("PetCareClient", "buyFood 回包: code=$code, err=$errorMsg")
-            callback(code, data, errorMsg)
-        }
+        // DEF-17: 0x99df 购买食物协议已废弃 (宿主已迁移至 Kuikly 增量资源架构)，安全静默不发包
+        EngineLog.w(TAG, "buyFood: 0x99df 购买食物协议已废弃，安全静默不发包 (Safe-Fail)")
+        callback(-1, null, "0x99df 已废弃 (Safe-Fail)")
     }
 
     fun refreshProfile(callback: ((code: Int) -> Unit)? = null) {
@@ -290,10 +357,54 @@ class PetCareProtocolClient(
     fun getPetAttributes(petId: String): PetAttributes? {
         try {
             val mgrCls = channel.classLoader.loadClass("com.tencent.ergo.user.DisplayValueManager")
-            val mgrInst = mgrCls.getField("a").get(null) ?: return null
-            val cMethod = mgrCls.getMethod("c")
-            val liveData = cMethod.invoke(mgrInst) ?: return null
-            val displayObj = liveData.javaClass.getMethod("getValue").invoke(liveData) ?: return null
+            val mgrInst = try {
+                mgrCls.getField("a").get(null)
+            } catch (_: Throwable) {
+                try {
+                    mgrCls.getField("INSTANCE").get(null)
+                } catch (_: Throwable) {
+                    null
+                }
+            } ?: return null
+
+            var displayObj: Any? = null
+
+            // 1. 优先调用全量快照方法 "d" (DEF-15: 修复误调单事件方法 "c")
+            try {
+                val dMethod = mgrCls.getMethod("d")
+                val liveData = dMethod.invoke(mgrInst)
+                if (liveData != null) {
+                    val v = liveData.javaClass.getMethod("getValue").invoke(liveData)
+                    if (v != null && (v.javaClass.name.contains("DisplayValues") || v.toString()
+                            .contains("DisplayValues"))
+                    ) {
+                        displayObj = v
+                    }
+                }
+            } catch (_: Throwable) {
+            }
+
+            // 2. 特征自适应动态探测：遍历返回 LiveData 且载荷对象包含 "DisplayValues" 的无参方法
+            if (displayObj == null) {
+                for (m in mgrCls.methods) {
+                    if (m.parameterTypes.isEmpty() && m.returnType.name.contains("LiveData")) {
+                        try {
+                            val liveData = m.invoke(mgrInst) ?: continue
+                            val v = liveData.javaClass.getMethod("getValue").invoke(liveData) ?: continue
+                            if (v.javaClass.name.contains("DisplayValues") || v.toString().contains("DisplayValues")) {
+                                displayObj = v
+                                break
+                            }
+                        } catch (_: Throwable) {
+                        }
+                    }
+                }
+            }
+
+            if (displayObj == null) {
+                EngineLog.w(TAG, "DisplayValueManager 未能定位到有效 DisplayValues 快照对象 (Safe-Fail)")
+                return null
+            }
 
             var energy = -1f
             var maxEnergy = 100f
@@ -301,37 +412,150 @@ class PetCareProtocolClient(
             var maxClean = 100f
             var mood = 0f
 
+            // 3. 提取 hunger (体力), clean (清洁), feel (心情)
+            var hungerObj: Any? = null
+            var cleanObj: Any? = null
+            var feelObj: Any? = null
+
+            // 3.1 语义名称探测 (优先匹配含 hunger, clean, feel/mood 的无参方法)
             for (m in displayObj.javaClass.methods) {
-                if (m.parameterTypes.isEmpty() && m.returnType.name.endsWith($$"$c")) {
-                    val cVal = m.invoke(displayObj)
-                    if (cVal != null) {
-                        val cur = (cVal.javaClass.getMethod("b").invoke(cVal) as? Number)?.toFloat() ?: 0f
-                        val max = (cVal.javaClass.getMethod("d").invoke(cVal) as? Number)?.toFloat() ?: 100f
+                if (m.parameterTypes.isNotEmpty()) continue
+                val nameLower = m.name.lowercase()
+                if (hungerObj == null && nameLower.contains("hunger")) {
+                    hungerObj = m.invoke(displayObj)
+                } else if (cleanObj == null && nameLower.contains("clean")) {
+                    cleanObj = m.invoke(displayObj)
+                } else if (feelObj == null && (nameLower.contains("feel") || nameLower.contains("mood"))) {
+                    feelObj = m.invoke(displayObj)
+                }
+            }
+
+            // 3.2 语义声明字段探测
+            if (hungerObj == null || cleanObj == null || feelObj == null) {
+                for (f in displayObj.javaClass.declaredFields) {
+                    f.isAccessible = true
+                    val nameLower = f.name.lowercase()
+                    if (hungerObj == null && nameLower.contains("hunger")) {
+                        hungerObj = f.get(displayObj)
+                    } else if (cleanObj == null && nameLower.contains("clean")) {
+                        cleanObj = f.get(displayObj)
+                    } else if (feelObj == null && (nameLower.contains("feel") || nameLower.contains("mood"))) {
+                        feelObj = f.get(displayObj)
+                    }
+                }
+            }
+
+            // 3.3 混淆单字母方法兼容回退 (f=hunger, c=clean, d=feel)
+            if (hungerObj == null || cleanObj == null || feelObj == null) {
+                for (m in displayObj.javaClass.methods) {
+                    if (m.parameterTypes.isEmpty() && m.returnType.name.endsWith($$"$c")) {
                         when (m.name) {
-                            "f" -> {
-                                energy = cur; maxEnergy = max
-                            }
-
-                            "c" -> {
-                                clean = cur; maxClean = max
-                            }
-
-                            "d" -> {
-                                mood = cur
-                            }
+                            "f" -> if (hungerObj == null) hungerObj = m.invoke(displayObj)
+                            "c" -> if (cleanObj == null) cleanObj = m.invoke(displayObj)
+                            "d" -> if (feelObj == null) feelObj = m.invoke(displayObj)
                         }
                     }
                 }
             }
+
+            if (hungerObj != null) {
+                val (cur, max) = extractValueAndMax(hungerObj)
+                if (cur >= 0f) {
+                    energy = cur
+                    maxEnergy = max
+                }
+            }
+            if (cleanObj != null) {
+                val (cur, max) = extractValueAndMax(cleanObj)
+                if (cur >= 0f) {
+                    clean = cur
+                    maxClean = max
+                }
+            }
+            if (feelObj != null) {
+                val (cur, _) = extractValueAndMax(feelObj)
+                if (cur >= 0f) {
+                    mood = cur
+                }
+            }
+
             if (energy >= 0f || clean >= 0f) {
                 val attrs = PetAttributes(energy, maxEnergy, clean, maxClean, mood)
                 onAttributesUpdated(attrs)
                 return attrs
+            } else {
+                EngineLog.w(TAG, "从 DisplayValues 提取属性数值未命中有效值 (Safe-Fail)")
             }
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
-            EngineLog.w("PetCareClient", "反射读取宠物属性异常: ${t.message}")
+            EngineLog.w(TAG, "反射读取宠物属性异常: ${t.message}")
         }
         return null
+    }
+
+    private fun extractValueAndMax(obj: Any): Pair<Float, Float> {
+        if (obj is Number) {
+            return Pair(obj.toFloat(), 100f)
+        }
+        var cur = -1f
+        var max = 100f
+
+        for (m in obj.javaClass.methods) {
+            if (m.parameterTypes.isNotEmpty()) continue
+            val nameLower = m.name.lowercase()
+            if (nameLower == "b" || nameLower == "getcur" || nameLower == "getcurrent" || nameLower == "getvalue") {
+                try {
+                    val v = m.invoke(obj)
+                    if (v is Number) {
+                        cur = v.toFloat()
+                        break
+                    }
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        for (m in obj.javaClass.methods) {
+            if (m.parameterTypes.isNotEmpty()) continue
+            val nameLower = m.name.lowercase()
+            if (nameLower == "d" || nameLower == "getmax" || nameLower == "getmaxvalue") {
+                try {
+                    val v = m.invoke(obj)
+                    if (v is Number) {
+                        max = v.toFloat()
+                        break
+                    }
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        if (cur < 0f) {
+            for (fieldName in listOf("b", "cur", "current", "value", "a")) {
+                try {
+                    val f = obj.javaClass.getDeclaredField(fieldName).apply { isAccessible = true }
+                    val v = f.get(obj)
+                    if (v is Number) {
+                        cur = v.toFloat()
+                        break
+                    }
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        for (fieldName in listOf("d", "max", "maxValue")) {
+            try {
+                val f = obj.javaClass.getDeclaredField(fieldName).apply { isAccessible = true }
+                val v = f.get(obj)
+                if (v is Number) {
+                    max = v.toFloat()
+                    break
+                }
+            } catch (_: Throwable) {
+            }
+        }
+
+        return Pair(cur, if (max > 0f) max else 100f)
     }
 }

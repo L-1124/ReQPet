@@ -3,6 +3,7 @@ package com.copilot.qqpet.protocol.client
 import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.AccountSessionGuard
 import com.copilot.qqpet.engine.utils.PetPureCalculations
+import com.copilot.qqpet.engine.model.StoryStatusResult
 import com.copilot.qqpet.protocol.ProtoWire
 import com.copilot.qqpet.protocol.ProtoWireText
 import com.copilot.qqpet.protocol.QQPetDirectBridge
@@ -23,11 +24,34 @@ class PetCareerProtocolClient(
 ) {
     companion object {
         private const val TAG = "PetCareerProtocolClient"
+
+        internal fun parseStoryStatus(code: Int, data: ByteArray?, errorMsg: String?): StoryStatusResult {
+            if (code != 0 || data == null) {
+                return StoryStatusResult(
+                    if (code == 0) -1 else code, null, null, null,
+                    bodyNote = "bytes=${data?.size ?: -1} err=${errorMsg ?: "无"}"
+                )
+            }
+            val info = ProtoWire.firstBytes(data, 1)
+            val status = when (val value = ProtoWire.firstVarint(info, 1) ?: 0L) {
+                0L, 2L, 51L, 101L, 151L -> value
+                else -> 0L
+            }
+            return StoryStatusResult(
+                code = 0,
+                remaining = if (status != 0L) ProtoWire.firstVarint(info, 2) ?: 0L else null,
+                total = if (status != 0L) ProtoWire.firstVarint(info, 3) ?: 0L else null,
+                storyId = ProtoWire.firstString(data, 2),
+                status = status,
+                bodyNote = "bytes=${data.size} 子状态=$status ${ProtoWire.outline(data, 260)}",
+                startTimestamp = if (status != 0L) ProtoWire.firstVarint(info, 4) ?: 0L else null
+            )
+        }
     }
 
     fun queryStoryStatus(
         petId: String,
-        callback: (code: Int, remainingSec: Long?, totalSec: Long?, activeStoryId: String?, status: Long?, bodyNote: String?) -> Unit
+        callback: (StoryStatusResult) -> Unit
     ) {
         val body = ProtoWire.message()
             .writeString(1, petId)
@@ -35,29 +59,7 @@ class PetCareerProtocolClient(
             .writeVarint(100, 2L)
             .toByteArray()
         channel.sendOidb("OidbSvcTrpcTcp.0x975a_1", 38746, 1, body) { code, data, err ->
-            var remaining: Long? = null
-            var total: Long? = null
-            var storyId: String? = null
-            var status: Long? = null
-            val note = buildString {
-                append("bytes=${data?.size ?: -1} err=${err ?: "无"} ")
-                if (code == 0 && data != null) {
-                    val subInfo = ProtoWire.firstBytes(data, 1)
-                    if (subInfo != null) {
-                        status = ProtoWire.firstVarint(subInfo, 1)
-                        append("子状态=${status ?: "无"} ")
-                        if ((status ?: 0L) != 0L) {
-                            remaining = ProtoWire.firstVarint(subInfo, 2) ?: 0L
-                            total = ProtoWire.firstVarint(subInfo, 3) ?: 0L
-                        }
-                    } else {
-                        append("无字段1 ")
-                    }
-                    storyId = ProtoWire.firstString(data, 2)
-                    append(ProtoWire.outline(data, 260))
-                }
-            }
-            callback(code, remaining, total, storyId, status, note)
+            callback(parseStoryStatus(code, data, err))
         }
     }
 

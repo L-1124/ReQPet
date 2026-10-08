@@ -88,22 +88,23 @@ class QQSettingFragment : QPublicBaseFragment() {
         val context = context ?: return
         val activeEngine = HookEntry.globalEngine ?: return
         CoroutineScope(Dispatchers.IO).launch {
-            activeEngine.verifyAndSyncAccountSession(context)
-            val (_, remotePetId) = activeEngine.queryOwnPetAwait()
-            val petId = if (!remotePetId.isNullOrEmpty() &&
-                PetPureCalculations.shouldUpdateCachedPetId(PetAdventureEngine.cachedPetId, remotePetId)
-            ) {
-                HookLog.w("QQSettingFragment", "[设置页核验] 发现新活跃小宠 ID: $remotePetId，覆写旧缓存")
-                PetAdventureEngine.saveScopedPetId(context, remotePetId)
-                remotePetId
-            } else {
-                PetAdventureEngine.cachedPetId ?: remotePetId
-            }
-            if (petId.isNullOrEmpty()) return@launch
-            activeEngine.preloadAccountDataAwait(petId)
-            activeEngine.queryPetAttributesAwait(petId)
-            if (PetAccountGateway.loadCachedHireableFriends(context).isEmpty()) {
-                activeEngine.fetchAllHireableFriendsAwait(context, enrichSelectedAndTop = false)
+            activeEngine.withAccountSession(context) {
+                val (_, remotePetId) = activeEngine.queryOwnPetAwait()
+                val petId = if (!remotePetId.isNullOrEmpty() &&
+                    PetPureCalculations.shouldUpdateCachedPetId(PetAdventureEngine.cachedPetId, remotePetId)
+                ) {
+                    HookLog.w("QQSettingFragment", "[设置页核验] 发现新活跃小宠 ID: $remotePetId，覆写旧缓存")
+                    PetAdventureEngine.saveScopedPetId(context, remotePetId)
+                    remotePetId
+                } else {
+                    PetAdventureEngine.cachedPetId ?: remotePetId
+                }
+                if (petId.isNullOrEmpty()) return@withAccountSession
+                activeEngine.preloadAccountDataAwait(petId)
+                activeEngine.queryPetAttributesAwait(petId)
+                if (PetAccountGateway.loadCachedHireableFriends(context).isEmpty()) {
+                    activeEngine.fetchAllHireableFriendsAwait(context, enrichSelectedAndTop = false)
+                }
             }
         }
     }

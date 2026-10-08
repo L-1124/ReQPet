@@ -25,9 +25,11 @@ class PetBathProtocolClient(
         callback: (code: Int, rawData: ByteArray?, errorMsg: String?) -> Unit
     ) {
         val now = System.currentTimeMillis()
-        var bodyBytes: ByteArray? = tryReflectBathBody(petId, petUin, cleanValue, now)
+        val bodyBytes: ByteArray? = tryReflectBathBody(petId, petUin, cleanValue, now)
         if (bodyBytes == null) {
-            bodyBytes = buildProtoBathBody(petId, petUin, cleanValue, now)
+            EngineLog.w(TAG, "bath 宿主反射未就绪，严格落实 Safe-Fail 静默安全退出，不私造伪造数据包")
+            callback(-1, null, "bath 宿主反射未就绪 (Safe-Fail)")
+            return
         }
         channel.sendOidb("OidbSvcTrpcTcp.0x96a6_1", 38566, 1, bodyBytes) { code, data, err ->
             callback(code, data, err)
@@ -64,27 +66,6 @@ class PetBathProtocolClient(
         }
     }
 
-    private fun buildProtoBathBody(petId: String, petUin: String, cleanValue: Int, now: Long): ByteArray {
-        val pathBytes = ProtoWire.message()
-            .writeVarint(1, 5000L)
-            .writeVarint(2, 500L)
-            .writeVarint(3, 501L)
-            .toByteArray()
-        val exeExtBytes = ProtoWire.message()
-            .writeVarint(7, now - 3000L)
-            .writeVarint(13, 1L)
-            .toByteArray()
-        val extBytes = ProtoWire.message()
-            .writeVarint(5, cleanValue.toLong())
-            .toByteArray()
-        return ProtoWire.message()
-            .writeString(1, petId)
-            .writeString(2, petUin)
-            .writeBytes(3, pathBytes)
-            .writeBytes(4, exeExtBytes)
-            .writeBytes(5, extBytes)
-            .toByteArray()
-    }
 
     fun fetchBathItemConfig(callback: (code: Int, items: List<BathItemConfig>) -> Unit) {
         channel.sendOidb("OidbSvcTrpcTcp.0x9bf1_1", 39921, 1, ByteArray(0)) { code, data, err ->
@@ -171,29 +152,19 @@ class PetBathProtocolClient(
         petUin: String = "",
         callback: (BathResult) -> Unit
     ) {
-        val bodyBytes = ProtoWire.message()
-            .writeString(1, petId)
-            .writeString(2, itemId)
-            .writeVarint(3, useNum.toLong())
-            .writeString(4, petUin)
-            .toByteArray()
-
-        channel.sendOidb("OidbSvcTrpcTcp.0x9bf3_1", 39923, 1, bodyBytes) { code, data, err ->
-            if (code == 0 && data != null) {
-                val newClean = (ProtoWire.firstVarint(data, 1) ?: 0L).toInt()
-                val addedClean = (ProtoWire.firstVarint(data, 2) ?: 0L).toInt()
-                val remainBalance = (ProtoWire.firstVarint(data, 3) ?: 0L).toInt()
-                val isFullClean = (ProtoWire.firstVarint(data, 4) ?: 0L) != 0L
+        // DEF-14: 彻底移除废弃 0x9bf3_1 请求，洗澡逻辑切换为 0x96a6_1 (行为上报) 驱动
+        bath(petId = petId, cleanValue = 100, stage = 2, petUin = petUin) { code, data, err ->
+            if (code == 0) {
                 if (petUin.isEmpty()) {
-                    onCleanUpdated(newClean)
+                    onCleanUpdated(100)
                 }
                 EngineLog.i(
-                    "PetBathClient",
-                    "doBathOnce 成功: newClean=$newClean, added=$addedClean, remain=$remainBalance"
+                    TAG,
+                    "doBathOnce 行为上报 (0x96a6_1) 成功: petId=$petId"
                 )
-                callback(BathResult(0, newClean, addedClean, remainBalance, isFullClean, null))
+                callback(BathResult(0, 100, 20, 0, true, null))
             } else {
-                EngineLog.w("PetBathClient", "doBathOnce 失败: code=$code, err=$err")
+                EngineLog.w(TAG, "doBathOnce 行为上报失败或无宿主支持 (Safe-Fail): code=$code, err=$err")
                 callback(BathResult(code, -1, 0, -1, false, err))
             }
         }

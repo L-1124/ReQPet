@@ -369,21 +369,22 @@ private fun refreshWorkJobs(
     val active = HookEntry.globalEngine ?: return
     scope.launch {
         val jobs = withContext(Dispatchers.IO) {
-            active.verifyAndSyncAccountSession(context)
-            val petId = PetAdventureEngine.cachedPetId
-                ?: active.queryOwnPetAwait().second?.also { PetAdventureEngine.saveScopedPetId(context, it) }
-            if (petId.isNullOrEmpty()) return@withContext null
-            val (code, list) = active.querySelectEventsAwait(
-                6400L,
-                petId,
-                schoolStage = 0,
-                careerType = if (careerId > 0) careerId else 3
-            )
-            if (code == 0 && list.isNotEmpty()) {
-                PetAdventureEngine.cachedWorkJobs = list
-                list
-            } else {
-                null
+            active.withAccountSession(context) {
+                val petId = PetAdventureEngine.cachedPetId
+                    ?: active.queryOwnPetAwait().second?.also { PetAdventureEngine.saveScopedPetId(context, it) }
+                if (petId.isNullOrEmpty()) return@withAccountSession null
+                val (code, list) = active.querySelectEventsAwait(
+                    6400L,
+                    petId,
+                    schoolStage = 0,
+                    careerType = if (careerId > 0) careerId else 3
+                )
+                if (code == 0 && list.isNotEmpty()) {
+                    PetAdventureEngine.cachedWorkJobs = list
+                    list
+                } else {
+                    null
+                }
             }
         }
         if (jobs != null) state.refresh()

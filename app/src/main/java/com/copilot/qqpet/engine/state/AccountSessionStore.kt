@@ -7,12 +7,57 @@ import com.copilot.qqpet.engine.cache.LRUCacheManager
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
 import java.time.LocalDate
+import java.util.concurrent.ConcurrentHashMap
+import com.copilot.qqpet.engine.PetAdventureEngine
 
 /**
  * 账号绑定数据与每日额度持久化仓储
  */
 object AccountSessionStore {
 
+    /**
+     * 按 UIN 分桶存储地面捕获金币福袋 ID（DEF-25）。
+     * 切号时通过 [clearAccountBoundMemoryCache] 彻底清空，防止小号误领大号福袋。
+     */
+    private val groundBagIdByUin = ConcurrentHashMap<String, String>()
+
+    /**
+     * 获取指定账号当前捕获到的地面金币福袋 ID。
+     * 若未传 [uin]，自动降级取 [PetAdventureEngine.currentActiveUin]。
+     */
+    fun getGroundBagId(uin: String? = null): String? {
+        val targetUin = uin?.takeIf { AccountSessionGuard.isValidUin(it) }
+            ?: PetAdventureEngine.currentActiveUin.takeIf { AccountSessionGuard.isValidUin(it) }
+            ?: return null
+        return groundBagIdByUin[targetUin.trim()]
+    }
+
+    /**
+     * 保存指定账号当前捕获到的地面金币福袋 ID。
+     * 若未传 [uin]，自动降级取 [PetAdventureEngine.currentActiveUin]。
+     */
+    fun saveGroundBagId(uin: String?, bagId: String?) {
+        val targetUin = uin?.takeIf { AccountSessionGuard.isValidUin(it) }
+            ?: PetAdventureEngine.currentActiveUin.takeIf { AccountSessionGuard.isValidUin(it) }
+            ?: return
+        val trimmedUin = targetUin.trim()
+        if (bagId.isNullOrBlank()) {
+            groundBagIdByUin.remove(trimmedUin)
+        } else {
+            groundBagIdByUin[trimmedUin] = bagId.trim()
+        }
+    }
+
+    /**
+     * 清空指定账号的地面金币福袋 ID。
+     */
+    fun clearGroundBagId(uin: String? = null) {
+        val targetUin = uin?.takeIf { AccountSessionGuard.isValidUin(it) }
+            ?: PetAdventureEngine.currentActiveUin.takeIf { AccountSessionGuard.isValidUin(it) }
+        if (targetUin != null) {
+            groundBagIdByUin.remove(targetUin.trim())
+        }
+    }
 
     @Volatile
     private var cacheManager: LRUCacheManager? = null
@@ -288,6 +333,9 @@ object AccountSessionStore {
         if (bagId.isNotEmpty()) {
             currentSet.add(bagId)
             cacheManager?.put(bagCacheKey, currentSet, 86400000L)
+            if (groundBagIdByUin[uin.trim()] == bagId) {
+                groundBagIdByUin.remove(uin.trim())
+            }
         }
 
         // 如果达到限额，更新限额状态
@@ -320,6 +368,10 @@ object AccountSessionStore {
         cacheManager?.invalidate("liked_uins_")
         cacheManager?.invalidate("claimed_bags_")
         cacheManager?.invalidate("coin_bag_limit_")
+
+        // DEF-25: 彻底清空所有账号的地面福袋 ID，防止跨号污染
+        groundBagIdByUin.clear()
+        QQPetDirectBridge.clearStaticRuntimeCache()
 
         EngineLog.d("AccountSessionStore", "Cleared account-bound memory cache for all users")
     }

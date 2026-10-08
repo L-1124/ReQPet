@@ -72,4 +72,48 @@ class StealthSchedulerTest {
         assertFalse(QQPetDirectBridge.containsFatigueKeyword("魅力+7，正常收益"))
         assertFalse(QQPetDirectBridge.containsFatigueKeyword(null))
     }
+
+    @Test
+    fun testClampSleepForPendingTaskNoPendingTask() {
+        assertEquals(3_600_000L, StealthScheduler.clampSleepForPendingTask(3_600_000L, 0L))
+        assertEquals(3_600_000L, StealthScheduler.clampSleepForPendingTask(3_600_000L, -1L))
+    }
+
+    @Test
+    fun testClampSleepForPendingTaskClampsToRemainingTime() {
+        // 距结束还有 60 秒，静默本想睡 1 小时，但必须截断到 60 秒唤醒
+        val now = 1_000_000L
+        val endTime = now + 60_000L
+        val sleep = StealthScheduler.clampSleepForPendingTask(3_600_000L, endTime, now)
+        assertEquals(60_000L, sleep)
+    }
+
+    @Test
+    fun testClampSleepForPendingTaskEnsuresMinimum3Seconds() {
+        // 距结束还有 1 秒，不得返回 1 秒或 0 秒，必须保底 3 秒防频刷
+        val now = 1_000_000L
+        val endTime = now + 1_000L
+        val sleep = StealthScheduler.clampSleepForPendingTask(3_600_000L, endTime, now)
+        assertEquals(3_000L, sleep)
+    }
+
+    @Test
+    fun testClampSleepForPendingTaskHonorsStealthIfShorterThanTask() {
+        // 距结束还有 2 小时，熄屏空闲轮询为 60 秒，应保留 60 秒
+        val now = 1_000_000L
+        val endTime = now + 7_200_000L
+        val sleep = StealthScheduler.clampSleepForPendingTask(60_000L, endTime, now)
+        assertEquals(60_000L, sleep)
+    }
+
+    @Test
+    fun testFormatLiveStatusTextPurityDoesNotClearTaskEndTime() {
+        PetAdventureEngine.masterEnabled = true
+        PetAdventureEngine.currentTaskEndTimeMillis = 1000L // 过去的时间戳，sec <= 0
+        PetAdventureEngine.currentTaskTypeName = "进阶修习中"
+        val statusText = PetAdventureEngine.formatLiveStatusText()
+        assertEquals("任务已修毕 · 正在自动结算收益...", statusText)
+        // DEF-12 纯函数验证：formatLiveStatusText 绝不得清除或篡改 currentTaskEndTimeMillis
+        assertEquals(1000L, PetAdventureEngine.currentTaskEndTimeMillis)
+    }
 }

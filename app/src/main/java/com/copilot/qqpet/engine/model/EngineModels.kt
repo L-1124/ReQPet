@@ -37,8 +37,22 @@ data class StoryStatusResult(
     val total: Long?,
     val storyId: String?,
     val status: Long? = null,
-    val bodyNote: String? = null
-)
+    val bodyNote: String? = null,
+    val startTimestamp: Long? = null
+) {
+    private val hasStartedStory: Boolean
+        get() = code == 0 && !storyId.isNullOrBlank() &&
+                status != null && status != 0L && (startTimestamp ?: 0L) > 0L
+
+    val isOngoing: Boolean
+        get() = hasStartedStory && remaining != null && remaining > 0L
+
+    val isReadyToSettle: Boolean
+        get() = hasStartedStory && remaining != null && remaining <= 0L
+
+    val isIdle: Boolean
+        get() = code == 0 && status == 0L && storyId.isNullOrBlank()
+}
 
 data class PetFriendsPageResult(
     val code: Int,

@@ -1,6 +1,7 @@
 package com.copilot.qqpet.protocol
 
 import android.content.Context
+import com.copilot.qqpet.engine.model.StoryStatusResult
 import com.copilot.qqpet.protocol.channel.OidbChannel
 import com.copilot.qqpet.protocol.client.PetBathProtocolClient
 import com.copilot.qqpet.protocol.client.PetCareProtocolClient
@@ -358,7 +359,7 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
 
     fun queryStoryStatus(
         petId: String,
-        callback: (code: Int, remainingSec: Long?, totalSec: Long?, activeStoryId: String?, status: Long?, bodyNote: String?) -> Unit
+        callback: (StoryStatusResult) -> Unit
     ) = careerClient.queryStoryStatus(petId, callback)
 
     fun queryProcessStoryInfo(

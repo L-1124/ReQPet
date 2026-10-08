@@ -12,11 +12,20 @@ import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
+import kotlin.random.Random
+import kotlin.math.pow
 
 /**
  * 负责主循环任务的分发、自适应学业、打工、探险与即时指令路由
  */
 object PetCycleDispatcher {
+    @Volatile
+    private var consecutiveFailureCount = 0
+
+    fun resetFailureCount() {
+        consecutiveFailureCount = 0
+    }
+
 
     suspend fun dispatchNextAction(
         context: Context,
@@ -29,10 +38,36 @@ object PetCycleDispatcher {
         if (PetAdventureEngine.enableAdventure) available.add("adventure")
         if (available.isEmpty()) return 30000L
 
-        val target = available[PetAdventureEngine.roundRobinCursor % available.size]
-        PetAdventureEngine.roundRobinCursor = (PetAdventureEngine.roundRobinCursor + 1) % available.size
-        executeAction(context, bridge, petId, target)
-        return 5000L
+        val attempts = available.size
+        var dispatched = false
+        for (i in 0 until attempts) {
+            val target = available[PetAdventureEngine.roundRobinCursor % available.size]
+            PetAdventureEngine.roundRobinCursor = (PetAdventureEngine.roundRobinCursor + 1) % available.size
+            if (executeAction(context, bridge, petId, target)) {
+                dispatched = true
+                break
+            }
+        }
+
+        if (dispatched) {
+            consecutiveFailureCount = 0
+            return 5000L
+        }
+
+        consecutiveFailureCount++
+        val backoff = calculateFailureBackoff(consecutiveFailureCount)
+        PetAdventureEngine.sendLog(
+            EngineLog.Level.WARN,
+            "[任务调度] 全量可用任务(共${attempts}项)均派遣失败(连续失败${consecutiveFailureCount}次)，实施退避 ${backoff / 1000L} 秒"
+        )
+        return backoff
+    }
+
+    fun calculateFailureBackoff(consecutiveFailures: Int): Long {
+        val maxBackoff = 10 * 60 * 1000L
+        val baseBackoff = (30_000L * 1.5.pow(consecutiveFailures.coerceAtMost(8))).toLong() +
+                Random.nextLong(5_000L, 15_000L)
+        return baseBackoff.coerceAtMost(maxBackoff)
     }
 
     suspend fun executeAction(
@@ -40,10 +75,11 @@ object PetCycleDispatcher {
         bridge: QQPetDirectBridge,
         petId: String,
         action: String
-    ) {
-        if (dispatchCareerAction(context, bridge, petId, action)) return
-        if (dispatchCareAction(context, bridge, petId, action)) return
-        if (dispatchSocialAction(context, bridge, petId, action)) return
+    ): Boolean {
+        if (dispatchCareerAction(context, bridge, petId, action)) return true
+        if (dispatchCareAction(context, bridge, petId, action)) return true
+        if (dispatchSocialAction(context, bridge, petId, action)) return true
+        return false
     }
 
     private suspend fun dispatchCareerAction(
@@ -56,25 +92,29 @@ object PetCycleDispatcher {
             "study", "school" -> {
                 val ok = dispatchStudy(context, bridge, petId)
                 showToast(context, if (ok) "已成功安排学园课程修习" else "课程开课未生效，详情见日志")
-                true
+                ok
             }
 
             "work" -> {
                 val ok = dispatchWork(context, bridge, petId)
                 showToast(context, if (ok) "已成功安排兼职打工派遣" else "打工开工未生效，详情见日志")
-                true
+                ok
             }
 
             "adventure" -> {
                 val ok = PetAdventureDispatch.dispatchAdventure(context, bridge, petId)
                 showToast(context, if (ok) "已成功启程森林探险巡航" else "探险启程未生效，详情见日志")
-                true
+                ok
             }
 
             "settle" -> {
+                var settled = false
                 PetAdventureEngine.lastActiveStoryId?.let { sId ->
+                    PetAdventureEngine.pendingSettlementStoryId = sId
                     val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, sId, petId)
                     if (code == 0) {
+                        PetAdventureEngine.clearSettledStory(sId)
+                        settled = true
                         PetSocialTask.claimOnceAfterSettle(
                             context,
                             bridge,
@@ -85,15 +125,20 @@ object PetCycleDispatcher {
                     }
                     showToast(context, "已发起探险收益结算")
                 } ?: showToast(context, "当前暂无待结算任务")
-                true
+                settled
             }
 
             "recall" -> {
+                var recalled = false
                 PetAdventureEngine.lastActiveStoryId?.let { sId ->
-                    PetHiredRecallTask.recallStoryAwait(bridge, sId, petId)
+                    val (code, _) = PetHiredRecallTask.recallStoryAwait(bridge, sId, petId)
+                    recalled = (code == 0)
+                    if (recalled) {
+                        PetAdventureEngine.markStoryRecalled(sId)
+                    }
                     showToast(context, "已发起宠物返程召回")
                 } ?: showToast(context, "小宠当前未在外出派遣状态")
-                true
+                recalled
             }
 
             else -> false
@@ -301,8 +346,7 @@ object PetCycleDispatcher {
             PetAdventureEngine.sendLog(
                 "[疲惫避让] 学园课程标记为疲惫 (${res.fatigueTip ?: "收益降低"})，智能避让转入森林探险..."
             )
-            PetAdventureDispatch.dispatchAdventure(context, bridge, petId)
-            return true
+            return PetAdventureDispatch.dispatchAdventure(context, bridge, petId)
         }
         PetAdventureEngine.sendLog(
             EngineLog.Level.WARN,
@@ -380,8 +424,7 @@ object PetCycleDispatcher {
             PetAdventureEngine.sendLog(
                 "[疲惫避让] 打工岗位标记为疲惫 (${res.fatigueTip ?: "收益降低"})，智能避让转入森林探险..."
             )
-            PetAdventureDispatch.dispatchAdventure(context, bridge, petId)
-            return true
+            return PetAdventureDispatch.dispatchAdventure(context, bridge, petId)
         }
         if (res.code == PetAdaptiveWorkTask.CODE_ALREADY_OUT || PetPureCalculations.isPetAlreadyOutError(
                 res.code,

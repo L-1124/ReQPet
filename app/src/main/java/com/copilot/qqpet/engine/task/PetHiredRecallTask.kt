@@ -1,14 +1,11 @@
 package com.copilot.qqpet.engine.task
 
 import com.copilot.qqpet.engine.TaskLogger
-import com.copilot.qqpet.engine.utils.randomJitter
-import android.content.Context
 import com.copilot.qqpet.engine.StealthScheduler
 import com.copilot.qqpet.engine.utils.PetPureCalculations
 import com.copilot.qqpet.protocol.DeviceTrace
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -143,11 +140,8 @@ object PetHiredRecallTask {
         onLog("[雇佣收益抢跑] 当前打工进度 ${progressInt}% 已达到设定目标 ${param.targetThresh}%！正在执行提前召回以抢得满额基础工资与最高增益分成...")
         val (rCode, rErr) = recallStoryAwait(bridge, param.currentStoryId, petId)
         if (rCode == 0) {
-            onLog("[提前召回成功] 宠物已提前回家，正在领取雇佣收益...")
-            delay(randomJitter(480L, 1120L))
-            val (sCode, _) = settleStoryAwait(bridge, param.currentStoryId, petId)
-            if (sCode == 0) onLog("[雇佣收益入账] 基础工资与最高加成奖金已全额入账！")
-            return HiredMonitorDecision(isHired = true, hasRecalled = true, nextSleepMillis = 4000L, settled = sCode == 0)
+            onLog("[提前召回成功] 宠物已提前回家，等待领取雇佣收益...")
+            return HiredMonitorDecision(isHired = true, hasRecalled = true, nextSleepMillis = 4000L)
         } else {
             val retrySleepMs = StealthScheduler.calculateHiredMonitorSleepMillis(0L, hasReachedTarget = true)
             onLog.warn("[提前召回重试] 召回指令返回 code=$rCode, 说明: ${rErr ?: "未知"}，将在 ${retrySleepMs / 1000L} 秒后重试")
@@ -155,18 +149,4 @@ object PetHiredRecallTask {
         }
     }
 
-    suspend fun checkAndExecuteRecall(
-        bridge: QQPetDirectBridge,
-        petId: String,
-        param: RecallCheckParam,
-        onLog: TaskLogger
-    ): Boolean = evaluateHiredMonitor(bridge, petId, param, onLog).hasRecalled
-
-    suspend fun checkAndExecuteRecall(
-        context: Context,
-        bridge: QQPetDirectBridge,
-        petId: String,
-        param: RecallCheckParam,
-        onLog: TaskLogger
-    ): Boolean = checkAndExecuteRecall(bridge, petId, param, onLog)
 }

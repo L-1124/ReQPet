@@ -4,7 +4,9 @@ import com.copilot.qqpet.engine.utils.randomJitter
 import android.content.Context
 import com.copilot.qqpet.engine.PetAccountGateway
 import com.copilot.qqpet.engine.PetAdventureEngine
+import com.copilot.qqpet.engine.model.StoryStatusResult
 import com.copilot.qqpet.engine.state.AccountSessionStore
+import com.copilot.qqpet.engine.resilience.RateLimitExceededException
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
@@ -20,7 +22,11 @@ object PetMaintenanceCoordinator {
     private const val ACTIVE_VISIT_INTERVAL_MS = 8 * 60 * 1000L
 
     /** 距离下一次喂食、洗澡、福袋、回踩、串门或 PK 到点还有多久。外出不会拉长这个等待。 */
-    fun millisUntilNextCheck(context: Context, now: Long = System.currentTimeMillis()): Long {
+    fun millisUntilNextCheck(
+        context: Context,
+        now: Long = System.currentTimeMillis(),
+        isOuting: Boolean = false
+    ): Long {
         val due = ArrayList<Long>(5)
         if (PetAdventureEngine.enableCare) due += waitAfter(
             PetAdventureEngine.lastCareTimeMillis,
@@ -42,7 +48,7 @@ object PetMaintenanceCoordinator {
             ACTIVE_VISIT_INTERVAL_MS,
             now
         )
-        if (PetAdventureEngine.enableAutoPk && AccountSessionStore.getDailyPkCount(
+        if (!isOuting && PetAdventureEngine.enableAutoPk && AccountSessionStore.getDailyPkCount(
                 context,
                 PetAdventureEngine.currentActiveUin
             ) < 10
@@ -57,17 +63,55 @@ object PetMaintenanceCoordinator {
         return (last + interval + 1L - now).coerceAtLeast(0L)
     }
 
-    suspend fun performMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String) {
+    suspend fun performMaintenance(
+        context: Context,
+        bridge: QQPetDirectBridge,
+        petId: String,
+        story: StoryStatusResult,
+        forceCheck: Boolean = false
+    ) {
         val now = System.currentTimeMillis()
-        checkCareMaintenance(context, bridge, petId, now)
-        checkCoinBagMaintenance(context, bridge, petId, now)
-        checkLikeBackMaintenance(context, bridge, now)
-        checkActiveVisitMaintenance(context, bridge, now)
-        checkAutoPkMaintenance(context, bridge, petId, now)
+        try {
+            checkCareMaintenance(context, bridge, petId, now, forceCheck)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            PetAdventureEngine.sendLog("[自理] 照料维护异常: ${e.message}")
+        }
+        try {
+            checkCoinBagMaintenance(context, bridge, petId, now)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            PetAdventureEngine.sendLog("[福袋] 维护巡检异常: ${e.message}")
+        }
+        try {
+            checkLikeBackMaintenance(context, bridge, now)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            PetAdventureEngine.sendLog("[回踩] 维护巡检异常: ${e.message}")
+        }
+        try {
+            checkActiveVisitMaintenance(context, bridge, now)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            PetAdventureEngine.sendLog("[串门] 维护巡检异常: ${e.message}")
+        }
+        try {
+            checkAutoPkMaintenance(context, bridge, petId, now, story)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            PetAdventureEngine.sendLog("[自动PK] 维护巡检异常: ${e.message}")
+        }
     }
 
-    private suspend fun checkCareMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String, now: Long) {
-        if (!PetAdventureEngine.enableCare || (now - PetAdventureEngine.lastCareTimeMillis <= CARE_CHECK_INTERVAL_MS)) return
+    private suspend fun checkCareMaintenance(
+        context: Context,
+        bridge: QQPetDirectBridge,
+        petId: String,
+        now: Long,
+        forceCheck: Boolean = false
+    ) {
+        if (!PetAdventureEngine.enableCare) return
+        if (!forceCheck && (now - PetAdventureEngine.lastCareTimeMillis <= CARE_CHECK_INTERVAL_MS)) return
         bridge.refreshProfile()
         val attrs = PetCareTask.queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
         if (attrs != null && (attrs.energy < PetAdventureEngine.prefCareEnergyThreshold || attrs.clean < PetAdventureEngine.prefCareCleanThreshold)) {
@@ -94,18 +138,26 @@ object PetMaintenanceCoordinator {
         }
     }
 
+
     private suspend fun checkCoinBagMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String, now: Long) {
         if (!PetAdventureEngine.enableClaimCoinBag || (now - PetAdventureEngine.lastCoinBagTimeMillis <= COIN_BAG_INTERVAL_MS)) return
-        PetSocialTask.executeAutoClaimCoinBags(
-            context,
-            bridge,
-            petId,
-            PetAdventureEngine.currentActiveUin,
-            false
-        ) { level, msg ->
-            PetAdventureEngine.sendLog(level, msg)
+        try {
+            PetSocialTask.executeAutoClaimCoinBags(
+                context,
+                bridge,
+                petId,
+                PetAdventureEngine.currentActiveUin,
+                false
+            ) { level, msg ->
+                PetAdventureEngine.sendLog(level, msg)
+            }
+        } catch (e: RateLimitExceededException) {
+            PetAdventureEngine.sendLog("[福袋巡检] 今日好友金币福袋领取已达官方上限，暂停后续巡检")
+        } catch (e: Exception) {
+            PetAdventureEngine.sendLog("[福袋巡检] 领福袋异常：${e.message}")
+        } finally {
+            PetAdventureEngine.lastCoinBagTimeMillis = System.currentTimeMillis()
         }
-        PetAdventureEngine.lastCoinBagTimeMillis = System.currentTimeMillis()
     }
 
     private suspend fun checkLikeBackMaintenance(context: Context, bridge: QQPetDirectBridge, now: Long) {
@@ -138,14 +190,15 @@ object PetMaintenanceCoordinator {
         PetAdventureEngine.lastActiveVisitTimeMillis = System.currentTimeMillis()
     }
 
-    private suspend fun checkAutoPkMaintenance(context: Context, bridge: QQPetDirectBridge, petId: String, now: Long) {
-        if (!PetAdventureEngine.enableAutoPk) return
+    private suspend fun checkAutoPkMaintenance(
+        context: Context, bridge: QQPetDirectBridge, petId: String, now: Long, story: StoryStatusResult
+    ) {
+        if (!PetAdventureEngine.enableAutoPk || !story.isIdle ||
+            !PetAdventureEngine.lastActiveStoryId.isNullOrEmpty()
+        ) return
         val dailyCount = AccountSessionStore.getDailyPkCount(context, PetAdventureEngine.currentActiveUin)
         if (dailyCount >= 10 || (now - PetAdventureEngine.lastPkTimeMillis < PetAdventureEngine.pkCooldownMillis)) return
-        val story = PetWorkTask.queryStoryStatusAwait(bridge, petId)
-        if (story.code == 0 && (story.remaining ?: 0L) > 0L) return
         PetAdventureEngine.lastPkTimeMillis = now
-
         val school = PetAdventureEngine.cachedSchoolDetails
         val myTotal = if (school != null && (school.power + school.intel + school.charm > 0L)) {
             school.power + school.intel + school.charm

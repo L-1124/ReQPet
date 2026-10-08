@@ -14,8 +14,6 @@ object OidbCommands {
 
     // 2. 状态照顾接口
     val FEED = Command("OidbSvcTrpcTcp.0x992d_1", 39213, 1, "喂食饼干提升体力")
-    val BUY_FOOD = Command("OidbSvcTrpcTcp.0x99df_1", 39391, 1, "金币购买食物库存")
-    val DO_BATH = Command("OidbSvcTrpcTcp.0x9bf3_1", 39923, 1, "使用香皂洗澡提升清洁度")
     val BUY_BATH_ITEM = Command("OidbSvcTrpcTcp.0x9bd0_0", 39888, 0, "购买洗澡用品")
 
     // 3. 学习与打工

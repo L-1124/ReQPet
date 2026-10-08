@@ -5,8 +5,10 @@ import com.copilot.qqpet.engine.model.StoryStatusResult
 import com.copilot.qqpet.engine.task.PetHiredRecallTask
 import com.copilot.qqpet.engine.task.PetSocialTask
 import com.copilot.qqpet.engine.utils.PetPureCalculations
+import com.copilot.qqpet.engine.utils.randomJitter
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 主循环故事处理器：外出中的雇佣召回监控与到期收益结算
@@ -15,17 +17,16 @@ import kotlinx.coroutines.delay
  */
 internal object PetStoryHandlers {
 
-    /** 处理进行中的外出：更新状态文本并评估雇佣召回；返回应休眠毫秒或 null */
     suspend fun handleOngoingStory(
         context: Context,
         bridge: QQPetDirectBridge,
         petId: String,
         story: StoryStatusResult
-    ): Long? {
+    ): PetHiredRecallTask.HiredMonitorDecision? {
+        if (!story.isOngoing) return null
         val rem = story.remaining ?: return null
         val total = story.total ?: 0L
         val storyId = story.storyId ?: return null
-        if (story.code != 0 || rem <= 0) return null
 
         PetAdventureEngine.currentTaskEndTimeMillis = System.currentTimeMillis() + rem * 1000L
         PetAdventureEngine.currentTaskTypeName = when {
@@ -33,6 +34,10 @@ internal object PetStoryHandlers {
         }
         PetAdventureEngine.currentStatusText =
             "${PetAdventureEngine.currentTaskTypeName} · 剩余 ${PetPureCalculations.formatDuration(rem)}"
+
+        if (PetAdventureEngine.lastActiveStoryId == null) {
+            PetAdventureEngine.lastActiveStoryId = storyId
+        }
 
         if (PetAdventureEngine.lastReportedOngoingStoryId != storyId) {
             PetAdventureEngine.lastReportedOngoingStoryId = storyId
@@ -46,7 +51,7 @@ internal object PetStoryHandlers {
         }
 
         val selfUin = PetAdventureEngine.currentActiveUin.toLongOrNull() ?: 0L
-        val decision = PetHiredRecallTask.evaluateHiredMonitor(
+        var decision = PetHiredRecallTask.evaluateHiredMonitor(
             bridge, petId,
             PetHiredRecallTask.RecallCheckParam(
                 storyId,
@@ -55,21 +60,36 @@ internal object PetStoryHandlers {
                 selfUin,
                 PetAdventureEngine.prefHiredRecallProgress
             )
-        ) { level, msg -> PetAdventureEngine.sendLog( level, msg) }
+        ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
         if (decision.isHired) {
             if (decision.hasRecalled) {
-                PetAdventureEngine.lastActiveStoryId = null
-                PetAdventureEngine.lastReportedOngoingStoryId = null
-                PetAdventureEngine.currentTaskEndTimeMillis = 0L
+                PetAdventureEngine.markStoryRecalled(storyId)
+                delay(randomJitter(480L, 1120L))
+                val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, storyId, petId)
+                decision = decision.copy(settled = code == 0)
+                if (decision.settled) PetAdventureEngine.clearSettledStory(storyId)
             }
             if (decision.settled) {
                 PetSocialTask.claimOnceAfterSettle(
                     context, bridge, petId, PetAdventureEngine.currentActiveUin, PetAdventureEngine.enableClaimCoinBag
-                ) { level, msg -> PetAdventureEngine.sendLog( level, msg) }
+                ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
             }
-            return decision.nextSleepMillis
+            return decision
         }
         return null
+    }
+
+    internal fun resolveSettlementStoryId(
+        story: StoryStatusResult, now: Long = System.currentTimeMillis()
+    ): String? {
+        if (!PetAdventureEngine.enableSettle || story.code != 0 ||
+            PetAdventureEngine.currentTaskEndTimeMillis > now
+        ) return null
+        return when {
+            story.isReadyToSettle -> story.storyId
+            story.isIdle -> PetAdventureEngine.pendingSettlementStoryId
+            else -> null
+        }
     }
 
     /** 处理到期结算：任务结束后自动领取收益 */
@@ -78,21 +98,29 @@ internal object PetStoryHandlers {
         bridge: QQPetDirectBridge,
         petId: String,
         story: StoryStatusResult
-    ) {
-        val pendingId = PetAdventureEngine.lastActiveStoryId ?: story.storyId
-        if ((story.remaining ?: 0L) <= 0L && PetAdventureEngine.enableSettle && !pendingId.isNullOrEmpty()) {
-            PetAdventureEngine.sendLog( "[结算] 自动发起收益结算 (StoryID: $pendingId)...")
-            val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, pendingId, petId)
-            if (code == 0) {
-                PetAdventureEngine.sendLog( "[结算] 收益结算成功！金币与经验已入账")
-                PetSocialTask.claimOnceAfterSettle(
-                    context, bridge, petId, PetAdventureEngine.currentActiveUin, PetAdventureEngine.enableClaimCoinBag
-                ) { level, msg -> PetAdventureEngine.sendLog( level, msg) }
-            }
-            PetAdventureEngine.lastActiveStoryId = null
-            PetAdventureEngine.lastReportedOngoingStoryId = null
-            PetAdventureEngine.currentTaskEndTimeMillis = 0L
-            delay(1500L)
+    ): Boolean {
+        val pendingId = resolveSettlementStoryId(story) ?: return false
+
+        PetAdventureEngine.lastActiveStoryId = pendingId
+        PetAdventureEngine.pendingSettlementStoryId = pendingId
+        PetAdventureEngine.sendLog("[结算] 自动发起收益结算 (StoryID: $pendingId)...")
+        val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, pendingId, petId)
+        if (code == 0) {
+            PetAdventureEngine.clearSettledStory(pendingId)
+            PetAdventureEngine.sendLog("[结算] 收益结算成功！金币与经验已入账")
+            PetSocialTask.claimOnceAfterSettle(
+                context, bridge, petId, PetAdventureEngine.currentActiveUin, PetAdventureEngine.enableClaimCoinBag
+            ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
+            delay(1500.milliseconds)
+            return true
+        } else {
+            // 未确认收益入账前保留待结算标识。
+            PetAdventureEngine.lastActiveStoryId = pendingId
+            PetAdventureEngine.sendLog(
+                EngineLog.Level.WARN,
+                "[结算] 收益结算未确认成功 (code=$code)，保留 StoryID ($pendingId) 等待下一轮对账重试"
+            )
+            return false
         }
     }
 }

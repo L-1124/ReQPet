@@ -233,8 +233,7 @@ class HookEntry : XposedModule() {
                                         "SplashActivity.onResume"
                                     )
                                 }
-                                globalEngine?.verifyAndSyncAccountSession(appContext)
-                                globalEngine?.startBackgroundLoop(appContext)
+                                globalEngine?.resumeBackgroundLoop(appContext)
                             }
                         }.onFailure { t ->
                             HookLog.e(TAG, "SplashActivity.onResume 执行异常", t)

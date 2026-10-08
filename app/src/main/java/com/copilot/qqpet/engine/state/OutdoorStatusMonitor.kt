@@ -44,7 +44,7 @@ sealed interface AdventureState {
  * 替代之前的多次 queryStoryStatus 调用，提供统一的流式状态查询
  */
 class OutdoorStatusMonitor(
-    private val queryStoryStatus: suspend (String) -> StoryStatusResult
+    private val queryStoryStatus: (suspend (String) -> StoryStatusResult)? = null
 ) {
     private val _statusFlow = MutableStateFlow<AdventureState>(AdventureState.Idle)
     val statusFlow: StateFlow<AdventureState> = _statusFlow.asStateFlow()
@@ -52,7 +52,8 @@ class OutdoorStatusMonitor(
     private var monitorJob: kotlinx.coroutines.Job? = null
 
     /**
-     * 开始监控（在协程范围内调用）
+     * 开始监控（已停用独立主动并发轮询，改为被动状态接收器）
+     * 严禁与主循环同时独立向服务端发包查询或修改状态。
      */
     fun monitor(
         petId: String,
@@ -60,47 +61,39 @@ class OutdoorStatusMonitor(
         pollIntervalMs: Long = 10_000L
     ): kotlinx.coroutines.Job {
         monitorJob?.cancel()
-
-        monitorJob = scope.launch {
-            while (isActive) {
-                try {
-                    val result = queryStoryStatus(petId)
-                    updateStateFromResult(result)
-
-                    // 成功轮询后重置失败计数
-                    resetFailureCount()
-                } catch (e: Exception) {
-                    EngineLog.w("OutdoorStatusMonitor", "状态监控异常：${e.message}")
-                    incrementFailureCount()
-
-                    if (failureCount >= MAX_FAILURE_BEFORE_OFFLINE) {
-                        transitionTo(AdventureState.Offline)
-                        delay(30_000) // 故障时延长延迟
-                    } else {
-                        delay(15_000) // 正常轮询间隔的 1.5 倍
-                    }
-                }
-
-                delay(pollIntervalMs)
-            }
+        EngineLog.i("OutdoorStatusMonitor", "独立并发轮询已停用，OutdoorStatusMonitor 作为被动状态接收器运行")
+        val job = scope.launch {
+            // 被动模式：停用独立轮询循环，避免与主循环并发发包和状态冲突
         }
+        monitorJob = job
+        return job
+    }
 
-        return monitorJob!!
+    /**
+     * 被动接收状态更新（由主循环推进时驱动）
+     */
+    fun updateState(result: StoryStatusResult): Boolean {
+        val wasUpdated = updateStateFromResult(result)
+        if (wasUpdated) {
+            resetFailureCount()
+        }
+        return wasUpdated
     }
 
     /**
      * 立即更新状态（用于同步查询场景）
      */
     suspend fun updateFromQuery(petId: String): Boolean {
+        val queryFn = queryStoryStatus ?: return false
         return try {
-            val result = queryStoryStatus(petId)
+            val result = queryFn(petId)
             val wasUpdated = updateStateFromResult(result)
-            if (wasUpdated) {
+            if (wasUpdated || result.code == 0) {
                 resetFailureCount()
             } else {
                 incrementFailureCount()
             }
-            true
+            result.code == 0 || wasUpdated
         } catch (e: Exception) {
             EngineLog.w("OutdoorStatusMonitor", "同步状态查询失败：${e.message}")
             false
@@ -219,6 +212,9 @@ class OutdoorStatusMonitor(
                 return true
             }
         } else {
+            if (result.code != 0) {
+                return false
+            }
             // 查询失败或无外出记录 -> 空闲
             if (oldState != AdventureState.Idle && oldState !is AdventureState.Offline) {
                 transitionTo(AdventureState.Idle)

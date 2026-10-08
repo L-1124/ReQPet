@@ -33,6 +33,21 @@ object StealthScheduler {
         return diffMinutes * 60 * 1000L
     }
 
+    /**
+     * 闭环唤醒计算 (DEF-11)：在进入夜间静默或熄屏静默时，休眠时间必须为 minOf(stealthSleep, maxOf(3_000L, taskEndTime - now))，
+     * 确保任务到期时能准时醒来，杜绝深度睡眠数小时阻断结算。
+     * 若当前本地无在途任务 (taskEndTime <= 0L)，则直接返回原静默休眠时长。
+     */
+    fun clampSleepForPendingTask(
+        stealthSleep: Long,
+        taskEndTime: Long,
+        now: Long = System.currentTimeMillis()
+    ): Long {
+        if (taskEndTime <= 0L) return stealthSleep
+        val timeUntilTaskDue = maxOf(3_000L, taskEndTime - now)
+        return minOf(stealthSleep, timeUntilTaskDue)
+    }
+
     const val MIN_SLICE_SECONDS = 180L
     const val MAX_SLICE_SECONDS = 300L
     const val SHORT_TASK_THRESHOLD_SECONDS = 180L

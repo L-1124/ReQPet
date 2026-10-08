@@ -393,6 +393,13 @@ object PetSocialTask {
     ) {
         if (!enabled) return
         onLog("[结算福袋] 收益已结算，按设置再捡一次福袋")
-        executeAutoClaimCoinBags(context, bridge, ownPetId, currentUin, false, onLog)
+        try {
+            executeAutoClaimCoinBags(context, bridge, ownPetId, currentUin, false, onLog)
+        } catch (e: RateLimitExceededException) {
+            onLog("[结算福袋] 今日好友福袋领取已达官方上限，跳过本次结算补领")
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            EngineLog.w("PetSocialTask", "结算补领福袋异常：${e.message}")
+        }
     }
 }

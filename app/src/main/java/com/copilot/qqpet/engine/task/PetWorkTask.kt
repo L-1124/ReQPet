@@ -21,6 +21,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.copilot.qqpet.protocol.channel.ProtocolBreakers
 import kotlin.coroutines.resume
 
 /**
@@ -30,6 +33,7 @@ object PetWorkTask {
 
     private const val NETWORK_TIMEOUT_MS = 8000L
     private val watchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val storyQueryMutex = Mutex()
 
     val CANDIDATE_JOBS_CLERK = listOf(
         Triple("星尘魔法塔", 6400L, 6401L),
@@ -230,12 +234,14 @@ object PetWorkTask {
 
     suspend fun queryStoryStatusAwait(
         bridge: QQPetDirectBridge, petId: String, timeoutMs: Long = NETWORK_TIMEOUT_MS
-    ): StoryStatusResult =
+    ): StoryStatusResult = storyQueryMutex.withLock {
+        val waitMs = ProtocolBreakers.millisUntilNextQueryAllowed()
+        if (waitMs > 0L) delay(waitMs)
         try {
             withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
-                    bridge.queryStoryStatus(petId) { code, rem, tot, storyId, status, note ->
-                        if (cont.isActive) cont.resume(StoryStatusResult(code, rem, tot, storyId, status, note))
+                    bridge.queryStoryStatus(petId) { result ->
+                        if (cont.isActive) cont.resume(result)
                     }
                 }
             } ?: StoryStatusResult(-99, null, null, null, bodyNote = "状态查询超时")
@@ -243,6 +249,7 @@ object PetWorkTask {
             if (t is CancellationException) throw t
             StoryStatusResult(-99, null, null, null, bodyNote = "状态查询异常 ${t.message ?: ""}")
         }
+    }
 
     suspend fun fetchPetFriendsPageAwait(
         bridge: QQPetDirectBridge, cookie: String = "", timeoutMs: Long = NETWORK_TIMEOUT_MS
@@ -266,12 +273,20 @@ object PetWorkTask {
         if (friend.petId.isBlank()) return friend
         val details = querySecondMapInfoDetailsAwait(bridge, 6100L, friend.petId)
         val status = queryStoryStatusAwait(bridge, friend.petId)
-        val rem = status.remaining ?: 0L
-        val idle = (status.code != 0) || rem <= 0L
+        val idle = when {
+            status.isIdle -> true
+            status.isOngoing || status.isReadyToSettle -> false
+            else -> friend.isIdle
+        }
+        val remaining = when {
+            status.isOngoing -> status.remaining ?: friend.remainingSec
+            status.isIdle -> 0L
+            else -> friend.remainingSec
+        }
         val p = if (details.code == 0 && details.power > 0L) details.power else friend.power
         val i = if (details.code == 0 && details.intel > 0L) details.intel else friend.intel
         val c = if (details.code == 0 && details.charm > 0L) details.charm else friend.charm
-        return friend.copy(power = p, intel = i, charm = c, isIdle = idle, remainingSec = if (rem > 0L) rem else 0L)
+        return friend.copy(power = p, intel = i, charm = c, isIdle = idle, remainingSec = remaining)
     }
 
     suspend fun fetchAllHireableFriendsAwait(

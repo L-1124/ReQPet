@@ -15,8 +15,10 @@ import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
+import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
+import io.github.libxposed.api.XposedModuleInterface.HotReloadedParam
 import kotlinx.coroutines.*
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -94,9 +96,23 @@ class HookEntry : XposedModule() {
         HookApi.attach(
             hooker = { executable -> hook(executable) },
             deoptimizer = { executable -> deoptimize(executable) },
+            invokerFactory = { executable ->
+                when (executable) {
+                    is java.lang.reflect.Method -> getInvoker(executable)
+                    is java.lang.reflect.Constructor<*> -> getInvoker(executable)
+                    else -> null
+                }
+            },
             logger = { priority, tag, message -> log(priority, tag, message) }
         )
-        HookLog.trace(TAG, "模块已载入进程 ${param.processName} (api=$apiVersion, $frameworkName $frameworkVersion)")
+        val props = frameworkProperties
+        val hasRemote = (props and XposedInterface.PROP_CAP_REMOTE) != 0L
+        val hasSystem = (props and XposedInterface.PROP_CAP_SYSTEM) != 0L
+        val hasRtProt = (props and XposedInterface.PROP_RT_API_PROTECTION) != 0L
+        HookLog.trace(
+            TAG,
+            "模块已载入进程 ${param.processName} (api=$apiVersion, $frameworkName $frameworkVersion, remote=$hasRemote, sys=$hasSystem, prot=$hasRtProt)"
+        )
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
@@ -211,7 +227,11 @@ class HookEntry : XposedModule() {
                                 HostClassLoaderBridge.updateHostLoader(activity.classLoader)
                                 QQSettingInjector.inject(activity.classLoader)
                                 if (globalBridge?.isReady != true) {
-                                    initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onResume")
+                                    initEngineAndReceiver(
+                                        appContext,
+                                        activity.classLoader,
+                                        "SplashActivity.onResume"
+                                    )
                                 }
                                 globalEngine?.verifyAndSyncAccountSession(appContext)
                                 globalEngine?.startBackgroundLoop(appContext)
@@ -234,7 +254,11 @@ class HookEntry : XposedModule() {
                                 HostClassLoaderBridge.updateHostLoader(activity.classLoader)
                                 QQSettingInjector.inject(activity.classLoader)
                                 if (globalBridge?.isReady != true) {
-                                    initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onCreate")
+                                    initEngineAndReceiver(
+                                        appContext,
+                                        activity.classLoader,
+                                        "SplashActivity.onCreate"
+                                    )
                                 }
                             }
                         }.onFailure { t ->
@@ -328,7 +352,11 @@ class HookEntry : XposedModule() {
         }
     }
 
-    private fun tryStartLoopIfLoggedIn(appContext: Context, classLoader: ClassLoader, from: String): Boolean {
+    private fun tryStartLoopIfLoggedIn(
+        appContext: Context,
+        classLoader: ClassLoader,
+        from: String
+    ): Boolean {
         try {
             val mobileQQClass = classLoader.loadClass("mqq.app.MobileQQ")
             val sMobileQQField = mobileQQClass.getDeclaredField("sMobileQQ").apply { isAccessible = true }
@@ -352,7 +380,15 @@ class HookEntry : XposedModule() {
     }
 
     override fun onHotReloading(param: HotReloadingParam): Boolean {
-        HookLog.log(TAG, "检测到模块热重载请求，正在注销旧代任务与类引用...")
+        HookLog.log(TAG, "检测到模块热重载请求，正在注销旧代任务并保存运行时状态...")
+        val state = Bundle().apply {
+            putString("active_uin", PetAdventureEngine.currentActiveUin)
+            putString("cached_pet_id", PetAdventureEngine.cachedPetId)
+            putString("last_story_id", PetAdventureEngine.lastActiveStoryId)
+            putLong("hot_reload_time", System.currentTimeMillis())
+        }
+        param.setSavedInstanceState(state)
+
         loginPollJob?.cancel()
         loginPollJob = null
         globalEngine?.stopBackgroundLoop()
@@ -363,5 +399,33 @@ class HookEntry : XposedModule() {
         isSplashHooked = false
         isReadySignalled = false
         return true
+    }
+
+    override fun onHotReloaded(param: HotReloadedParam) {
+        instance = this
+        processName = param.processName
+        HookApi.attach(
+            hooker = { executable -> hook(executable) },
+            deoptimizer = { executable -> deoptimize(executable) },
+            invokerFactory = { executable ->
+                when (executable) {
+                    is java.lang.reflect.Method -> getInvoker(executable)
+                    is java.lang.reflect.Constructor<*> -> getInvoker(executable)
+                    else -> null
+                }
+            },
+            logger = { priority, tag, message -> log(priority, tag, message) }
+        )
+        val state = param.savedInstanceState as? Bundle
+        if (state != null) {
+            val uin = state.getString("active_uin").orEmpty()
+            val petId = state.getString("cached_pet_id")
+            val storyId = state.getString("last_story_id")
+            if (uin.isNotEmpty()) PetAdventureEngine.currentActiveUin = uin
+            if (!petId.isNullOrEmpty()) PetAdventureEngine.cachedPetId = petId
+            if (!storyId.isNullOrEmpty()) PetAdventureEngine.lastActiveStoryId = storyId
+            HookLog.log(TAG, "热重载跨代状态已恢复: uin=$uin, petId=$petId, storyId=$storyId")
+        }
+        HookLog.trace(TAG, "新一代模块已成功热重载接管进程 ${param.processName}")
     }
 }

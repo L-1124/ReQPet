@@ -8,23 +8,25 @@ import com.copilot.qqpet.engine.PetAdventureEngine
 object SettingConfigSyncer {
 
     fun triggerAction(context: Context, engine: PetAdventureEngine?, action: String) {
+        val appContext = context.applicationContext ?: context
         val target = engine ?: HookEntry.globalEngine ?: return
-        if (HookEntry.globalBridge?.isReady != true) HookEntry.reconnectBridgeIfAvailable(context)
+        if (HookEntry.globalBridge?.isReady != true) HookEntry.reconnectBridgeIfAvailable(appContext)
         if (action == "query_work_places" || action == "query_account_status") {
-            target.preloadAccountData(context)
+            target.preloadAccountData(appContext)
         } else {
-            target.runAction(context, action)
+            target.runAction(appContext, action)
         }
-        target.wakeUpMasterCycle(context)
+        target.wakeUpMasterCycle(appContext)
     }
 
     fun syncConfig(engine: PetAdventureEngine?, context: Context, wakeCycle: Boolean = false) {
+        val appContext = context.applicationContext ?: context
         val target = engine ?: HookEntry.globalEngine ?: return
-        if (HookEntry.globalBridge?.isReady != true) HookEntry.reconnectBridgeIfAvailable(context)
-        target.reloadConfig(context)
+        if (HookEntry.globalBridge?.isReady != true) HookEntry.reconnectBridgeIfAvailable(appContext)
+        target.reloadConfig(appContext)
         if (wakeCycle) {
-            target.logConfigSummary(context)
-            target.wakeUpMasterCycle(context)
+            target.logConfigSummary(appContext)
+            target.wakeUpMasterCycle(appContext)
         }
     }
 

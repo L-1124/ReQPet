@@ -254,9 +254,10 @@ object PetCycleDispatcher {
     }
 
     private suspend fun showToast(context: Context, text: String) {
+        val appContext = context.applicationContext ?: context
         withContext(Dispatchers.Main) {
             try {
-                android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(appContext, text, android.widget.Toast.LENGTH_SHORT).show()
             } catch (e: Throwable) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
             }

@@ -338,7 +338,7 @@ class CircuitBreaker(
     private fun addFailureTimestamp(timestamp: Long) {
         // 移除过期的失败记录（超过 1 分钟前的）
         val cutoff = timestamp - 60_000L
-        while (recentFailures.isNotEmpty() && recentFailures.peekFirst() < cutoff) {
+        while (recentFailures.peekFirst()?.let { it < cutoff } == true) {
             recentFailures.pollFirst()
         }
 

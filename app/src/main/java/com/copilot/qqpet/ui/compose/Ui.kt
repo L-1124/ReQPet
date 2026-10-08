@@ -258,7 +258,7 @@ fun ActionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .toggleable(value = false, role = Role.Button, onValueChange = { onClick() })
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

@@ -138,9 +138,6 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
         var prefScreenOffSilent = true
 
         @Volatile
-        var prefHideQQSettingEntry = false
-
-        @Volatile
         var prefDebugLog = false
 
         @Volatile

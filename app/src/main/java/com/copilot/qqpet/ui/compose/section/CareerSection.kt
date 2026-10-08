@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val HIRED_RECALL_VALUES = listOf(0, 12, 42, 72)
-private val HIRED_RECALL_LABELS = listOf("关闭", "12% 极速", "42% 均衡", "72% 顶格")
+private val HIRED_RECALL_LABELS = listOf("关闭", "12%", "42%", "72%")
 private const val HIRED_RECALL_DEFAULT = 72
 
 @Composable
@@ -60,21 +60,23 @@ fun CareerSection(state: SettingsState) {
     val workJobs = state.workJobs
 
     LaunchedEffect(Unit) {
-        try {
-            val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
-            if (!prefs.contains(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS)) {
-                prefs.edit().putInt(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS, HIRED_RECALL_DEFAULT).apply()
+        if (!state.previewMode) {
+            try {
+                val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
+                if (!prefs.contains(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS)) {
+                    prefs.edit().putInt(PreferencesHelper.KEY_HIRED_RECALL_PROGRESS, HIRED_RECALL_DEFAULT).apply()
+                }
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
             }
-        } catch (e: Throwable) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
         }
     }
 
-    SectionHeader("自动轮转调度")
+    SectionHeader("任务养成")
     SettingsGroup {
         item {
             ToggleRow(
-                title = "进阶学力研修",
+                title = "自动学习",
                 checked = studyEnabled,
                 onCheckedChange = { state.setBool(PreferencesHelper.KEY_STUDY, it) },
                 subtitle = schoolStageSubtitle(state, schoolDetails)
@@ -87,7 +89,7 @@ fun CareerSection(state: SettingsState) {
         }
         item {
             ToggleRow(
-                title = "全自动打工派遣",
+                title = "自动打工",
                 checked = workEnabled,
                 onCheckedChange = { state.setBool(PreferencesHelper.KEY_WORK, it) },
                 subtitle = workSubtitle(state, workPlaces)
@@ -122,7 +124,34 @@ fun CareerSection(state: SettingsState) {
         item {
             HiredRecallPanel(state = state)
         }
+        item {
+            ToggleRow(
+                title = "自动冒险",
+                checked = state.bool(PreferencesHelper.KEY_ADVENTURE, false),
+                onCheckedChange = { state.setBool(PreferencesHelper.KEY_ADVENTURE, it) },
+                subtitle = "自动深入野外林区探秘与冒险"
+            )
+        }
+        item {
+            ToggleRow(
+                title = "任务收益结算",
+                checked = state.bool(PreferencesHelper.KEY_SETTLE, false),
+                onCheckedChange = { state.setBool(PreferencesHelper.KEY_SETTLE, it) },
+                subtitle = "外出任务完成后检查并结算收益"
+            )
+        }
+        item {
+            ToggleRow(
+                title = "疲惫时自动转冒险",
+                checked = state.bool(PreferencesHelper.KEY_FATIGUE_TO_ADVENTURE, false),
+                onCheckedChange = { state.setBool(PreferencesHelper.KEY_FATIGUE_TO_ADVENTURE, it) },
+                subtitle = "检测到疲惫收益减少时，取消打工和学习转去冒险直至恢复"
+            )
+        }
     }
+
+    Spacer(modifier = Modifier.height(16.dp))
+    TaskActions(state = state)
 
     if (showHireWhitelist) {
         HireWhitelistDialog(
@@ -224,7 +253,7 @@ private fun HiredRecallPanel(state: SettingsState) {
             .padding(top = 8.dp, bottom = 12.dp)
     ) {
         Text(
-            text = "被雇佣打工提前召回",
+            text = "被好友雇佣时提前召回",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
@@ -264,7 +293,7 @@ private fun OptionLabel(text: String) {
 @Composable
 private fun StudyPanelPreview() {
     MaterialTheme {
-        StudyPanel(state = SettingsState(LocalContext.current, null), details = null)
+        StudyPanel(state = SettingsState(LocalContext.current, null, previewMode = true), details = null)
     }
 }
 
@@ -272,7 +301,7 @@ private fun StudyPanelPreview() {
 @Composable
 private fun HiredRecallPanelPreview() {
     MaterialTheme {
-        HiredRecallPanel(state = SettingsState(LocalContext.current, null))
+        HiredRecallPanel(state = SettingsState(LocalContext.current, null, previewMode = true))
     }
 }
 
@@ -366,6 +395,7 @@ private fun refreshWorkJobs(
     state: SettingsState,
     careerId: Int
 ) {
+    if (state.previewMode) return
     val active = HookEntry.globalEngine ?: return
     scope.launch {
         val jobs = withContext(Dispatchers.IO) {

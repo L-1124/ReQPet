@@ -23,7 +23,6 @@ object PreferencesHelper {
     const val KEY_HUMAN_LIKE_SLEEP = "key_human_like_sleep"
     const val KEY_NIGHT_SLEEP_MODE = "key_night_sleep_mode"
     const val KEY_SCREEN_OFF_SILENT = "key_screen_off_silent"
-    const val KEY_HIDE_QQ_SETTING_ENTRY = "key_hide_qq_setting_entry"
     const val KEY_DEBUG_LOG = "key_debug_log"
    const val KEY_HIRE_FRIEND_ENABLED = "key_hire_friend_enabled"
    const val KEY_HIRE_FRIEND_UINS = "key_hire_friend_uins"

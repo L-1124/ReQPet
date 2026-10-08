@@ -26,12 +26,15 @@ import com.copilot.qqpet.ui.util.SettingConfigSyncer
 @Stable
 class SettingsState(
     private val context: Context,
-    private val engine: PetAdventureEngine?
+    private val engine: PetAdventureEngine?,
+    val previewMode: Boolean = false
 ) {
     private val prefs = context.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
     private val values: SnapshotStateMap<String, Any?> = mutableStateMapOf()
 
     var statusText by mutableStateOf("")
+        private set
+    var hasOngoingTask by mutableStateOf(false)
         private set
     var attributesText by mutableStateOf("")
         private set
@@ -67,10 +70,16 @@ class SettingsState(
 
 
     init {
-        refresh()
+        if (previewMode) {
+            statusText = "预览 · 自动托管未开启"
+            attributesText = "暂无小宠数据"
+        } else {
+            refresh()
+        }
     }
 
     fun attach(scope: kotlinx.coroutines.CoroutineScope) {
+        if (previewMode) return
         prefs.registerOnSharedPreferenceChangeListener(prefListener)
         for ((k, v) in prefs.all) values[k] = v
         logCollectJob?.cancel()
@@ -82,33 +91,46 @@ class SettingsState(
     }
 
     fun detach() {
+        if (previewMode) return
         logCollectJob?.cancel()
         logCollectJob = null
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
     }
 
     fun bool(key: String, def: Boolean = false): Boolean =
-        values[key] as? Boolean ?: prefs.getBoolean(key, def)
+        values[key] as? Boolean ?: if (previewMode) def else prefs.getBoolean(key, def)
 
     fun int(key: String, def: Int = 0): Int =
-        values[key] as? Int ?: prefs.getInt(key, def)
+        values[key] as? Int ?: if (previewMode) def else prefs.getInt(key, def)
 
     fun string(key: String, def: String = ""): String =
-        values[key] as? String ?: prefs.getString(key, def).orEmpty()
+        values[key] as? String ?: if (previewMode) def else prefs.getString(key, def).orEmpty()
 
     fun setBool(key: String, value: Boolean) {
+        if (previewMode) {
+            values[key] = value
+            return
+        }
         prefs.edit().putBoolean(key, value).apply()
         values[key] = value
         syncOrWake(key)
     }
 
     fun setInt(key: String, value: Int) {
+        if (previewMode) {
+            values[key] = value
+            return
+        }
         prefs.edit().putInt(key, value).apply()
         values[key] = value
         syncOrWake(key)
     }
 
     fun setString(key: String, value: String) {
+        if (previewMode) {
+            values[key] = value
+            return
+        }
         prefs.edit().putString(key, value).apply()
         values[key] = value
         syncOrWake(key)
@@ -125,7 +147,9 @@ class SettingsState(
 
     /** 每秒 tick 与页面 resume 都会调用：引擎状态、日志每秒刷新；prefs 仅在外部变化时重读 */
     fun refresh() {
+        if (previewMode) return
         statusText = PetAdventureEngine.formatLiveStatusText()
+        hasOngoingTask = PetAdventureEngine.getLiveRemainingSeconds() > 0L
         val details = PetAdventureEngine.cachedSchoolDetails
         schoolDetails = details
         workPlaces = PetAdventureEngine.cachedWorkPlaces
@@ -178,21 +202,25 @@ class SettingsState(
     }
 
     fun refreshLogs() {
+        if (previewMode) return
         logLines = EngineLog.snapshot()
     }
 
     fun clearLogs() {
+        if (previewMode) return
         EngineLog.clear()
         refreshLogs()
     }
 
     /** 让引擎重读配置（不唤醒主循环；总开关翻转走 syncOrWake 专用通道） */
     fun syncConfig() {
+        if (previewMode) return
         SettingConfigSyncer.syncConfig(engine, context)
     }
 
     /** 触发一次具体动作（查询工作地点、账号状态等） */
     fun action(name: String) {
+        if (previewMode) return
         SettingConfigSyncer.triggerAction(context, engine, name)
     }
 }

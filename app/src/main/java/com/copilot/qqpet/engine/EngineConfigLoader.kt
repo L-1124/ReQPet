@@ -41,8 +41,6 @@ internal object EngineConfigLoader {
             PetAdventureEngine.prefCustomWorkDuration = p.getInt(PreferencesHelper.KEY_WORK_DURATION, 0)
             PetAdventureEngine.prefCareEnergyThreshold = p.getInt(PreferencesHelper.KEY_CARE_ENERGY_THRESHOLD, 60)
             PetAdventureEngine.prefCareCleanThreshold = p.getInt(PreferencesHelper.KEY_CARE_CLEAN_THRESHOLD, 60)
-            PetAdventureEngine.prefHideQQSettingEntry =
-                p.getBoolean(PreferencesHelper.KEY_HIDE_QQ_SETTING_ENTRY, false)
             val debugLog = p.getBoolean(PreferencesHelper.KEY_DEBUG_LOG, false)
             // 调试开关即刻生效（原先要等 QQ 进程重启才会重新读取）
             HookLog.isDebugEnabled = debugLog

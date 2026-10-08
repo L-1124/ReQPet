@@ -4,12 +4,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.ui.unit.dp
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.ExpandablePanel
@@ -21,11 +18,12 @@ import com.copilot.qqpet.ui.compose.ToggleRow
 import com.copilot.qqpet.ui.util.UiDescUtils
 
 private val CARE_THRESHOLD_VALUES = listOf(40, 50, 60, 70, 80, 90, 100)
+private val FRIEND_CARE_THRESHOLD_VALUES = listOf(40, 50, 60, 70, 80, 90, 100)
 
 @Composable
-fun DailySection(state: SettingsState) {
+fun CareSection(state: SettingsState) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        SectionHeader("日常起居与历练")
+        SectionHeader("宠物照料")
         SettingsGroup {
             val careEnabled = state.bool(PreferencesHelper.KEY_CARE, false)
             item {
@@ -55,47 +53,39 @@ fun DailySection(state: SettingsState) {
                     Spacer(modifier = Modifier.height(6.dp))
                 }
             }
+
+            val friendCareEnabled = state.bool(PreferencesHelper.KEY_FRIEND_CARE_ENABLED, false)
             item {
                 ToggleRow(
-                    title = "自动回踩访客",
-                    checked = state.bool(PreferencesHelper.KEY_LIKE_BACK, false),
-                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_LIKE_BACK, it) },
-                    subtitle = "定时巡检并自动回赠所有造访小家的好友与陌生访客"
+                    title = "好友宠物自动喂食洗澡",
+                    checked = friendCareEnabled,
+                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_FRIEND_CARE_ENABLED, it) },
+                    subtitle = UiDescUtils.getFriendCareSubtitle(
+                        state.int(PreferencesHelper.KEY_FRIEND_CARE_ENERGY_THRESHOLD, 60),
+                        state.int(PreferencesHelper.KEY_FRIEND_CARE_CLEAN_THRESHOLD, 60)
+                    )
                 )
-            }
-            item {
-                ToggleRow(
-                    title = "自动领取福袋",
-                    checked = state.bool(PreferencesHelper.KEY_CLAIM_COINBAG, false),
-                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_CLAIM_COINBAG, it) },
-                    subtitle = "自动扫描并拆取自己小窝及好友掉落的金币福袋"
-                )
-            }
-            item {
-                ToggleRow(
-                    title = "疲惫时自动转冒险",
-                    checked = state.bool(PreferencesHelper.KEY_FATIGUE_TO_ADVENTURE, false),
-                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_FATIGUE_TO_ADVENTURE, it) },
-                    subtitle = "检测到疲惫收益减少时，取消打工和学习转去冒险直至恢复"
-                )
-            }
-            item {
-                ToggleRow(
-                    title = "神秘森林冒险",
-                    checked = state.bool(PreferencesHelper.KEY_ADVENTURE, false),
-                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_ADVENTURE, it) },
-                    subtitle = "自动深入野外林区探秘与冒险"
-                )
-            }
-            item {
-                ToggleRow(
-                    title = "探险收益结算",
-                    checked = state.bool(PreferencesHelper.KEY_SETTLE, false),
-                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_SETTLE, it) },
-                    subtitle = "历练归来自动领取全部掉落收益"
-                )
+                ExpandablePanel(friendCareEnabled) {
+                    CardDivider()
+                    FriendCareThresholdSliderRow(
+                        state = state,
+                        key = PreferencesHelper.KEY_FRIEND_CARE_ENERGY_THRESHOLD,
+                        title = "体力阈值",
+                        defaultValue = 60
+                    )
+                    FriendCareThresholdSliderRow(
+                        state = state,
+                        key = PreferencesHelper.KEY_FRIEND_CARE_CLEAN_THRESHOLD,
+                        title = "清洁阈值",
+                        defaultValue = 60
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        CareActions(state = state)
     }
 }
 
@@ -118,10 +108,21 @@ private fun ThresholdSliderRow(
     )
 }
 
-@Preview(showBackground = true)
 @Composable
-private fun DailySectionPreview() {
-    MaterialTheme {
-        DailySection(state = SettingsState(LocalContext.current, null))
-    }
+private fun FriendCareThresholdSliderRow(
+    state: SettingsState,
+    key: String,
+    title: String,
+    defaultValue: Int
+) {
+    val current = state.int(key, defaultValue)
+    val index = FRIEND_CARE_THRESHOLD_VALUES.indexOf(current)
+        .let { if (it >= 0) it else FRIEND_CARE_THRESHOLD_VALUES.indexOf(defaultValue).coerceAtLeast(0) }
+    SliderRow(
+        title = title,
+        value = index,
+        range = 0..FRIEND_CARE_THRESHOLD_VALUES.lastIndex,
+        valueLabel = FRIEND_CARE_THRESHOLD_VALUES[index].toString(),
+        onValueChange = { state.setInt(key, FRIEND_CARE_THRESHOLD_VALUES.getOrElse(it) { defaultValue }) }
+    )
 }

@@ -97,9 +97,7 @@ class OidbChannel(
 
         fun buildCandidateClassNames(): List<String> {
             val names = linkedSetOf<String>()
-            val commonSingle = listOf('m', 'l', 'n', 'k', 'o', 'p', 'j', 'i', 'h', 'g', 'f', 'e', 'd', 'c', 'b', 'a')
-            for (ch in commonSingle) names.add("$DELEGATE_PKG$ch")
-            for (ch in 'q'..'z') names.add("$DELEGATE_PKG$ch")
+            for (ch in 'a'..'z') names.add("$DELEGATE_PKG$ch")
             for (ch in 'A'..'Z') names.add("$DELEGATE_PKG$ch")
             for (c1 in 'a'..'z') {
                 for (c2 in 'a'..'z') {
@@ -114,7 +112,10 @@ class OidbChannel(
             return Pair(cls, method)
         }
 
-        fun findDelegateClass(loaders: List<ClassLoader>): Triple<Class<*>?, Method?, Class<*>?> {
+        fun findDelegateClass(
+            loaders: List<ClassLoader>,
+            context: Context? = null
+        ): Triple<Class<*>?, Method?, Class<*>?> {
             resolvedDelegateClass?.let { cls ->
                 val targetMethod = findOidbSendMethod(cls, null)
                 if (targetMethod != null) {
@@ -123,13 +124,46 @@ class OidbChannel(
                 }
             }
 
+            // 1. 优先读取 SharedPreferences 缓存并校验可用性 (<1ms)
             val cachedName = cachedDelegateClassName
-            val candidateNames = if (!cachedName.isNullOrEmpty()) {
-                listOf(cachedName) + buildCandidateClassNames().filter { it != cachedName }
-            } else {
-                buildCandidateClassNames()
+            if (!cachedName.isNullOrEmpty()) {
+                for (loader in loaders) {
+                    val cls = tryLoadClass(cachedName, loader) ?: continue
+                    if (cls.isInterface) continue
+                    val observerCls = tryFindObserverClass(loaders, loader)
+                    val targetMethod = findOidbSendMethod(cls, observerCls)
+                    if (targetMethod != null) {
+                        resolvedDelegateClass = cls
+                        resolvedSendMethodName = targetMethod.name
+                        EngineLog.i("OidbChannel", "命中本地缓存发包代理类: $cachedName")
+                        return Triple(cls, targetMethod, observerCls ?: targetMethod.parameterTypes[4])
+                    }
+                }
             }
 
+            // 2. 缓存未命中或失效时，使用纯 Kotlin DexParser 从 APK 提取真实实现类
+            val apkPath = context?.applicationInfo?.sourceDir
+            if (!apkPath.isNullOrEmpty()) {
+                val dexClassName = DexParser.findImplementingClass(apkPath)
+                if (!dexClassName.isNullOrEmpty()) {
+                    for (loader in loaders) {
+                        val cls = tryLoadClass(dexClassName, loader) ?: continue
+                        if (cls.isInterface) continue
+                        val observerCls = tryFindObserverClass(loaders, loader)
+                        val targetMethod = findOidbSendMethod(cls, observerCls)
+                        if (targetMethod != null) {
+                            resolvedDelegateClass = cls
+                            resolvedSendMethodName = targetMethod.name
+                            cachedDelegateClassName = dexClassName
+                            EngineLog.i("OidbChannel", "DexParser 精确提取发包代理类: $dexClassName")
+                            return Triple(cls, targetMethod, observerCls ?: targetMethod.parameterTypes[4])
+                        }
+                    }
+                }
+            }
+
+            // 3. 兜底回退：若 DexParser 未能执行或未命中，沿用平权穷举探测
+            val candidateNames = buildCandidateClassNames()
             for (loader in loaders) {
                 var observerCls = tryFindObserverClass(loaders, loader)
                 val interfaceCls = tryLoadClass(INTERFACE_CLASS, loader)
@@ -147,7 +181,7 @@ class OidbChannel(
                         }
                         EngineLog.i(
                             "OidbChannel",
-                            "动态多源自适应命中 QQ 宠物原生发包代理类: $className, 发包方法: ${targetMethod.name}"
+                            "穷举兜底命中发包代理类: $className, 发包方法: ${targetMethod.name}"
                         )
                         return Triple(cls, targetMethod, observerCls)
                     }
@@ -180,7 +214,7 @@ class OidbChannel(
                 ) {
                     targetMethod = m
                     m.isAccessible = true
-                    if (m.name == "c") break
+                    break
                 }
             }
             return targetMethod
@@ -214,7 +248,7 @@ class OidbChannel(
                 }
             }
             val loaders = getCandidateClassLoaders(classLoader, context)
-            val (cls, method, obsCls) = findDelegateClass(loaders)
+            val (cls, method, obsCls) = findDelegateClass(loaders, context)
             if (cls != null && method != null && obsCls != null) {
                 observerClass = obsCls
                 val inst = createDelegateInstance(cls, context)

@@ -20,7 +20,7 @@ import kotlinx.coroutines.sync.withLock
  * Q宠后台全功能自动化调度引擎 (v1.0.75 架构解耦门面)
  * 采用 Round-Robin 时间片智能轮转算法，调度学业、打工、探险、自理、社交与竞技。
  */
-class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
+class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
 
     companion object {
         private const val TAG = "PetAdventureEngine"
@@ -297,7 +297,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
     private fun launchLoop(context: Context) {
         loopJob?.cancel()
         loopJob = scope.launch {
-            while (isActive && isLoopRunning) {
+            while (isActive && isLoopRunning && masterEnabled) {
                 val delayMs = try {
                     executeMasterCycle(context)
                 } catch (t: Throwable) {
@@ -307,6 +307,7 @@ class PetAdventureEngine(private var bridge: QQPetDirectBridge) {
                 }
                 delay(delayMs.milliseconds)
             }
+            isLoopRunning = false
         }
     }
 

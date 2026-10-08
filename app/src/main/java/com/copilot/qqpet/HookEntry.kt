@@ -33,6 +33,8 @@ class HookEntry : XposedModule() {
 
         @Volatile
         private var isSplashHooked = false
+
+        @Volatile
         private var isReadySignalled = false
 
         @Volatile
@@ -135,14 +137,16 @@ class HookEntry : XposedModule() {
                     runCatching {
                         val app = chain.thisObject as? Context
                         if (app != null) {
-                            val appLoader = app.classLoader
-                            latestClassLoader = appLoader
-                            HostClassLoaderBridge.updateHostLoader(appLoader)
-                            CrashInterceptor.install(app)
-                            HookLog.log(TAG, "BaseApplicationImpl.onCreate 触发, classLoader=$appLoader")
-                            initEngineAndReceiver(app, appLoader, "BaseApplicationImpl.onCreate")
-                            hookSplashActivity(appLoader)
-                            QQSettingInjector.inject(appLoader)
+                            synchronized(this@HookEntry) {
+                                val appLoader = app.classLoader
+                                latestClassLoader = appLoader
+                                HostClassLoaderBridge.updateHostLoader(appLoader)
+                                CrashInterceptor.install(app)
+                                HookLog.log(TAG, "BaseApplicationImpl.onCreate 触发, classLoader=$appLoader")
+                                initEngineAndReceiver(app, appLoader, "BaseApplicationImpl.onCreate")
+                                hookSplashActivity(appLoader)
+                                QQSettingInjector.inject(appLoader)
+                            }
                         }
                     }.onFailure { t ->
                         HookLog.e(TAG, "BaseApplicationImpl.onCreate 注入执行异常", t)
@@ -164,12 +168,15 @@ class HookEntry : XposedModule() {
                     runCatching {
                         val context = chain.thisObject as? Context
                         if (context != null) {
-                            latestClassLoader = context.classLoader
-                            HostClassLoaderBridge.updateHostLoader(context.classLoader)
-                            CrashInterceptor.install(context)
-                            initEngineAndReceiver(context, context.classLoader, "MobileQQ.onCreate")
-                            hookSplashActivity(context.classLoader)
-                            QQSettingInjector.inject(context.classLoader)
+                            synchronized(this@HookEntry) {
+                                val appLoader = context.classLoader
+                                latestClassLoader = appLoader
+                                HostClassLoaderBridge.updateHostLoader(appLoader)
+                                CrashInterceptor.install(context)
+                                initEngineAndReceiver(context, appLoader, "MobileQQ.onCreate")
+                                hookSplashActivity(appLoader)
+                                QQSettingInjector.inject(appLoader)
+                            }
                         }
                     }.onFailure { t ->
                         HookLog.e(TAG, "MobileQQ.onCreate 注入执行异常", t)
@@ -188,61 +195,65 @@ class HookEntry : XposedModule() {
 
     private fun hookSplashActivity(classLoader: ClassLoader) {
         if (isSplashHooked) return
-        try {
-            val splashCls = classLoader.loadClass("com.tencent.mobileqq.activity.SplashActivity")
+        synchronized(this) {
+            if (isSplashHooked) return
+            try {
+                val splashCls = classLoader.loadClass("com.tencent.mobileqq.activity.SplashActivity")
 
-            findMethodInHierarchy(splashCls, "onResume")?.let { method ->
-                HookApi.hook(method, id = "qq_splash_resume").intercept { chain ->
-                    val result = chain.proceed()
-                    runCatching {
-                        val activity = chain.thisObject as? Activity
-                        if (activity != null && activity.packageName == TARGET_PACKAGE) {
-                            val appContext = activity.applicationContext ?: activity
-                            latestClassLoader = activity.classLoader
-                            HostClassLoaderBridge.updateHostLoader(activity.classLoader)
-                            QQSettingInjector.inject(activity.classLoader)
-                            if (globalBridge?.isReady != true) {
-                                initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onResume")
+                findMethodInHierarchy(splashCls, "onResume")?.let { method ->
+                    HookApi.hook(method, id = "qq_splash_resume").intercept { chain ->
+                        val result = chain.proceed()
+                        runCatching {
+                            val activity = chain.thisObject as? Activity
+                            if (activity != null && activity.packageName == TARGET_PACKAGE) {
+                                val appContext = activity.applicationContext ?: activity
+                                latestClassLoader = activity.classLoader
+                                HostClassLoaderBridge.updateHostLoader(activity.classLoader)
+                                QQSettingInjector.inject(activity.classLoader)
+                                if (globalBridge?.isReady != true) {
+                                    initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onResume")
+                                }
+                                globalEngine?.verifyAndSyncAccountSession(appContext)
+                                globalEngine?.startBackgroundLoop(appContext)
                             }
-                            globalEngine?.verifyAndSyncAccountSession(appContext)
-                            globalEngine?.startBackgroundLoop(appContext)
+                        }.onFailure { t ->
+                            HookLog.e(TAG, "SplashActivity.onResume 执行异常", t)
                         }
-                    }.onFailure { t ->
-                        HookLog.e(TAG, "SplashActivity.onResume 执行异常", t)
+                        result
                     }
-                    result
                 }
-            }
 
-            findMethodInHierarchy(splashCls, "onCreate", Bundle::class.java)?.let { method ->
-                HookApi.hook(method, id = "qq_splash_create").intercept { chain ->
-                    val result = chain.proceed()
-                    runCatching {
-                        val activity = chain.thisObject as? Activity
-                        if (activity != null && activity.packageName == TARGET_PACKAGE) {
-                            val appContext = activity.applicationContext ?: activity
-                            latestClassLoader = activity.classLoader
-                            HostClassLoaderBridge.updateHostLoader(activity.classLoader)
-                            QQSettingInjector.inject(activity.classLoader)
-                            if (globalBridge?.isReady != true) {
-                                initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onCreate")
+                findMethodInHierarchy(splashCls, "onCreate", Bundle::class.java)?.let { method ->
+                    HookApi.hook(method, id = "qq_splash_create").intercept { chain ->
+                        val result = chain.proceed()
+                        runCatching {
+                            val activity = chain.thisObject as? Activity
+                            if (activity != null && activity.packageName == TARGET_PACKAGE) {
+                                val appContext = activity.applicationContext ?: activity
+                                latestClassLoader = activity.classLoader
+                                HostClassLoaderBridge.updateHostLoader(activity.classLoader)
+                                QQSettingInjector.inject(activity.classLoader)
+                                if (globalBridge?.isReady != true) {
+                                    initEngineAndReceiver(appContext, activity.classLoader, "SplashActivity.onCreate")
+                                }
                             }
+                        }.onFailure { t ->
+                            HookLog.e(TAG, "SplashActivity.onCreate 执行异常", t)
                         }
-                    }.onFailure { t ->
-                        HookLog.e(TAG, "SplashActivity.onCreate 执行异常", t)
+                        result
                     }
-                    result
                 }
-            }
 
-            isSplashHooked = true
-            HookLog.log(TAG, "已成功挂钩 SplashActivity 主界面保活与设置项注入 (libxposed)")
-        } catch (t: Throwable) {
-            if (t is kotlinx.coroutines.CancellationException) throw t
-            HookLog.e(TAG, "Hook SplashActivity 异常", t)
+                isSplashHooked = true
+                HookLog.log(TAG, "已成功挂钩 SplashActivity 主界面保活与设置项注入 (libxposed)")
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
+                HookLog.e(TAG, "Hook SplashActivity 异常", t)
+            }
         }
     }
 
+    @Synchronized
     fun initEngineAndReceiver(context: Context, classLoader: ClassLoader, from: String): Boolean {
         val appContext = context.applicationContext ?: context
 

@@ -51,7 +51,6 @@ class SettingsState(
     var pkBlacklistSummary by mutableStateOf("")
         private set
 
-    private val logListener: (LogEntry) -> Unit = { refreshLogs() }
     private val prefListener =
         android.content.SharedPreferences.OnSharedPreferenceChangeListener { sharedPreferences, key ->
             if (key != null) {
@@ -71,25 +70,20 @@ class SettingsState(
         refresh()
     }
 
-    fun attach(scope: kotlinx.coroutines.CoroutineScope? = null) {
+    fun attach(scope: kotlinx.coroutines.CoroutineScope) {
         prefs.registerOnSharedPreferenceChangeListener(prefListener)
         for ((k, v) in prefs.all) values[k] = v
-        if (scope != null) {
-            logCollectJob?.cancel()
-            logCollectJob = scope.launch {
-                EngineLog.logFlow.collect {
-                    refreshLogs()
-                }
+        logCollectJob?.cancel()
+        logCollectJob = scope.launch {
+            EngineLog.logFlow.collect {
+                refreshLogs()
             }
-        } else {
-            EngineLog.addListener(logListener)
         }
     }
 
     fun detach() {
         logCollectJob?.cancel()
         logCollectJob = null
-        EngineLog.removeListener(logListener)
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
     }
 

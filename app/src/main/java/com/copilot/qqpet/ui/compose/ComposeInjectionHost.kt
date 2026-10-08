@@ -1,6 +1,7 @@
 package com.copilot.qqpet.ui.compose
 
 import android.content.Context
+import android.os.Bundle
 import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
@@ -15,6 +16,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.copilot.qqpet.R
 
 /**
  * 注入式 Compose 运行环境宿主：提供模块闭环的 ViewTree*Owner。
@@ -23,7 +25,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
  * ViewTree*Owner，因此 attach 时沿祖先链把模块 owner 打满。模块与宿主 tag key 不同，
  * 在 mKeyedTags 中共存互不覆盖。
  */
-class ComposeInjectionHost : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
+class ComposeInjectionHost(savedState: Bundle? = null) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val savedStateController = SavedStateRegistryController.create(this)
@@ -38,14 +40,19 @@ class ComposeInjectionHost : LifecycleOwner, ViewModelStoreOwner, SavedStateRegi
 
     init {
         savedStateController.performAttach()
-        savedStateController.performRestore(null)
+        savedStateController.performRestore(savedState)
     }
 
     fun createView(context: Context, content: @Composable () -> Unit): ComposeView =
         ComposeView(context).apply {
+            id = R.id.qpet_settings_compose_view
             tagOwners(this)
             setContent(content)
         }
+
+    fun saveState(outState: Bundle) {
+        savedStateController.performSave(outState)
+    }
 
     fun installOwnersOnAttach(root: View) {
         root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {

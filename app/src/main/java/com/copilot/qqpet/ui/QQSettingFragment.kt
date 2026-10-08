@@ -26,20 +26,30 @@ class QQSettingFragment : QPublicBaseFragment() {
 
     private var composeHost: ComposeInjectionHost? = null
     private var state: SettingsState? = null
+    private var composeView: ComposeView? = null
+    private var savedComposeState: Bundle? = null
+    private var pageBackHandler: (() -> Boolean)? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         HookLog.trace("QQSettingFragment", "onCreateView 已被调用")
         val context = requireContext()
         val dark = HostTheme.isNight(context)
-        val host = ComposeInjectionHost()
+        val host = ComposeInjectionHost(
+            savedComposeState ?: savedInstanceState?.getBundle(COMPOSE_STATE_KEY)
+        )
         val settings = SettingsState(context, HookEntry.globalEngine)
         composeHost = host
         state = settings
         val composeView = host.createView(context) {
             QPetExpressiveTheme(dark = dark) {
-                QPetSettingsScreen(state = settings) { requireActivity().finish() }
+                QPetSettingsScreen(
+                    state = settings,
+                    onBack = { requireActivity().finish() },
+                    onBackHandlerChanged = { pageBackHandler = it }
+                )
             }
         }
+        this.composeView = composeView
         return FrameLayout(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -70,12 +80,27 @@ class QQSettingFragment : QPublicBaseFragment() {
         state?.refresh()
     }
 
+    override fun onBackEvent(): Boolean =
+        if (pageBackHandler?.invoke() == true) true else super.onBackEvent()
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        captureComposeState()?.let { outState.putBundle(COMPOSE_STATE_KEY, it) }
+    }
+
+    private fun captureComposeState(): Bundle? =
+        composeHost?.let { host -> Bundle().also { host.saveState(it) } } ?: savedComposeState
+
     override fun onPause() {
         super.onPause()
         composeHost?.onPause()
     }
 
     override fun onDestroyView() {
+        savedComposeState = captureComposeState()
+        composeView?.disposeComposition()
+        composeView = null
+        pageBackHandler = null
         state?.detach()
         composeHost?.onDestroy()
         state = null
@@ -107,5 +132,9 @@ class QQSettingFragment : QPublicBaseFragment() {
                 }
             }
         }
+    }
+
+    private companion object {
+        const val COMPOSE_STATE_KEY = "qpet_compose_state"
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -23,11 +24,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -58,9 +58,10 @@ internal enum class SettingsPage(val title: String) {
 @Composable
 fun QPetSettingsScreen(
     state: SettingsState,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onBackHandlerChanged: (handler: (() -> Boolean)?) -> Unit
 ) {
-    QPetSettingsContent(state, onBack)
+    QPetSettingsContent(state, onBack, onBackHandlerChanged = onBackHandlerChanged)
 }
 
 @Composable
@@ -68,10 +69,13 @@ fun QPetSettingsScreen(
 internal fun QPetSettingsContent(
     state: SettingsState,
     onBack: () -> Unit,
-    initialPage: SettingsPage = SettingsPage.HOME
+    initialPage: SettingsPage = SettingsPage.HOME,
+    onBackHandlerChanged: ((handler: (() -> Boolean)?) -> Unit)? = null
 ) {
-    var page by remember { mutableStateOf(initialPage) }
+    val navigation = rememberSaveable(saver = SettingsBackStack.Saver) { SettingsBackStack(initialPage) }
+    val page = navigation.currentPage
     val scope = rememberCoroutineScope()
+    val stateHolder = rememberSaveableStateHolder()
     LaunchedEffect(state) {
         if (!state.previewMode) {
             while (true) {
@@ -84,13 +88,17 @@ internal fun QPetSettingsContent(
         state.attach(scope)
         onDispose { state.detach() }
     }
+    DisposableEffect(navigation, onBackHandlerChanged) {
+        onBackHandlerChanged?.invoke(navigation::popBack)
+        onDispose { onBackHandlerChanged?.invoke(null) }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(page.title) },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (page == SettingsPage.HOME) onBack() else page = SettingsPage.HOME
+                        if (!navigation.popBack()) onBack()
                     }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
@@ -105,70 +113,74 @@ internal fun QPetSettingsContent(
             modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
             contentAlignment = Alignment.TopCenter
         ) {
-            LazyColumn(
-                modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth().fillMaxHeight(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (page == SettingsPage.HOME) {
-                    item(key = "master") {
-                        SettingsGroup {
-                            item {
-                                ToggleRow(
-                                    title = "自动托管",
-                                    subtitle = "关闭时不发起模块请求；配置保留，下次开启继续使用",
-                                    checked = state.bool(PreferencesHelper.KEY_MASTER_ENABLED, false),
-                                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_MASTER_ENABLED, it) }
-                                )
+            val displayedPage = page
+            stateHolder.SaveableStateProvider(displayedPage.name) {
+                LazyColumn(
+                    modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth().fillMaxHeight(),
+                    state = rememberLazyListState(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (displayedPage == SettingsPage.HOME) {
+                        item(key = "master") {
+                            SettingsGroup {
+                                item {
+                                    ToggleRow(
+                                        title = "自动托管",
+                                        subtitle = "关闭时不发起模块请求；配置保留，下次开启继续使用",
+                                        checked = state.bool(PreferencesHelper.KEY_MASTER_ENABLED, false),
+                                        onCheckedChange = { state.setBool(PreferencesHelper.KEY_MASTER_ENABLED, it) }
+                                    )
+                                }
                             }
                         }
-                    }
-                    item(key = "status") {
-                        SettingsCard {
-                            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                                Text("运行状态", style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary)
-                                Text(state.statusText.ifBlank { "状态尚未确认" },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(top = 8.dp))
-                                Text(state.attributesText.ifBlank { "暂无小宠数据" },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 4.dp))
+                        item(key = "status") {
+                            SettingsCard {
+                                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                                    Text("运行状态", style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary)
+                                    Text(state.statusText.ifBlank { "状态尚未确认" },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.padding(top = 8.dp))
+                                    Text(state.attributesText.ifBlank { "暂无小宠数据" },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 4.dp))
+                                }
                             }
                         }
-                    }
-                    item(key = "features") {
-                        SectionHeader("功能")
-                        SettingsGroup {
-                            item { CategoryRow(SettingsPage.TASKS, taskSummary(state), { page = it }) }
-                            item { CategoryRow(SettingsPage.CARE, "自己与好友的小宠 · 照料阈值", { page = it }) }
-                            item { CategoryRow(SettingsPage.SOCIAL, "回踩访客 · 主动串门 · 每日上限", { page = it }) }
-                            item { CategoryRow(SettingsPage.PK, "自动挑战 · 免战名单", { page = it }) }
-                            item { CategoryRow(SettingsPage.REWARDS, "自动领取 · 立即领取", { page = it }) }
+                        item(key = "features") {
+                            SectionHeader("功能")
+                            SettingsGroup {
+                                item { CategoryRow(SettingsPage.TASKS, taskSummary(state), navigation::navigate) }
+                                item { CategoryRow(SettingsPage.CARE, "自己与好友的小宠 · 照料阈值", navigation::navigate) }
+                                item { CategoryRow(SettingsPage.SOCIAL, "回踩访客 · 主动串门 · 每日上限", navigation::navigate) }
+                                item { CategoryRow(SettingsPage.PK, "自动挑战 · 免战名单", navigation::navigate) }
+                                item { CategoryRow(SettingsPage.REWARDS, "自动领取 · 立即领取", navigation::navigate) }
+                            }
                         }
-                    }
-                    item(key = "system") {
-                        SectionHeader("系统")
-                        SettingsGroup {
-                            item { CategoryRow(SettingsPage.SCHEDULE, "夜间与熄屏静默 · 随机休眠", { page = it }) }
-                            item { CategoryRow(SettingsPage.DIAGNOSTICS, "近期日志 · 长期日志位置 · 引擎指标", { page = it }) }
-                            item { CategoryRow(SettingsPage.MODULE, "宿主兼容 · 反馈", { page = it }) }
+                        item(key = "system") {
+                            SectionHeader("系统")
+                            SettingsGroup {
+                                item { CategoryRow(SettingsPage.SCHEDULE, "夜间与熄屏静默 · 随机休眠", navigation::navigate) }
+                                item { CategoryRow(SettingsPage.DIAGNOSTICS, "近期日志 · 长期日志位置 · 引擎指标", navigation::navigate) }
+                                item { CategoryRow(SettingsPage.MODULE, "宿主兼容 · 反馈", navigation::navigate) }
+                            }
                         }
-                    }
-                    item(key = "overview_actions") { OverviewActions(state) }
-                } else {
-                    item(key = page.name) {
-                        when (page) {
-                            SettingsPage.TASKS -> CareerSection(state)
-                            SettingsPage.CARE -> CareSection(state)
-                            SettingsPage.SOCIAL -> SocialSection(state)
-                            SettingsPage.PK -> PkSection(state)
-                            SettingsPage.REWARDS -> RewardSection(state)
-                            SettingsPage.SCHEDULE -> ScheduleSection(state)
-                            SettingsPage.DIAGNOSTICS -> DiagnosticsSection(state)
-                            SettingsPage.MODULE -> ModuleSection(state)
-                            SettingsPage.HOME -> Unit
+                        item(key = "overview_actions") { OverviewActions(state) }
+                    } else {
+                        item(key = displayedPage.name) {
+                            when (displayedPage) {
+                                SettingsPage.TASKS -> CareerSection(state)
+                                SettingsPage.CARE -> CareSection(state)
+                                SettingsPage.SOCIAL -> SocialSection(state)
+                                SettingsPage.PK -> PkSection(state)
+                                SettingsPage.REWARDS -> RewardSection(state)
+                                SettingsPage.SCHEDULE -> ScheduleSection(state)
+                                SettingsPage.DIAGNOSTICS -> DiagnosticsSection(state)
+                                SettingsPage.MODULE -> ModuleSection(state)
+                                SettingsPage.HOME -> Unit
+                            }
                         }
                     }
                 }

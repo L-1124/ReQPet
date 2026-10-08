@@ -5,6 +5,10 @@ import android.app.Activity;
 /** 编译期桩：运行时由宿主 APK 提供真实实现；经 compileOnly 引入，不会打包进 APK。 */
 public class QPublicBaseFragment extends androidx.fragment.app.Fragment {
 
+    public boolean onBackEvent() {
+        return false;
+    }
+
     /** 宿主 BasePartFragment 的抽象方法，真实实现位于宿主 QBaseFragment */
     protected int getContentLayoutId() {
         return 0;

@@ -1,6 +1,7 @@
 package com.copilot.qqpet.protocol.channel
 
 import com.copilot.qqpet.engine.EngineLog
+import com.copilot.qqpet.engine.PetAdventureEngine
 import android.content.Context
 import java.util.Base64
 import com.copilot.qqpet.RuntimeSwitches
@@ -365,20 +366,50 @@ class OidbChannel(
         request: ByteArray,
         callback: (code: Int, data: ByteArray?, errorMsg: String?) -> Unit
     ): Int {
-        val requestId = requestTracker.register(commandName)
+        val liveRuntimeUin = getCurrentRuntimeUin()
+        if (!AccountSessionGuard.isValidUin(liveRuntimeUin)) {
+            EngineLog.w("OidbChannel", "实时登录态无效或尚未就绪 (UIN='$liveRuntimeUin')：拒绝发包 $commandName")
+            val requestId = requestTracker.register(
+                command = commandName,
+                sessionGeneration = PetAdventureEngine.sessionGeneration,
+                accountUin = liveRuntimeUin
+            )
+            completeLocalOnce(requestId, commandName, callback, -1, null, "实时登录态无效或尚未就绪")
+            return requestId
+        }
+        if (PetAdventureEngine.currentActiveUin.isNotEmpty() && liveRuntimeUin != PetAdventureEngine.currentActiveUin) {
+            EngineLog.w(
+                "OidbChannel",
+                "检测到账号切换 (live=$liveRuntimeUin != active=${PetAdventureEngine.currentActiveUin})：拦截旧会话发包 $commandName"
+            )
+            val requestId = requestTracker.register(
+                command = commandName,
+                sessionGeneration = PetAdventureEngine.sessionGeneration,
+                accountUin = liveRuntimeUin
+            )
+            completeLocalOnce(requestId, commandName, callback, -1, null, "检测到账号切换，拦截旧会话发包")
+            return requestId
+        }
+        val currentGen = PetAdventureEngine.sessionGeneration
+        val currentUin = liveRuntimeUin
+        val requestId = requestTracker.register(
+            command = commandName,
+            sessionGeneration = currentGen,
+            accountUin = currentUin
+        )
         requestTracker.sweepExpired().forEach {
             EngineLog.d("OidbChannel", "请求 #${it.id} ${it.command} 超时未回包，配对已释放")
         }
         if (!RuntimeSwitches.masterEnabled) {
             EngineLog.w("OidbChannel", "总开关未开启：拦截发包 $commandName")
-            deliverOnce(requestId, commandName, callback, MASTER_OFF_CODE, null, "总开关未开启")
+            completeLocalOnce(requestId, commandName, callback, MASTER_OFF_CODE, null, "总开关未开启")
             return requestId
         }
 
         // 熔断器打开时快速失败，不发反射包，避免持续冲击故障域
         if (!ProtocolBreakers.allowSend(commandName)) {
             EngineLog.w("OidbChannel", "熔断器打开：快速失败 $commandName")
-            deliverOnce(requestId, commandName, callback, ProtocolBreakers.FAST_FAIL_CODE, null, "协议域熔断中")
+            completeLocalOnce(requestId, commandName, callback, ProtocolBreakers.FAST_FAIL_CODE, null, "协议域熔断中")
             return requestId
         }
 
@@ -386,7 +417,7 @@ class OidbChannel(
         val method = sendOidbMethod
         val instance = delegateInstance
         if (!isReady || instance == null || method == null || obsCls == null) {
-            deliverOnce(requestId, commandName, callback, -1, null, "发包代理未就绪")
+            completeLocalOnce(requestId, commandName, callback, -1, null, "发包代理未就绪", recordTransportOutcome = true)
             return requestId
         }
         try {
@@ -399,8 +430,13 @@ class OidbChannel(
                 if (invokedMethod.name == "hashCode") return@newProxyInstance System.identityHashCode(proxy)
                 if (invokedMethod.name == "equals") return@newProxyInstance args?.getOrNull(0) === proxy
                 if (args != null && args.isNotEmpty()) {
-                    if (!requestTracker.tryDeliver(requestId)) {
-                        EngineLog.w("OidbChannel", "丢弃重复或迟到的回包 #$requestId $commandName")
+                    val liveGen = PetAdventureEngine.sessionGeneration
+                    val liveUin = getCurrentRuntimeUin()
+                    if (!requestTracker.tryDeliver(requestId, currentGeneration = liveGen, currentUin = liveUin)) {
+                        EngineLog.w(
+                            "OidbChannel",
+                            "丢弃重复或迟到的回包 #$requestId $commandName (gen=$liveGen, uin=$liveUin)"
+                        )
                         return@newProxyInstance null
                     }
                     val code = (args[0] as? Number)?.toInt() ?: -1
@@ -420,25 +456,27 @@ class OidbChannel(
         } catch (t: Throwable) {
             if (t is kotlinx.coroutines.CancellationException) throw t
             EngineLog.e("OidbChannel", "sendOidb 执行反射调用异常: ${t.javaClass.simpleName}: ${t.message}")
-            deliverOnce(requestId, commandName, callback, -2, null, t.message)
+            completeLocalOnce(requestId, commandName, callback, -2, null, t.message, recordTransportOutcome = true)
         }
         return requestId
     }
 
-    /** 未进入回调阶段时的单次投递（代理未就绪 / 反射异常） */
-    private fun deliverOnce(
+    /** 本地完成不伪装成回包；仅真实代理/传输故障参与熔断统计。 */
+    private fun completeLocalOnce(
         requestId: Int,
         commandName: String,
         callback: (code: Int, data: ByteArray?, errorMsg: String?) -> Unit,
         code: Int,
         data: ByteArray?,
-        errorMsg: String?
+        errorMsg: String?,
+        recordTransportOutcome: Boolean = false
     ) {
-        if (!requestTracker.tryDeliver(requestId)) {
-            EngineLog.w("OidbChannel", "丢弃重复或迟到的结果 #$requestId $commandName")
+        val liveGen = PetAdventureEngine.sessionGeneration
+        if (!requestTracker.tryCompleteLocal(requestId, currentGeneration = liveGen)) {
+            EngineLog.w("OidbChannel", "丢弃重复或迟到的本地结果 #$requestId $commandName (gen=$liveGen)")
             return
         }
-        invokeCallback(commandName, requestId, callback, code, data, errorMsg)
+        invokeCallback(commandName, requestId, callback, code, data, errorMsg, recordTransportOutcome)
     }
 
     /** 回调执行边界：异常不得冒泡到宿主线程 */
@@ -448,21 +486,24 @@ class OidbChannel(
         callback: (code: Int, data: ByteArray?, errorMsg: String?) -> Unit,
         code: Int,
         data: ByteArray?,
-        errorMsg: String?
+        errorMsg: String?,
+        recordTransportOutcome: Boolean = true
     ) {
-        // 真实回包才参与熔断统计；本地快速失败码不计入
-        if (code != MASTER_OFF_CODE && code != ProtocolBreakers.FAST_FAIL_CODE) {
+        // 本地账号、开关、限流/熔断拒绝不属于网络请求或传输故障。
+        if (recordTransportOutcome && code != MASTER_OFF_CODE && code != ProtocolBreakers.FAST_FAIL_CODE) {
             ProtocolBreakers.recordOutcome(commandName, code)
             ProtocolBreakers.recordRequest(commandName, code)
         }
         try {
             callback(code, data, errorMsg)
         } catch (t: Throwable) {
-            if (t is kotlinx.coroutines.CancellationException) throw t
             EngineLog.e(
                 "OidbChannel",
                 "回包处理异常 #$requestId $commandName: ${t.javaClass.simpleName}: ${t.message}"
             )
         }
     }
+
+    fun invalidateSession(generation: Long) = requestTracker.invalidateSession(generation)
+    fun clearPendingRequests() = requestTracker.clear()
 }

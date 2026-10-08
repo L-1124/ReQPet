@@ -23,6 +23,12 @@ object ProtocolBreakers {
     const val DOMAIN_SOCIAL = "social"   // 好友/福袋/点赞
     const val DOMAIN_PK = "pk"           // PK 竞技
     const val DOMAIN_BATH = "bath"       // 洗护库存/购买
+    const val DOMAIN_QUERY = "query"     // 只读状态查询（免熔断域）
+
+    const val MIN_QUERY_INTERVAL_MS = 15_000L
+
+    @Volatile
+    private var lastQueryTimestamp: Long = 0L
 
     @Volatile
     var metrics: EngineMetrics? = null
@@ -41,10 +47,9 @@ object ProtocolBreakers {
         put("0x96f2", DOMAIN_CARE)
         put("0x992d", DOMAIN_CARE)
         put("0x9949", DOMAIN_CARE)
-        put("0x99df", DOMAIN_CARE)
         put("0x99f2", DOMAIN_CARE)
         put("0x9c44", DOMAIN_CARE)
-        put("0x975a", DOMAIN_CAREER)
+        put("0x975a", DOMAIN_QUERY)
         put("0x975e", DOMAIN_CAREER)
         put("0x975f", DOMAIN_CAREER)
         put("0x9760", DOMAIN_CAREER)
@@ -60,7 +65,6 @@ object ProtocolBreakers {
         put("0x96a6", DOMAIN_BATH)
         put("0x9bf1", DOMAIN_BATH)
         put("0x9bf2", DOMAIN_BATH)
-        put("0x9bf3", DOMAIN_BATH)
         put("0x9bd0", DOMAIN_BATH)
     }
 
@@ -70,10 +74,43 @@ object ProtocolBreakers {
     }
 
     /**
-     * 是否允许发送该命令；熔断器打开时快速失败，不发反射包
+     * 检查是否满足只读状态查询最小请求间隔频控限制 (>= 15s)
+     */
+    fun canQueryStoryStatus(now: Long = System.currentTimeMillis()): Boolean {
+        return (now - lastQueryTimestamp) >= MIN_QUERY_INTERVAL_MS
+    }
+
+    fun millisUntilNextQueryAllowed(now: Long = System.currentTimeMillis()): Long {
+        val elapsed = now - lastQueryTimestamp
+        return (MIN_QUERY_INTERVAL_MS - elapsed).coerceAtLeast(0L)
+    }
+
+    /**
+     * 记录只读状态查询发送时间戳
+     */
+    fun markQueryStoryStatus(now: Long = System.currentTimeMillis()) {
+        lastQueryTimestamp = now
+    }
+
+    /**
+     * 是否允许发送该命令；熔断器打开时快速失败，不发反射包。
+     * 只读状态查询 (DOMAIN_QUERY) 免受断路器影响，但受最小 15 秒限流保护。
      */
     fun allowSend(commandName: String): Boolean {
-        val breaker = manager.getOrCreate(resolveDomain(commandName), domainConfig)
+        val domain = resolveDomain(commandName)
+        if (domain == DOMAIN_QUERY) {
+            val now = System.currentTimeMillis()
+            if (!canQueryStoryStatus(now)) {
+                EngineLog.w(
+                    "ProtocolBreakers",
+                    "状态查询触发最小 15 秒限流保护 (还需等待 ${millisUntilNextQueryAllowed(now)}ms)"
+                )
+                return false
+            }
+            markQueryStoryStatus(now)
+            return true
+        }
+        val breaker = manager.getOrCreate(domain, domainConfig)
         return breaker.allowRequest()
     }
 
@@ -90,21 +127,36 @@ object ProtocolBreakers {
     }
 
     /**
-     * 回包出口统一记录：code==0 成功，其余失败
-     * 返回记录后的断路器状态供日志输出
+     * 回包出口统一记录：
+     * 仅网络/协议传输层故障（如 code < 0）计入 recordFailure；
+     * 正常业务返回码（如今日已赞 136202、福袋已空 135091、体力/饼干不足等业务码）视为业务成功，不触发断路器熔断。
+     * 只读状态查询域 (DOMAIN_QUERY) 免熔断，更新时间戳并恒定返回 Closed。
+     * 返回记录后的断路器状态供日志输出。
      */
     fun recordOutcome(commandName: String, code: Int): CircuitState {
-        val breaker = manager.getOrCreate(resolveDomain(commandName), domainConfig)
+        val domain = resolveDomain(commandName)
+        if (domain == DOMAIN_QUERY) {
+            markQueryStoryStatus()
+            return CircuitState.Closed
+        }
+        val breaker = manager.getOrCreate(domain, domainConfig)
         val before = breaker.getState()
-        if (code == 0) {
-            breaker.recordSuccess()
+        if (isTransportFailure(code)) {
+            breaker.recordFailure(java.lang.RuntimeException("transport failure: code=$code"))
         } else {
-            breaker.recordFailure(java.lang.RuntimeException("code=$code"))
+            breaker.recordSuccess()
         }
         val after = breaker.getState()
         notifyTransition(breaker, before, after)
         return after
     }
+
+    /**
+     * 判断是否为网络/协议传输层故障：
+     * code < 0 为底层传输错误（连接中断、超时、代理未就绪等）；
+     * 业务返回码（code >= 0）无论成功或业务拒绝均说明网络传输正常。
+     */
+    fun isTransportFailure(code: Int): Boolean = code < 0
 
     private fun notifyTransition(breaker: CircuitBreaker, before: CircuitState, after: CircuitState) {
         if (before == after) return

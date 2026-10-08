@@ -84,4 +84,146 @@ class RequestTrackerTest {
         assertFalse(tracker.tryDeliver(999))
         assertEquals(0, tracker.pendingCount())
     }
+
+    @Test
+    fun `代数一致时正常投递`() {
+        val tracker = RequestTracker()
+        val id = tracker.register("cmd_gen1", sessionGeneration = 1L, accountUin = "910298997")
+
+        assertTrue(tracker.tryDeliver(id, currentGeneration = 1L, currentUin = "910298997"))
+        assertFalse(tracker.tryDeliver(id, currentGeneration = 1L, currentUin = "910298997"))
+        assertFalse(tracker.tryCompleteLocal(id, currentGeneration = 1L))
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `代数不一致时直接丢弃并移除配对`() {
+        val tracker = RequestTracker()
+        val id = tracker.register("cmd_gen1", sessionGeneration = 1L, accountUin = "910298997")
+
+        // 切号后代数升级为 2L，迟到回包必须被丢弃
+        assertFalse(tracker.tryDeliver(id, currentGeneration = 2L, currentUin = "910298997"))
+        assertEquals(0, tracker.pendingCount())
+        // 再次投递同样失败
+        assertFalse(tracker.tryDeliver(id, currentGeneration = 1L))
+    }
+
+    @Test
+    fun `UIN不一致时直接丢弃并移除配对`() {
+        val tracker = RequestTracker()
+        val id = tracker.register("cmd_uin1", sessionGeneration = 1L, accountUin = "910298997")
+
+        // 切号到小号 813380203，大号请求迟到回包必须被丢弃
+        assertFalse(tracker.tryDeliver(id, currentGeneration = 1L, currentUin = "813380203"))
+        assertFalse(tracker.tryCompleteLocal(id, currentGeneration = 1L))
+        assertFalse(tracker.tryDeliver(id, currentGeneration = 1L, currentUin = "910298997"))
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `显式登出空UIN丢弃绑定账号回包且不能再次完成`() {
+        val tracker = RequestTracker()
+        val id = tracker.register("cmd_logout", sessionGeneration = 1L, accountUin = "910298997")
+
+        assertFalse(tracker.tryDeliver(id, currentGeneration = 1L, currentUin = ""))
+        assertFalse(tracker.tryDeliver(id, currentGeneration = 1L, currentUin = "910298997"))
+        assertFalse(tracker.tryCompleteLocal(id, currentGeneration = 1L))
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `未提供当前UIN的独立调用方仍可完成绑定账号请求`() {
+        val tracker = RequestTracker()
+        val id = tracker.register("cmd_standalone", accountUin = "910298997")
+
+        assertTrue(tracker.tryDeliver(id))
+        assertFalse(tracker.tryDeliver(id))
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `本地账号拒绝不受当前账号不同影响且只完成一次`() {
+        val tracker = RequestTracker()
+        // 通道发现 live=813380203 与 active=910298997 不同，注册后直接本地拒绝。
+        val id = tracker.register("cmd_account_rejected", sessionGeneration = 1L, accountUin = "813380203")
+        var callbacks = 0
+
+        if (tracker.tryCompleteLocal(id, currentGeneration = 1L)) callbacks++
+        if (tracker.tryCompleteLocal(id, currentGeneration = 1L)) callbacks++
+        if (tracker.tryDeliver(id, currentGeneration = 1L, currentUin = "813380203")) callbacks++
+        if (tracker.tryDeliver(id, currentGeneration = 1L, currentUin = "910298997")) callbacks++
+
+        assertEquals(1, callbacks)
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `本地无效登录态拒绝可立即完成`() {
+        val tracker = RequestTracker()
+        val id = tracker.register("cmd_logged_out", sessionGeneration = 1L, accountUin = "")
+
+        assertTrue(tracker.tryCompleteLocal(id, currentGeneration = 1L))
+        assertFalse(tracker.tryCompleteLocal(id, currentGeneration = 1L))
+        assertFalse(tracker.tryDeliver(id, currentGeneration = 1L, currentUin = ""))
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `跨代的本地完成被丢弃后不能重新完成`() {
+        val tracker = RequestTracker()
+        val id = tracker.register("cmd_old_local", sessionGeneration = 1L, now = 0L)
+
+        assertFalse(tracker.tryCompleteLocal(id, currentGeneration = 2L, now = 1L))
+        assertFalse(tracker.tryCompleteLocal(id, currentGeneration = 1L, now = 1L))
+        assertFalse(tracker.tryDeliver(id, currentGeneration = 1L, now = 1L))
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `超时的本地完成被丢弃后不能重新完成`() {
+        val tracker = RequestTracker(timeoutMs = 1000L)
+        val id = tracker.register("cmd_expired_local", now = 0L)
+
+        assertFalse(tracker.tryCompleteLocal(id, now = 1000L))
+        assertFalse(tracker.tryCompleteLocal(id, now = 999L))
+        assertFalse(tracker.tryDeliver(id, now = 999L))
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `invalidateSession批量作废目标代数及更早代数的未决请求`() {
+        val tracker = RequestTracker()
+        val id1 = tracker.register("cmd_old1", sessionGeneration = 1L)
+        val id2 = tracker.register("cmd_old2", sessionGeneration = 1L)
+        val id3 = tracker.register("cmd_new", sessionGeneration = 2L)
+
+        assertEquals(3, tracker.pendingCount())
+        val invalidated = tracker.invalidateSession(1L)
+        assertEquals(2, invalidated.size)
+        assertEquals(1, tracker.pendingCount())
+
+        // 废弃的请求无法再投递
+        assertFalse(tracker.tryDeliver(id1, currentGeneration = 1L))
+        assertFalse(tracker.tryDeliver(id2, currentGeneration = 1L))
+        assertFalse(tracker.tryCompleteLocal(id1, currentGeneration = 1L))
+        assertFalse(tracker.tryCompleteLocal(id2, currentGeneration = 1L))
+        // 新代数的请求仍能正常投递
+        assertTrue(tracker.tryDeliver(id3, currentGeneration = 2L))
+        assertEquals(0, tracker.pendingCount())
+    }
+
+    @Test
+    fun `invalidateAccount批量作废指定UIN的未决请求`() {
+        val tracker = RequestTracker()
+        val id1 = tracker.register("cmd_a1", accountUin = "111")
+        val id2 = tracker.register("cmd_a2", accountUin = "111")
+        val id3 = tracker.register("cmd_b1", accountUin = "222")
+
+        val invalidated = tracker.invalidateAccount("111")
+        assertEquals(2, invalidated.size)
+        assertEquals(1, tracker.pendingCount())
+
+        assertFalse(tracker.tryDeliver(id1, currentUin = "111"))
+        assertTrue(tracker.tryDeliver(id3, currentUin = "222"))
+    }
 }

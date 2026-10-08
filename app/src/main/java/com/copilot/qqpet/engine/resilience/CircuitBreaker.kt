@@ -2,6 +2,7 @@ package com.copilot.qqpet.engine.resilience
 
 import com.copilot.qqpet.engine.EngineLog
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicInteger
@@ -183,27 +184,35 @@ class CircuitBreaker(
 
         when (currentState) {
             is CircuitState.Closed -> {
+                val now = System.currentTimeMillis()
                 // 添加失败到滑动窗口
-                addFailureTimestamp(System.currentTimeMillis())
+                addFailureTimestamp(now)
 
-                // 更新故障计数
-                val count = failureCount.incrementAndGet()
+                // 滑动窗口内真实失败次数（避免单调递增累加误熔断）
+                val count = recentFailures.size
+                failureCount.set(count)
 
-                EngineLog.w("CircuitBreaker", "[$name] Failure #$count recorded: ${e.message}")
+                EngineLog.w(
+                    "CircuitBreaker",
+                    "[$name] Failure recorded: windowCount=$count (threshold=${config.failureThreshold}): ${e.message}"
+                )
 
-                // 检查是否达到熔断阈值
+                // 检查是否达到熔断阈值（按滑动窗口内真实失败次数判断）
                 if (count >= config.failureThreshold) {
-                    EngineLog.w("CircuitBreaker", "[$name] Triggering circuit breaker OPEN after $count failures")
+                    EngineLog.w(
+                        "CircuitBreaker",
+                        "[$name] Triggering circuit breaker OPEN after $count failures in sliding window"
+                    )
+                    lastFailureTime = now
                     transitionTo(CircuitState.Open)
-                    lastFailureTime = System.currentTimeMillis()
                 }
             }
 
             is CircuitState.HalfOpen -> {
                 // 在半开状态下失败，立即回到打开状态
                 EngineLog.w("CircuitBreaker", "[$name] Failure in HALF_OPEN state, transitioning to OPEN")
-                transitionTo(CircuitState.Open)
                 lastFailureTime = System.currentTimeMillis()
+                transitionTo(CircuitState.Open)
             }
 
             is CircuitState.Open -> {
@@ -235,6 +244,7 @@ class CircuitBreaker(
             recordSuccess()
             return result
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             val shouldContinue = recordFailure(e)
 
             if (!shouldContinue) {
@@ -270,6 +280,7 @@ class CircuitBreaker(
                 recordSuccess()
                 return result
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 lastError = e
 
                 // 记录失败并检查是否应该继续重试
@@ -310,11 +321,17 @@ class CircuitBreaker(
      * 获取失败统计信息
      */
     fun getStats(): Map<String, Any> {
+        val now = System.currentTimeMillis()
+        val cutoff = now - 60_000L
+        while (recentFailures.peekFirst()?.let { it < cutoff } == true) {
+            recentFailures.pollFirst()
+        }
+        val windowCount = recentFailures.size
         return mapOf(
             "name" to name,
             "state" to stateRef.get().toString(),
-            "failureCount" to failureCount.get(),
-            "recentFailureCount" to recentFailures.size,
+            "failureCount" to windowCount,
+            "recentFailureCount" to windowCount,
             "lastFailureTime" to lastFailureTime,
             "config_failureThreshold" to config.failureThreshold,
             "config_successThreshold" to config.successThreshold,
@@ -332,6 +349,9 @@ class CircuitBreaker(
         val oldState = stateRef.getAndSet(newState)
         if (oldState != newState) {
             EngineLog.i("CircuitBreaker", "[$name] State transition: $oldState → $newState")
+            if (newState is CircuitState.Open || newState is CircuitState.HalfOpen) {
+                recentSuccesses.set(0)
+            }
         }
     }
 

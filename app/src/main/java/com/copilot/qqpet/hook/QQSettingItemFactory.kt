@@ -55,7 +55,7 @@ object QQSettingItemFactory {
                     Context::class.java.isAssignableFrom(pt) -> ctx
                     pt == Integer.TYPE -> if (i == 1) DUMMY_VIEW_ID else iconRes
                     CharSequence::class.java.isAssignableFrom(pt) -> "Q宠后台伴侣"
-                    pt == java.lang.String::class.java -> "纯后台全自动调度"
+                    pt == String::class.java -> "纯后台全自动调度"
                     pt == java.lang.Boolean.TYPE -> true
                     else -> null
                 }
@@ -84,21 +84,28 @@ object QQSettingItemFactory {
         for (f in itemCls.declaredFields) {
             f.isAccessible = true
             try {
-                if ((f.name == "g" || f.name == "title") && (CharSequence::class.java.isAssignableFrom(f.type) || f.type == String::class.java)) {
-                    f.set(item, "Q宠后台伴侣")
-                }
-                if ((f.name == "h" || f.name == "subTitle") && (CharSequence::class.java.isAssignableFrom(f.type) || f.type == String::class.java)) {
-                    f.set(item, "纯后台全自动调度")
+                val isStringType = CharSequence::class.java.isAssignableFrom(f.type) || f.type == String::class.java
+                if (isStringType) {
+                    if (f.name == "g" || f.name.equals("title", ignoreCase = true)) {
+                        f.set(item, "Q宠后台伴侣")
+                    } else if (f.name == "i" || f.name.equals(
+                            "subTitle",
+                            ignoreCase = true
+                        ) || f.name.equals("subtitle", ignoreCase = true)
+                    ) {
+                        f.set(item, "纯后台全自动调度")
+                    }
                 }
             } catch (e: Throwable) {
-            if (e is kotlinx.coroutines.CancellationException) throw e}
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            }
         }
 
         val clickListenerMethod = itemCls.declaredMethods.firstOrNull { m ->
             m.parameterTypes.size == 1 && (
                     m.parameterTypes[0].name.contains("Function0") ||
-                    m.parameterTypes[0].name.contains("OnClickListener")
-            )
+                            m.parameterTypes[0].name.contains("OnClickListener")
+                    )
         } ?: return
 
         try {
@@ -139,7 +146,8 @@ object QQSettingItemFactory {
                     return c.newInstance(*args)
                 }
             } catch (e: Throwable) {
-            if (e is kotlinx.coroutines.CancellationException) throw e}
+                if (e is kotlinx.coroutines.CancellationException) throw e
+            }
         }
         return null
     }

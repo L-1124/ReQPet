@@ -81,4 +81,25 @@ class SettingsBackStackTest {
             assertEquals(SettingsPage.HOME, restored.currentPage)
         }
     }
+
+    @Test
+    fun `a repeated destination during back preserves reverse direction until a real push`() {
+        val stack = SettingsBackStack()
+        stack.navigate(SettingsPage.TASKS)
+        stack.navigate(SettingsPage.CARE)
+        assertTrue(stack.popBack())
+        assertEquals(SettingsPage.TASKS, stack.currentPage)
+        assertTrue(stack.isBackNavigation)
+
+        stack.navigate(SettingsPage.TASKS)
+        assertTrue(stack.isBackNavigation)
+        assertTrue(stack.popBack())
+        assertEquals(SettingsPage.HOME, stack.currentPage)
+
+        stack.navigate(SettingsPage.PK)
+        assertFalse(stack.isBackNavigation)
+        assertEquals(SettingsPage.PK, stack.currentPage)
+        assertTrue(stack.popBack())
+        assertEquals(SettingsPage.HOME, stack.currentPage)
+    }
 }

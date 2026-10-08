@@ -1,5 +1,8 @@
 package com.copilot.qqpet.ui.compose
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.saveable.listSaver
 
@@ -7,12 +10,15 @@ internal class SettingsBackStack(initialPage: SettingsPage = SettingsPage.HOME) 
     private val pages = mutableStateListOf(SettingsPage.HOME).apply {
         if (initialPage != SettingsPage.HOME) add(initialPage)
     }
+    var isBackNavigation by mutableStateOf(false)
+        private set
 
     val currentPage: SettingsPage
         get() = pages.last()
 
     fun navigate(page: SettingsPage) {
         if (page == currentPage) return
+        isBackNavigation = page == SettingsPage.HOME
         if (page == SettingsPage.HOME) {
             pages.removeRange(1, pages.size)
         } else {
@@ -22,6 +28,7 @@ internal class SettingsBackStack(initialPage: SettingsPage = SettingsPage.HOME) 
 
     fun popBack(): Boolean {
         if (pages.size == 1) return false
+        isBackNavigation = true
         pages.removeAt(pages.lastIndex)
         return true
     }

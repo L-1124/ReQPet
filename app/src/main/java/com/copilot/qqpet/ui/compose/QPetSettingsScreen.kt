@@ -1,7 +1,12 @@
 package com.copilot.qqpet.ui.compose
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -109,11 +114,24 @@ internal fun QPetSettingsContent(
             )
         }
     ) { padding ->
-        Box(
+        AnimatedContent(
+            targetState = page,
             modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            val displayedPage = page
+            contentAlignment = Alignment.TopCenter,
+            contentKey = { it },
+            transitionSpec = {
+                val direction = if (navigation.isBackNavigation) {
+                    AnimatedContentTransitionScope.SlideDirection.End
+                } else {
+                    AnimatedContentTransitionScope.SlideDirection.Start
+                }
+                (slideIntoContainer(direction, tween(220), initialOffset = { it / 8 }) +
+                    fadeIn(tween(180))) togetherWith
+                    (slideOutOfContainer(direction, tween(220), targetOffset = { it / 8 }) +
+                        fadeOut(tween(140)))
+            },
+            label = "settings_page"
+        ) { displayedPage ->
             stateHolder.SaveableStateProvider(displayedPage.name) {
                 LazyColumn(
                     modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth().fillMaxHeight(),

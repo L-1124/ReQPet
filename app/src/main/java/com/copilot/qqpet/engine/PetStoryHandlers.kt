@@ -105,6 +105,11 @@ internal object PetStoryHandlers {
         return when {
             story.isReadyToSettle -> story.storyId
             story.isIdle -> PetAdventureEngine.pendingSettlementStoryId
+                ?: PetAdventureEngine.lastActiveStoryId?.takeIf {
+                    // Expiry may clear running fields while the known story still needs settlement.
+                    PetAdventureEngine.currentTaskEndTimeMillis > 0L &&
+                        (story.storyId.isNullOrBlank() || story.storyId == it)
+                }
             else -> null
         }
     }
@@ -117,6 +122,11 @@ internal object PetStoryHandlers {
         story: StoryStatusResult
     ): Boolean {
         val pendingId = resolveSettlementStoryId(story) ?: return false
+        val source = when {
+            !story.isIdle -> "server_ready"
+            PetAdventureEngine.pendingSettlementStoryId != null -> "pending_retry"
+            else -> "tracked_expiry"
+        }
 
         PetAdventureEngine.lastActiveStoryId = pendingId
         PetAdventureEngine.pendingSettlementStoryId = pendingId
@@ -124,7 +134,7 @@ internal object PetStoryHandlers {
         RuntimeDiagnostics.event(
             "settlement_start", "transaction" to PetAdventureEngine.currentTransactionId,
             "cycle" to PetAdventureEngine.currentCycleId, "story_id" to RuntimeDiagnostics.id(pendingId),
-            "source" to (if (story.isIdle) "pending_retry" else "server_ready")
+            "source" to source
         )
         val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, pendingId, petId)
         RuntimeDiagnostics.event(

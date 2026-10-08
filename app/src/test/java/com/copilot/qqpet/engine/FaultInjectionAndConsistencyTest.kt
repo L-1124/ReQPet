@@ -57,6 +57,29 @@ class FaultInjectionAndConsistencyTest {
     }
 
     @Test
+    fun expiredTrackedStorySettlesWhenServerClearsRunningFields() {
+        val idle = PetCareerProtocolClient.parseStoryStatus(
+            0, ProtoWire.message().writeBytes(1, byteArrayOf()).writeString(2, "6400-story").toByteArray(), null
+        )
+        PetAdventureEngine.lastActiveStoryId = "6400-story"
+        PetAdventureEngine.currentTaskEndTimeMillis = 100_001L
+        assertNull(PetStoryHandlers.resolveSettlementStoryId(idle, now = 100_000L))
+        assertEquals("6400-story", PetStoryHandlers.resolveSettlementStoryId(idle, now = 100_001L))
+        PetAdventureEngine.clearSettledStory("6400-story")
+        assertNull(PetStoryHandlers.resolveSettlementStoryId(idle, now = 100_002L))
+    }
+
+    @Test
+    fun idleSettlementRequiresKnownDeadlineAndMatchingStoryIdentity() {
+        PetAdventureEngine.lastActiveStoryId = "6400-story"
+        val idle = StoryStatusResult(0, null, null, "6400-story", status = 0L)
+        assertNull(PetStoryHandlers.resolveSettlementStoryId(idle, now = 100_000L))
+        PetAdventureEngine.currentTaskEndTimeMillis = 90_000L
+        assertNull(PetStoryHandlers.resolveSettlementStoryId(idle.copy(storyId = "different-story"), now = 100_000L))
+        assertEquals("6400-story", PetStoryHandlers.resolveSettlementStoryId(idle.copy(storyId = null), now = 100_000L))
+    }
+
+    @Test
     fun unstartedOrUnknownStoryDoesNotSettle() {
         for (start in listOf(null, 0L, -1L)) {
             val reply = statusReply(startTimestamp = start)

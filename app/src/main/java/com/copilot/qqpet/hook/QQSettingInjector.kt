@@ -1,12 +1,12 @@
 package com.copilot.qqpet.hook
 
 import android.content.Context
-import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.copilot.qqpet.HookEntry
-import com.copilot.qqpet.ui.QQSettingFragment
+import com.copilot.qqpet.ui.SettingsDialogController
+import com.copilot.qqpet.ui.SettingsTrace
 
 object QQSettingInjector {
 
@@ -25,7 +25,6 @@ object QQSettingInjector {
     }
 
     fun inject(classLoader: ClassLoader) {
-        PublicFragmentHostHook.install(classLoader)
         if (isHooked) return
 
         val providerClassNames = resolveProviderClassNames()
@@ -273,28 +272,32 @@ object QQSettingInjector {
     }
 
     private fun onSettingEntryClick(context: Context) {
-        HookLog.trace(TAG, "入口被点击 context=${context.javaClass.name}")
-        HookLog.log(TAG, "用户在 QQ 设置中点击了「Q宠后台伴侣」！")
-        try {
-            HookEntry.globalEngine?.startBackgroundLoop(context.applicationContext)
-            mainHandler.post { openSettingPage(context) }
-        } catch (t: Throwable) {
-            if (t is kotlinx.coroutines.CancellationException) throw t
-            HookLog.trace(TAG, "调起设置页异常", t)
+        SettingsTrace.trace("settings.entry_click") {
+            HookLog.trace(TAG, "入口被点击 context=${context.javaClass.name}")
+            HookLog.log(TAG, "用户在 QQ 设置中点击了「Q宠后台伴侣」！")
+            try {
+                HookEntry.globalEngine?.startBackgroundLoop(context.applicationContext)
+                mainHandler.post {
+                    try {
+                        openSettingPage(context)
+                    } catch (t: Throwable) {
+                        HookLog.trace(TAG, "异步打开设置页异常", t)
+                    }
+                }
+            } catch (t: Throwable) {
+                HookLog.trace(TAG, "调起设置页异常", t)
+            }
         }
     }
 
-    /** 用宿主自己的通用 Fragment 容器打开设置页，形态与 QQ 原生设置页一致 */
     private fun openSettingPage(context: Context) {
-        try {
-            val loader = HookEntry.latestClassLoader ?: context.classLoader
-            val hostClass = loader.loadClass("com.tencent.mobileqq.activity.QPublicFragmentActivity")
-            val start = hostClass.getMethod("start", Context::class.java, Intent::class.java, Class::class.java)
-            start.invoke(null, context, null, QQSettingFragment::class.java)
-            HookLog.trace(TAG, "已请求宿主容器打开设置页")
-        } catch (t: Throwable) {
-            if (t is kotlinx.coroutines.CancellationException) throw t
-            HookLog.trace(TAG, "打开设置页失败", t)
+        SettingsTrace.trace("settings.open_setting_page") {
+            try {
+                SettingsDialogController.show(context)
+                HookLog.trace(TAG, "已请求打开设置页")
+            } catch (t: Throwable) {
+                HookLog.trace(TAG, "打开设置页失败", t)
+            }
         }
     }
 }

@@ -21,7 +21,7 @@ android {
     buildTypes {
         release {
             optimization {
-                enable = false
+                enable = true
             }
             signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
@@ -50,10 +50,11 @@ android {
 }
 
 dependencies {
+    // AGP 内置 Kotlin 版本与 Compose 插件不同，映射工具必须跟随 Compose 插件版本。
+    add("composeMappingProducerClasspath", "org.jetbrains.kotlin:compose-group-mapping:${libs.versions.kotlin.get()}")
+
     compileOnly(libs.libxposed.api)
-    compileOnly(project(":qqstub"))
-    // 运行期的 androidx.fragment 由宿主提供，这里只需编译期可见
-    compileOnly(libs.androidx.fragment)
+    implementation(libs.androidx.core)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

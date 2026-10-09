@@ -7,7 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
-import com.copilot.qqpet.HookEntry
+import com.copilot.qqpet.ui.SettingsTrace
 import kotlinx.coroutines.launch
 import com.copilot.qqpet.engine.EngineLog
 import com.copilot.qqpet.engine.LogEntry
@@ -80,12 +80,14 @@ class SettingsState(
 
     fun attach(scope: kotlinx.coroutines.CoroutineScope) {
         if (previewMode) return
-        prefs.registerOnSharedPreferenceChangeListener(prefListener)
-        for ((k, v) in prefs.all) values[k] = v
-        logCollectJob?.cancel()
-        logCollectJob = scope.launch {
-            EngineLog.logFlow.collect {
-                refreshLogs()
+        SettingsTrace.trace("settings.state_attach") {
+            prefs.registerOnSharedPreferenceChangeListener(prefListener)
+            for ((k, v) in prefs.all) values[k] = v
+            logCollectJob?.cancel()
+            logCollectJob = scope.launch {
+                EngineLog.logFlow.collect {
+                    refreshLogs()
+                }
             }
         }
     }
@@ -148,41 +150,43 @@ class SettingsState(
     /** 每秒 tick 与页面 resume 都会调用：引擎状态、日志每秒刷新；prefs 仅在外部变化时重读 */
     fun refresh() {
         if (previewMode) return
-        statusText = PetAdventureEngine.formatLiveStatusText()
-        hasOngoingTask = PetAdventureEngine.getLiveRemainingSeconds() > 0L
-        val details = PetAdventureEngine.cachedSchoolDetails
-        schoolDetails = details
-        workPlaces = PetAdventureEngine.cachedWorkPlaces
-        workJobs = PetAdventureEngine.cachedWorkJobs
-        hireableFriends = PetAdventureEngine.cachedHireableFriends
+        SettingsTrace.trace("settings.state_refresh") {
+            statusText = PetAdventureEngine.formatLiveStatusText()
+            hasOngoingTask = PetAdventureEngine.getLiveRemainingSeconds() > 0L
+            val details = PetAdventureEngine.cachedSchoolDetails
+            schoolDetails = details
+            workPlaces = PetAdventureEngine.cachedWorkPlaces
+            workJobs = PetAdventureEngine.cachedWorkJobs
+            hireableFriends = PetAdventureEngine.cachedHireableFriends
 
-        val petId = PetAdventureEngine.cachedPetId
-        val attrs = if (!petId.isNullOrEmpty()) {
-            QQPetDirectBridge.cachedPetAttributes ?: HookEntry.globalBridge?.getPetAttributes(petId)
-        } else {
-            null
-        }
-        val attrPrefix = if (details != null && details.code == 0) {
-            "力量 ${details.power}  智力 ${details.intel}  魅力 ${details.charm}"
-        } else {
-            "实时同步官方属性中"
-        }
-        val liveCare = if (attrs != null && attrs.energy >= 0f) {
-            " · 体力 ${attrs.energy.toInt()} 清洁 ${attrs.clean.toInt()}"
-        } else {
-            ""
-        }
-        attributesText = "$attrPrefix$liveCare"
+            val petId = PetAdventureEngine.cachedPetId
+            val attrs = if (!petId.isNullOrEmpty()) {
+                QQPetDirectBridge.cachedPetAttributes
+            } else {
+                null
+            }
+            val attrPrefix = if (details != null && details.code == 0) {
+                "力量 ${details.power}  智力 ${details.intel}  魅力 ${details.charm}"
+            } else {
+                "实时同步官方属性中"
+            }
+            val liveCare = if (attrs != null && attrs.energy >= 0f) {
+                " · 体力 ${attrs.energy.toInt()} 清洁 ${attrs.clean.toInt()}"
+            } else {
+                ""
+            }
+            attributesText = "$attrPrefix$liveCare"
 
-        // PK 黑名单仅在名单/好友缓存实际变化时重算（避免每秒读 prefs + CSV 解析）
-        val blKey = PetAdventureEngine.currentActiveUin to PetAdventureEngine.prefPkBlacklistUinsCsv
-        val friendCacheStamp = PetAdventureEngine.cachedHireableFriends
-        if (blKey != lastPkSummaryKey || friendCacheStamp !== lastPkSummaryFriends) {
-            lastPkSummaryKey = blKey
-            lastPkSummaryFriends = friendCacheStamp
-            pkBlacklistSummary = buildPkBlacklistSummary()
+            // PK 黑名单仅在名单/好友缓存实际变化时重算（避免每秒读 prefs + CSV 解析）
+            val blKey = PetAdventureEngine.currentActiveUin to PetAdventureEngine.prefPkBlacklistUinsCsv
+            val friendCacheStamp = PetAdventureEngine.cachedHireableFriends
+            if (blKey != lastPkSummaryKey || friendCacheStamp !== lastPkSummaryFriends) {
+                lastPkSummaryKey = blKey
+                lastPkSummaryFriends = friendCacheStamp
+                pkBlacklistSummary = buildPkBlacklistSummary()
+            }
+            refreshLogs()
         }
-        refreshLogs()
     }
 
 

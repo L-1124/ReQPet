@@ -21,4 +21,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "QPetCompanion"
 include(":app")
-include(":qqstub")

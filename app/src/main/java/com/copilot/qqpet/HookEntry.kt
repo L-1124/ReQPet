@@ -8,11 +8,11 @@ import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.hook.CrashInterceptor
 import com.copilot.qqpet.hook.HookApi
 import com.copilot.qqpet.hook.HookLog
-import com.copilot.qqpet.hook.HostClassLoaderBridge
 import com.copilot.qqpet.hook.QQSettingInjector
 import com.copilot.qqpet.hook.TinkerBlocker
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
+import com.copilot.qqpet.ui.SettingsDialogController
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedInterface
@@ -130,12 +130,7 @@ class HookEntry : XposedModule() {
         // 尽早注入全局未捕获异常监控，防止宿主 Crash SDK 静默强杀
         CrashInterceptor.install()
 
-        // 必须在任何"模块类继承宿主类"的解析发生之前完成，否则 NoClassDefFoundError 会被缓存
-        val hostResolvable = HostClassLoaderBridge.install(javaClass.classLoader ?: classLoader, classLoader)
-        HookLog.trace(
-            TAG,
-            "已注入 QQ 主进程 pid=${android.os.Process.myPid()} 宿主类解析=${if (hostResolvable) "OK" else "失败"}"
-        )
+        HookLog.trace(TAG, "已注入 QQ 主进程 pid=${android.os.Process.myPid()}")
         HookLog.log(
             TAG,
             "成功注入 QQ 主进程: $actualProcess, PID=${android.os.Process.myPid()} (libxposed api=$apiVersion)"
@@ -154,7 +149,6 @@ class HookEntry : XposedModule() {
                             synchronized(this@HookEntry) {
                                 val appLoader = app.classLoader
                                 latestClassLoader = appLoader
-                                HostClassLoaderBridge.updateHostLoader(appLoader)
                                 CrashInterceptor.install(app)
                                 HookLog.log(TAG, "BaseApplicationImpl.onCreate 触发, classLoader=$appLoader")
                                 initEngineAndReceiver(app, appLoader, "BaseApplicationImpl.onCreate")
@@ -185,7 +179,6 @@ class HookEntry : XposedModule() {
                             synchronized(this@HookEntry) {
                                 val appLoader = context.classLoader
                                 latestClassLoader = appLoader
-                                HostClassLoaderBridge.updateHostLoader(appLoader)
                                 CrashInterceptor.install(context)
                                 initEngineAndReceiver(context, appLoader, "MobileQQ.onCreate")
                                 hookSplashActivity(appLoader)
@@ -222,7 +215,6 @@ class HookEntry : XposedModule() {
                             if (activity != null && activity.packageName == TARGET_PACKAGE) {
                                 val appContext = activity.applicationContext ?: activity
                                 latestClassLoader = activity.classLoader
-                                HostClassLoaderBridge.updateHostLoader(activity.classLoader)
                                 QQSettingInjector.inject(activity.classLoader)
                                 if (globalBridge?.isReady != true) {
                                     initEngineAndReceiver(
@@ -248,7 +240,6 @@ class HookEntry : XposedModule() {
                             if (activity != null && activity.packageName == TARGET_PACKAGE) {
                                 val appContext = activity.applicationContext ?: activity
                                 latestClassLoader = activity.classLoader
-                                HostClassLoaderBridge.updateHostLoader(activity.classLoader)
                                 QQSettingInjector.inject(activity.classLoader)
                                 if (globalBridge?.isReady != true) {
                                     initEngineAndReceiver(
@@ -278,6 +269,7 @@ class HookEntry : XposedModule() {
     fun initEngineAndReceiver(context: Context, classLoader: ClassLoader, from: String): Boolean {
         val appContext = context.applicationContext ?: context
         com.copilot.qqpet.engine.RuntimeDiagnostics.bind(appContext)
+        SettingsDialogController.install(appContext)
 
         try {
             val prefs = appContext.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)

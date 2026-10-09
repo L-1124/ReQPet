@@ -26,6 +26,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -81,11 +84,14 @@ internal fun QPetSettingsContent(
     val page = navigation.currentPage
     val scope = rememberCoroutineScope()
     val stateHolder = rememberSaveableStateHolder()
-    LaunchedEffect(state) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(state, lifecycleOwner) {
         if (!state.previewMode) {
-            while (true) {
-                delay(1_000L)
-                state.refresh()
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (true) {
+                    delay(1_000L)
+                    state.refresh()
+                }
             }
         }
     }

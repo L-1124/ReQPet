@@ -17,13 +17,13 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.copilot.qqpet.R
+import com.copilot.qqpet.hook.HookLog
 
 /**
  * 注入式 Compose 运行环境宿主：提供模块闭环的 ViewTree*Owner。
  *
- * WindowRecomposer 从 android.R.id.content 的直接子视图（宿主 Fragment 容器）向上查
- * ViewTree*Owner，因此 attach 时沿祖先链把模块 owner 打满。模块与宿主 tag key 不同，
- * 在 mKeyedTags 中共存互不覆盖。
+ * 沿视图祖先链安装模块 LifecycleOwner、ViewModelStoreOwner 与 SavedStateRegistryOwner，
+ * 止于指定的边界视图（Dialog DecorView），防止作用域逸出到外部窗口。
  */
 class ComposeInjectionHost(savedState: Bundle? = null) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
@@ -54,13 +54,29 @@ class ComposeInjectionHost(savedState: Bundle? = null) : LifecycleOwner, ViewMod
         savedStateController.performSave(outState)
     }
 
-    fun installOwnersOnAttach(root: View) {
+    fun installOwnersOnAttach(
+        root: View,
+        boundaryView: View,
+        onError: ((Throwable) -> Unit)? = null
+    ) {
         root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) {
-                var node: View? = v
-                while (node != null) {
-                    tagOwners(node)
-                    node = node.parent as? View
+                try {
+                    var node: View? = v
+                    while (node != null) {
+                        tagOwners(node)
+                        if (node === boundaryView) {
+                            break
+                        }
+                        node = node.parent as? View
+                    }
+                } catch (t: Throwable) {
+                    HookLog.e("ComposeInjectionHost", "Failed installing ViewTree owners on attach", t)
+                    try {
+                        onError?.invoke(t)
+                    } catch (cbError: Throwable) {
+                        HookLog.e("ComposeInjectionHost", "Error invoking onError callback", cbError)
+                    }
                 }
             }
 
@@ -88,6 +104,9 @@ class ComposeInjectionHost(savedState: Bundle? = null) : LifecycleOwner, ViewMod
 
     fun onPause() {
         lifecycleRegistry.currentState = Lifecycle.State.STARTED
+    }
+    fun onStop() {
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
     }
 
     fun onDestroy() {

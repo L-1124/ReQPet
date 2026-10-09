@@ -1,19 +1,12 @@
 package com.copilot.qqpet.ui.compose
 
-import android.app.Activity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import androidx.core.view.WindowCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.copilot.qqpet.ui.theme.HostTheme
 
 /**
@@ -24,7 +17,6 @@ import com.copilot.qqpet.ui.theme.HostTheme
  */
 @Composable
 fun QPetExpressiveTheme(dark: Boolean, content: @Composable () -> Unit) {
-    SystemBarAppearanceEffect(dark)
     val context = LocalContext.current
     val base = if (dark) darkColorScheme() else expressiveLightColorScheme()
     val colorScheme = HostTheme.brandColor(context)?.let { brand ->
@@ -38,24 +30,4 @@ fun QPetExpressiveTheme(dark: Boolean, content: @Composable () -> Unit) {
         motionScheme = MotionScheme.expressive(),
         content = content
     )
-}
-
-/** 状态栏图标明暗跟随主题；系统在切前台后可能重置，故 ON_RESUME 时重新应用。 */
-@Composable
-private fun SystemBarAppearanceEffect(dark: Boolean) {
-    val view = LocalView.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(view, lifecycleOwner, dark) {
-        val activity = view.context as? Activity ?: return@DisposableEffect onDispose { }
-        val controller = WindowCompat.getInsetsController(activity.window, view)
-        fun apply() {
-            controller.isAppearanceLightStatusBars = !dark
-        }
-        apply()
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) apply()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
 }

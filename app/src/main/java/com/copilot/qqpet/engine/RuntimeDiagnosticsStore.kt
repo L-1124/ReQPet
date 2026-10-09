@@ -22,7 +22,7 @@ internal class RuntimeDiagnosticIds(private val salt: ByteArray = ByteArray(32).
 
     fun id(value: String?): String {
         if (value.isNullOrEmpty()) return "none"
-        val hash = digest.get().run {
+        val hash = requireNotNull(digest.get()).run {
             reset()
             update(salt)
             digest(value.toByteArray(Charsets.UTF_8))

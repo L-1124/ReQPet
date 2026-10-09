@@ -17,8 +17,8 @@ object HookLog {
                 HookApi.log(Log.INFO, tag, msg)
             } catch (e: Throwable) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                Log.i(tag, msg)
             }
+            Log.i(tag, msg)
         }
     }
 

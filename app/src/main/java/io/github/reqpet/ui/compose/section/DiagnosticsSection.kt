@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import io.github.reqpet.ui.PreferencesHelper
 import io.github.reqpet.ui.compose.ActionRow
 import io.github.reqpet.ui.compose.SectionHeader
+import io.github.reqpet.ui.compose.InfoRow
 import io.github.reqpet.ui.compose.SettingsGroup
 import io.github.reqpet.ui.compose.SettingsState
 import io.github.reqpet.ui.compose.ToggleRow
@@ -93,6 +94,76 @@ fun DiagnosticsSection(state: SettingsState) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        SectionHeader("宿主业务入口")
+        SettingsGroup {
+            item {
+                InfoRow(
+                    title = "业务发包策略",
+                    value = "当前业务路径：现有代理发包 · 宿主入口仅探测"
+                )
+            }
+            item {
+                val report = state.hostProbeReport
+                val trailingText = if (report.isScanning) "探测中" else "重新探测"
+                val subtitleText = buildString {
+                    append("实际业务就绪未验证")
+                    if (report.scanTimestamp > 0L) {
+                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                        append(" · ").append(sdf.format(java.util.Date(report.scanTimestamp)))
+                        if (report.isFromCache) {
+                            append(" (缓存命中)")
+                        } else {
+                            append(" (全新扫描)")
+                        }
+                    }
+                    if (report.apkFingerprint.isNotEmpty()) {
+                        append(" · 指纹: ").append(report.apkFingerprint)
+                    }
+                }
+                ActionRow(
+                    title = "重新探测",
+                    subtitle = subtitleText,
+                    trailing = trailingText,
+                    onClick = {
+                        if (!report.isScanning) {
+                            state.reprobeHostBusiness()
+                        }
+                    }
+                )
+            }
+
+            items(state.hostProbeReport.entries) { entry ->
+                val subtitle = buildString {
+                    append("状态: ").append(entry.status.label)
+                    if (entry.descriptor != null) {
+                        append("\n").append(entry.descriptor)
+                    }
+                    if (entry.adapterDescriptor != null) {
+                        append("\nAdapter: ").append(entry.adapterDescriptor)
+                    }
+                    if (entry.notice != null) {
+                        append("\n说明: ").append(entry.notice)
+                    }
+                }
+                ActionRow(
+                    title = entry.title,
+                    subtitle = subtitle,
+                    trailing = entry.status.label,
+                    onClick = {}
+                )
+            }
+
+            items(state.hostProbeReport.unmappedFeatures) { entry ->
+                ActionRow(
+                    title = entry.title,
+                    subtitle = entry.notice ?: "宿主入口尚未确认",
+                    trailing = entry.status.label,
+                    onClick = {}
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
         SectionHeader("调试选项")
         SettingsGroup {
             item {
@@ -100,7 +171,7 @@ fun DiagnosticsSection(state: SettingsState) {
                     title = "调试详细日志",
                     checked = state.bool(PreferencesHelper.KEY_DEBUG_LOG, false),
                     onCheckedChange = { state.setBool(PreferencesHelper.KEY_DEBUG_LOG, it) },
-                    subtitle = "默认静默，开启后向 libxposed 打印详细发包日志"
+                    subtitle = "默认静默，开启后向 libxposed 与系统 logcat 打印详细业务日志"
                 )
             }
             item {

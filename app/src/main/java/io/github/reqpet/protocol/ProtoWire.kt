@@ -29,6 +29,19 @@ class ProtoWire {
         return this
     }
 
+    fun writeFixed32(tag: Int, value: Int): ProtoWire {
+        writeTag(tag, 5)
+        output.write(value and 0xFF)
+        output.write((value ushr 8) and 0xFF)
+        output.write((value ushr 16) and 0xFF)
+        output.write((value ushr 24) and 0xFF)
+        return this
+    }
+
+    fun writeFloat(tag: Int, value: Float): ProtoWire {
+        return writeFixed32(tag, java.lang.Float.floatToRawIntBits(value))
+    }
+
     private fun writeTag(fieldNumber: Int, wireType: Int) {
         writeRawVarint(((fieldNumber shl 3) or wireType).toLong())
     }

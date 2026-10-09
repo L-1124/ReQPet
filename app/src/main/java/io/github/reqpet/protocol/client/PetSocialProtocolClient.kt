@@ -8,6 +8,8 @@ import io.github.reqpet.protocol.QQPetDirectBridge.HireableFriend
 import io.github.reqpet.protocol.QQPetDirectBridge.LikeMember
 import io.github.reqpet.protocol.channel.OidbChannel
 import io.github.reqpet.protocol.model.FriendCoinBagInfo
+import io.github.reqpet.protocol.model.FriendPetSnapshot
+import io.github.reqpet.protocol.model.GuestPetStatus
 import io.github.reqpet.protocol.model.SnatchCoinBagResult
 
 /**
@@ -202,6 +204,149 @@ class PetSocialProtocolClient(
                 callback(code, emptyList(), false, "", errorMsg)
             }
         }
+    }
+
+    fun fetchFriendPetList(
+        cookie: String = "",
+        callback: (code: Int, friends: List<FriendPetSnapshot>, hasMore: Boolean, nextCookie: String, errorMsg: String?) -> Unit
+    ) {
+        val body = ProtoWire.message()
+            .writeString(1, cookie)
+            .writeVarint(2, 3L)
+            .writeVarint(3, 0L)
+            .toByteArray()
+        channel.sendOidb("OidbSvcTrpcTcp.0x985d_0", 39005, 0, body) { code, data, errorMsg ->
+            if (code == 0 && data != null) {
+                val list = parseFriendPetSnapshots(data)
+                val nextCookie = ProtoWire.firstString(data, 2) ?: ""
+                val hasMore = (ProtoWire.firstVarint(data, 3) ?: 0L) != 0L
+                EngineLog.i("PetSocialClient", "fetchFriendPetList: 解析到 ${list.size} 位好友宠物, hasMore=$hasMore")
+                callback(0, list, hasMore, nextCookie, null)
+            } else {
+                EngineLog.w("PetSocialClient", "fetchFriendPetList 失败: code=$code, err=$errorMsg")
+                callback(code, emptyList(), false, "", errorMsg)
+            }
+        }
+    }
+
+    internal fun parseFriendPetSnapshots(data: ByteArray): List<FriendPetSnapshot> {
+        val list = mutableListOf<FriendPetSnapshot>()
+        val friendNodes = ProtoWire.allBytes(data, 1)
+        for (nodeBytes in friendNodes) {
+            val userBytes = ProtoWire.firstBytes(nodeBytes, 2)
+            val friendUin = ProtoWire.firstVarint(userBytes, 1) ?: 0L
+            val friendNick = ProtoWire.firstString(userBytes, 2)?.trim().orEmpty()
+            val profileBytes = ProtoWire.firstBytes(nodeBytes, 1)
+            val petNick = ProtoWire.firstString(profileBytes, 1)?.trim().orEmpty()
+            val friendPetId = ProtoWire.firstString(profileBytes, 8)?.trim()
+                ?: ProtoWire.firstString(profileBytes, 101)?.trim().orEmpty()
+            val levelNode = ProtoWire.firstBytes(profileBytes, 13)
+            val level = (ProtoWire.firstVarint(levelNode, 1) ?: 0L).toInt()
+            val hireStatus = (ProtoWire.firstVarint(nodeBytes, 3) ?: 0L).toInt()
+            val displayValueBytes = ProtoWire.firstBytes(nodeBytes, 4)
+            val feelBytes = ProtoWire.firstBytes(displayValueBytes, 1)
+            val hungerBytes = ProtoWire.firstBytes(displayValueBytes, 2)
+            val cleanBytes = ProtoWire.firstBytes(displayValueBytes, 3)
+            val mood = if (feelBytes != null) (ProtoWire.firstFloat(feelBytes, 3) ?: 100f) else 100f
+            val energy = if (hungerBytes != null) (ProtoWire.firstFloat(hungerBytes, 3) ?: 100f) else 100f
+            val clean = if (cleanBytes != null) (ProtoWire.firstFloat(cleanBytes, 3) ?: 100f) else 100f
+            val coinbagId = ProtoWire.firstString(ProtoWire.firstBytes(nodeBytes, 21), 1)?.trim().orEmpty()
+            if (coinbagId.isNotEmpty()) {
+                onOwnBagFound(coinbagId)
+            }
+            list.add(
+                FriendPetSnapshot(
+                    uin = friendUin,
+                    userNick = friendNick,
+                    petId = friendPetId,
+                    petNick = petNick,
+                    level = level,
+                    energy = energy,
+                    clean = clean,
+                    mood = mood,
+                    hireStatus = hireStatus,
+                    coinbagId = coinbagId
+                )
+            )
+        }
+        return list
+    }
+
+    fun fetchGuestPetDenStatus(
+        petId: String,
+        callback: (code: Int, status: GuestPetStatus?, errorMsg: String?) -> Unit
+    ) {
+        val body = ProtoWire.message()
+            .writeString(1, petId)
+            .writeBytes(2, byteArrayOf(8, 9, 14))
+            .toByteArray()
+        channel.sendOidb("OidbSvcTrpcTcp.0x9acb_0", CMD_HOME_MSG, SUBCMD_HOME_MSG, body) { code, data, errorMsg ->
+            if (code == 0 && data != null) {
+                val status = parseGuestPetStatus(petId, data)
+                EngineLog.i(
+                    TAG,
+                    "fetchGuestPetDenStatus 成功: petId=$petId, isSick=${status.isSick}, coinbagId=${status.coinbagId}"
+                )
+                callback(0, status, null)
+            } else {
+                EngineLog.w(TAG, "fetchGuestPetDenStatus 失败 (petId=$petId): code=$code, err=$errorMsg")
+                callback(code, null, errorMsg)
+            }
+        }
+    }
+
+    internal fun parseGuestPetStatus(targetPetId: String, data: ByteArray): GuestPetStatus {
+        var isSick = false
+        var isTreating = false
+        var sicknessType = 0
+        var medicineId = ""
+        var countdownSec = 0L
+        var acceptStrangerPK = false
+        var coinbagId = ""
+
+        val msgList = ProtoWire.allBytes(data, 1)
+        for (mBytes in msgList) {
+            val type = (ProtoWire.firstVarint(mBytes, 1) ?: 0L).toInt()
+            val payload = ProtoWire.firstBytes(mBytes, 2) ?: continue
+            when (type) {
+                8 -> {
+                    acceptStrangerPK = (ProtoWire.firstVarint(payload, 52) ?: 0L) == 1L
+                }
+
+                9 -> {
+                    val sicknessInfoBytes = ProtoWire.firstBytes(payload, 1)
+                    if (sicknessInfoBytes != null) {
+                        countdownSec = ProtoWire.firstVarint(sicknessInfoBytes, 1) ?: 0L
+                        sicknessType = (ProtoWire.firstVarint(sicknessInfoBytes, 3) ?: 0L).toInt()
+                        medicineId = ProtoWire.firstString(sicknessInfoBytes, 4).orEmpty()
+                        isSick = sicknessType != 0
+                        isTreating = medicineId.isNotEmpty()
+                    }
+                }
+
+                14 -> {
+                    val bagId = ProtoWire.firstString(payload, 1)?.trim().orEmpty()
+                    val status = (ProtoWire.firstVarint(payload, 5) ?: 0L).toInt()
+                    val alreadyOpened = (ProtoWire.firstVarint(payload, 31) ?: 0L) != 0L
+                    if (bagId.isNotEmpty() && !alreadyOpened && status != BAG_STATUS_OPENED && status != BAG_STATUS_EXPIRED) {
+                        coinbagId = bagId
+                        onOwnBagFound(bagId)
+                    }
+                }
+            }
+        }
+        return GuestPetStatus(
+            petId = targetPetId,
+            isSick = isSick,
+            isTreating = isTreating,
+            sicknessType = sicknessType,
+            medicineId = medicineId,
+            recoverCountdownSec = countdownSec,
+            acceptAllPK = true,
+            acceptStrangerPK = acceptStrangerPK,
+            acceptAllEmploy = true,
+            coinbagId = coinbagId
+        )
     }
 
     private fun parseHireableFriends(data: ByteArray, currentOwnUin: String): List<HireableFriend> {

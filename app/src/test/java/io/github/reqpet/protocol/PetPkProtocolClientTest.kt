@@ -46,6 +46,10 @@ class PetPkProtocolClientTest {
     @Test
     fun queryFriendPkStatusDecodesW54HResponse() {
         var callbackInvoked = false
+        val mockHireStatus = ProtoWire.message()
+            .writeVarint(1, 10L)
+            .toByteArray()
+
         val mockPkStatus = ProtoWire.message()
             .writeVarint(1, 100L)
             .writeVarint(3, 30L)
@@ -54,10 +58,10 @@ class PetPkProtocolClientTest {
             .toByteArray()
 
         val responseData = ProtoWire.message()
+            .writeBytes(1, mockHireStatus)
             .writeBytes(2, mockPkStatus)
             .writeVarint(3, 10L)
             .toByteArray()
-
         val client = createClient { commandName, command, subCommand, _, callback ->
             assertEquals("OidbSvcTrpcTcp.0x9875_1", commandName)
             assertEquals(39029, command)
@@ -72,6 +76,8 @@ class PetPkProtocolClientTest {
             assertEquals(100, info?.rawStatus)
             assertEquals(30L, info?.remainingSec)
             assertEquals("story_test_123", info?.ongoingStoryId)
+            assertTrue(info?.canHire == true)
+            assertEquals(10, info?.hireStatus)
             assertNull(err)
         }
 

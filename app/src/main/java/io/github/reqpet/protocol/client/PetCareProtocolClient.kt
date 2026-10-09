@@ -8,6 +8,7 @@ import io.github.reqpet.protocol.QQPetDirectBridge.PetAttributes
 import io.github.reqpet.protocol.channel.OidbChannel
 import io.github.reqpet.protocol.model.FeedDetailResult
 import io.github.reqpet.protocol.model.FoodInventoryItem
+import io.github.reqpet.protocol.model.PetProfileDetail
 import io.github.reqpet.engine.AccountSessionGuard
 import io.github.reqpet.engine.PetAdventureEngine
 import io.github.reqpet.engine.state.AccountSessionStore
@@ -121,6 +122,42 @@ class PetCareProtocolClient(
             }
             callback(code, petId, data)
         }
+    }
+
+    fun queryPetProfile(
+        petId: String = "",
+        callback: (code: Int, profile: PetProfileDetail?, rawData: ByteArray?) -> Unit
+    ) {
+        val body = if (petId.isBlank()) {
+            ByteArray(0)
+        } else {
+            ProtoWire.message().writeString(1, petId).toByteArray()
+        }
+        channel.sendOidb("OidbSvcTrpcTcp.0x95e1_0", 38369, 0, body) { code, data, errorMsg ->
+            if (code == 0 && data != null) {
+                val profile = parsePetProfileDetail(petId, data)
+                callback(0, profile, data)
+            } else {
+                EngineLog.w(TAG, "queryPetProfile 失败 (petId=$petId): code=$code, err=$errorMsg")
+                callback(code, null, data)
+            }
+        }
+    }
+
+    internal fun parsePetProfileDetail(targetPetId: String, data: ByteArray): PetProfileDetail {
+        val petBytes = ProtoWire.firstBytes(data, 1) ?: data
+        val species = ProtoWire.firstString(petBytes, 1).orEmpty()
+        val levelNode = ProtoWire.firstBytes(petBytes, 4)
+        val level = (ProtoWire.firstVarint(levelNode, 1) ?: 0L).toInt()
+        val nameNode = ProtoWire.firstBytes(petBytes, 7)
+        val petName = ProtoWire.firstString(nameNode, 1).orEmpty()
+        val resolvedPetId = ProtoWire.firstString(petBytes, 101)?.trim().orEmpty().ifEmpty { targetPetId }
+        return PetProfileDetail(
+            petId = resolvedPetId,
+            species = species,
+            petName = petName,
+            level = level
+        )
     }
 
     fun resolveFoodId(): Long {

@@ -39,6 +39,10 @@ class PetPkProtocolClient(
         val body = buildQueryFriendPkStatusBody(friendUin, friendPetId, ownPetId)
         channel.sendOidb("OidbSvcTrpcTcp.0x9875_1", 39029, 1, body) { code, data, errorMsg ->
             if (code == 0 && data != null) {
+                val hireStatusBytes = ProtoWire.firstBytes(data, 1)
+                val hireRawStatus = (ProtoWire.firstVarint(hireStatusBytes, 1) ?: 0L).toInt()
+                val canHire = (hireRawStatus == 10 || hireRawStatus == 30)
+
                 val pkStatusBytes = ProtoWire.firstBytes(data, 2)
                 val rawStatus = (ProtoWire.firstVarint(pkStatusBytes, 1) ?: 0L).toInt()
                 val countDown = ProtoWire.firstVarint(pkStatusBytes, 4)
@@ -48,9 +52,9 @@ class PetPkProtocolClient(
                 val canPk = (rawStatus == 100 || rawStatus == 300)
                 EngineLog.i(
                     "PetPkClient",
-                    "queryFriendPkStatus: uin=$friendUin, rawStatus=$rawStatus, canPk=$canPk, storyId=$storyId"
+                    "queryFriendPkStatus: uin=$friendUin, rawStatus=$rawStatus, canPk=$canPk, canHire=$canHire, storyId=$storyId"
                 )
-                callback(0, PkStatusInfo(canPk, rawStatus, storyId, countDown), null)
+                callback(0, PkStatusInfo(canPk, rawStatus, storyId, countDown, canHire, hireRawStatus), null)
             } else {
                 EngineLog.w("PetPkClient", "queryFriendPkStatus 回包: code=$code, err=$errorMsg")
                 callback(code, null, errorMsg)

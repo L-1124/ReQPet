@@ -18,3 +18,6 @@ typealias SecondMapDetails = QQPetDirectBridge.SecondMapDetails
 typealias LikeMember = QQPetDirectBridge.LikeMember
 typealias PetAttributes = QQPetDirectBridge.PetAttributes
 typealias HireableFriend = QQPetDirectBridge.HireableFriend
+typealias FriendPetSnapshot = QQPetDirectBridge.FriendPetSnapshot
+typealias GuestPetStatus = QQPetDirectBridge.GuestPetStatus
+typealias PetProfileDetail = QQPetDirectBridge.PetProfileDetail

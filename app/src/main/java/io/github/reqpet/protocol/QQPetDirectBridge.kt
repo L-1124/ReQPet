@@ -143,7 +143,9 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
         val canPk: Boolean,
         val rawStatus: Int,
         val ongoingStoryId: String? = null,
-        val remainingSec: Long = 0L
+        val remainingSec: Long = 0L,
+        val canHire: Boolean = false,
+        val hireStatus: Int = 0
     )
 
     data class PkBattleResult(
@@ -164,6 +166,39 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
         val title: String? = null,
         val desc: String? = null,
         val errorMsg: String? = null
+    )
+
+    data class FriendPetSnapshot(
+        val uin: Long,
+        val userNick: String,
+        val petId: String,
+        val petNick: String,
+        val level: Int = 0,
+        val energy: Float = 100f,
+        val clean: Float = 100f,
+        val mood: Float = 100f,
+        val hireStatus: Int = 0,
+        val coinbagId: String = ""
+    )
+
+    data class GuestPetStatus(
+        val petId: String,
+        val isSick: Boolean = false,
+        val isTreating: Boolean = false,
+        val sicknessType: Int = 0,
+        val medicineId: String = "",
+        val recoverCountdownSec: Long = 0L,
+        val acceptAllPK: Boolean = true,
+        val acceptStrangerPK: Boolean = false,
+        val acceptAllEmploy: Boolean = true,
+        val coinbagId: String = ""
+    )
+
+    data class PetProfileDetail(
+        val petId: String,
+        val species: String,
+        val petName: String,
+        val level: Int = 0
     )
 
     companion object {
@@ -458,6 +493,21 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
         coinbagId: String,
         callback: (SnatchCoinBagResult) -> Unit
     ) = socialClient.snatchCoinBag(ownPetId, coinbagId, callback)
+
+    fun fetchFriendPetList(
+        cookie: String = "",
+        callback: (code: Int, friends: List<FriendPetSnapshot>, hasMore: Boolean, nextCookie: String, errorMsg: String?) -> Unit
+    ) = socialClient.fetchFriendPetList(cookie, callback)
+
+    fun fetchGuestPetDenStatus(
+        petId: String,
+        callback: (code: Int, status: GuestPetStatus?, errorMsg: String?) -> Unit
+    ) = socialClient.fetchGuestPetDenStatus(petId, callback)
+
+    fun queryPetProfile(
+        petId: String = "",
+        callback: (code: Int, profile: PetProfileDetail?, rawData: ByteArray?) -> Unit
+    ) = careClient.queryPetProfile(petId, callback)
 
     fun queryFriendPkStatus(
         friendUin: Long,

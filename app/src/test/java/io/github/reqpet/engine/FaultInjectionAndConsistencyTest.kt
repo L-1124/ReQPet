@@ -158,6 +158,35 @@ class FaultInjectionAndConsistencyTest {
     }
 
     @Test
+    fun disabledSettlementClearsExpiredTrackedStoryOnIdle() = kotlinx.coroutines.runBlocking {
+        PetAdventureEngine.enableSettle = false
+        PetAdventureEngine.lastActiveStoryId = "6400-story"
+        PetAdventureEngine.currentTaskEndTimeMillis = 100_000L
+        val idle = StoryStatusResult(0, null, null, "6400-story", status = 0L)
+        val bridge = io.github.reqpet.protocol.QQPetDirectBridge(ClassLoader.getSystemClassLoader())
+        val context = android.content.ContextWrapper(null)
+        val settled = PetStoryHandlers.handleStorySettlement(context, bridge, "pet-1", idle, now = 100_001L)
+        assertFalse(settled)
+        assertNull(PetAdventureEngine.lastActiveStoryId)
+        assertEquals(0L, PetAdventureEngine.currentTaskEndTimeMillis)
+    }
+
+    @Test
+    fun idleSettlementFailureClearsStaleStoryUnlessNotDueYet() = kotlinx.coroutines.runBlocking {
+        PetAdventureEngine.enableSettle = true
+        PetAdventureEngine.lastActiveStoryId = "6400-story"
+        PetAdventureEngine.currentTaskEndTimeMillis = 100_000L
+        val idle = StoryStatusResult(0, null, null, "6400-story", status = 0L)
+        val bridge = io.github.reqpet.protocol.QQPetDirectBridge(ClassLoader.getSystemClassLoader())
+        val context = android.content.ContextWrapper(null)
+        // bridge without delegate returns -1 (unready / failure), not 135004 -> clears story
+        val settled = PetStoryHandlers.handleStorySettlement(context, bridge, "pet-1", idle, now = 100_001L)
+        assertFalse(settled)
+        assertNull(PetAdventureEngine.lastActiveStoryId)
+        assertEquals(0L, PetAdventureEngine.currentTaskEndTimeMillis)
+    }
+
+    @Test
     fun formattingExpiredTaskDoesNotClearSettlementDeadline() {
         PetAdventureEngine.masterEnabled = true
         PetAdventureEngine.currentTaskEndTimeMillis = 1L

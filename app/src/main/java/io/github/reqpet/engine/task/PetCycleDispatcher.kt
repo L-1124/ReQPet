@@ -131,18 +131,20 @@ object PetCycleDispatcher {
                 PetAdventureEngine.lastActiveStoryId?.let { sId ->
                     PetAdventureEngine.pendingSettlementStoryId = sId
                     val (code, _) = PetHiredRecallTask.settleStoryAwait(bridge, sId, petId)
-                    if (code == 0) {
+                    if (code == 0 || code != 135004) {
                         PetAdventureEngine.clearSettledStory(sId)
-                        settled = true
-                        PetSocialTask.claimOnceAfterSettle(
-                            context,
-                            bridge,
-                            petId,
-                            PetAdventureEngine.currentActiveUin,
-                            PetAdventureEngine.enableClaimCoinBag
-                        ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
+                        settled = (code == 0)
+                        if (code == 0) {
+                            PetSocialTask.claimOnceAfterSettle(
+                                context,
+                                bridge,
+                                petId,
+                                PetAdventureEngine.currentActiveUin,
+                                PetAdventureEngine.enableClaimCoinBag
+                            ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
+                        }
                     }
-                    showToast(context, "已发起探险收益结算")
+                    showToast(context, if (code == 0) "已发起探险收益结算" else "任务已在手Q结清或已失效，已同步状态")
                 } ?: showToast(context, "当前暂无待结算任务")
                 settled
             }

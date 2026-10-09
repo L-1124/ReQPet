@@ -120,9 +120,16 @@ internal object PetStoryHandlers {
         context: Context,
         bridge: QQPetDirectBridge,
         petId: String,
-        story: StoryStatusResult
+        story: StoryStatusResult,
+        now: Long = System.currentTimeMillis()
     ): Boolean {
-        val pendingId = resolveSettlementStoryId(story) ?: return false
+        if (!PetAdventureEngine.enableSettle) {
+            if (story.isIdle && PetAdventureEngine.currentTaskEndTimeMillis in 1..now) {
+                PetAdventureEngine.lastActiveStoryId?.let { PetAdventureEngine.clearSettledStory(it) }
+            }
+            return false
+        }
+        val pendingId = resolveSettlementStoryId(story, now) ?: return false
         val source = when {
             !story.isIdle -> "server_ready"
             PetAdventureEngine.pendingSettlementStoryId != null -> "pending_retry"
@@ -151,6 +158,13 @@ internal object PetStoryHandlers {
             ) { level, msg -> PetAdventureEngine.sendLog(level, msg) }
             delay(1500.milliseconds)
             return true
+        } else if (story.isIdle && code != 135004) {
+            PetAdventureEngine.clearSettledStory(pendingId)
+            PetAdventureEngine.sendLog(
+                EngineLog.Level.INFO,
+                "[结算] 任务已在手Q结清或已失效 (code=$code)，解除待结算标识"
+            )
+            return false
         } else {
             // 未确认收益入账前保留待结算标识。
             PetAdventureEngine.lastActiveStoryId = pendingId

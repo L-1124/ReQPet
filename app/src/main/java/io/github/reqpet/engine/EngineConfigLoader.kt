@@ -22,7 +22,9 @@ internal object EngineConfigLoader {
             PetAdventureEngine.enableWork = p.getBoolean("key_work", false)
             PetAdventureEngine.enableCare = p.getBoolean("key_care", false)
             PetAdventureEngine.enableAdventure = p.getBoolean("key_adventure", false)
-            PetAdventureEngine.enableSettle = p.getBoolean("key_settle", false)
+            val hasAnyTask =
+                PetAdventureEngine.enableStudy || PetAdventureEngine.enableWork || PetAdventureEngine.enableAdventure
+            PetAdventureEngine.enableSettle = p.getBoolean("key_settle", true) || hasAnyTask
             PetAdventureEngine.enableLikeBack = p.getBoolean(PreferencesHelper.KEY_LIKE_BACK, false)
             PetAdventureEngine.enableClaimCoinBag = p.getBoolean(PreferencesHelper.KEY_CLAIM_COINBAG, false)
             PetAdventureEngine.enableFatigueToAdventure =

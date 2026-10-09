@@ -54,10 +54,11 @@ fun CareerSection(state: SettingsState) {
 
     val studyEnabled = state.bool(PreferencesHelper.KEY_STUDY, false)
     val workEnabled = state.bool(PreferencesHelper.KEY_WORK, false)
+    val adventureEnabled = state.bool(PreferencesHelper.KEY_ADVENTURE, false)
+    val hasAnyTask = studyEnabled || workEnabled || adventureEnabled
     val schoolDetails = state.schoolDetails
     val workPlaces = state.workPlaces
     val workJobs = state.workJobs
-
     LaunchedEffect(Unit) {
         if (!state.previewMode) {
             try {
@@ -129,9 +130,10 @@ fun CareerSection(state: SettingsState) {
         item {
             ToggleRow(
                 title = "任务收益结算",
-                checked = state.bool(PreferencesHelper.KEY_SETTLE, false),
+                checked = hasAnyTask || state.bool(PreferencesHelper.KEY_SETTLE, true),
                 onCheckedChange = { state.setBool(PreferencesHelper.KEY_SETTLE, it) },
-                subtitle = "外出任务完成后检查并结算收益"
+                subtitle = if (hasAnyTask) "已开启自动任务，收益结算强制开启" else "外出任务完成后检查并结算收益",
+                enabled = !hasAnyTask
             )
         }
         item {

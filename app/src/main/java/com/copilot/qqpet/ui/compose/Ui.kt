@@ -1,59 +1,53 @@
 package com.copilot.qqpet.ui.compose
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.FilledTonalToggleButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SliderState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.ToggleButtonShapes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -62,15 +56,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -82,7 +73,7 @@ fun SectionHeader(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleMediumEmphasized,
-        color = MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 6.dp)
     )
 }
@@ -100,30 +91,6 @@ class SettingsGroupScope {
         }
     }
 
-    fun expandableItem(visible: Boolean, content: @Composable () -> Unit) {
-        items.add {
-            AnimatedVisibility(
-                visible = visible,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                content()
-            }
-        }
-    }
-
-    fun expandablePanel(visible: Boolean, content: @Composable ColumnScope.() -> Unit) {
-        items.add {
-            AnimatedVisibility(
-                visible = visible,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column(modifier = Modifier.fillMaxWidth(), content = content)
-            }
-        }
-    }
-
     internal fun getItems() = items
 }
 
@@ -132,15 +99,13 @@ fun SettingsGroup(
     modifier: Modifier = Modifier,
     spacing: Dp = 3.dp,
     outerCornerRadius: Dp = 20.dp,
-    innerCornerRadius: Dp = 4.dp,
+    innerCornerRadius: Dp = 0.dp,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
     content: SettingsGroupScope.() -> Unit
 ) {
-    val scope = SettingsGroupScope().apply(content)
-    val items = scope.getItems()
+    val items = SettingsGroupScope().apply(content).getItems()
     if (items.isEmpty()) return
 
-    val total = items.size
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(spacing)
@@ -148,7 +113,7 @@ fun SettingsGroup(
         items.forEachIndexed { index, itemContent ->
             SettingsGroupItem(
                 index = index,
-                total = total,
+                total = items.size,
                 outerCornerRadius = outerCornerRadius,
                 innerCornerRadius = innerCornerRadius,
                 containerColor = containerColor
@@ -162,12 +127,29 @@ fun SettingsGroup(
 }
 
 @Composable
+internal fun ExpandablePanel(visible: Boolean, content: @Composable ColumnScope.() -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandVertically(animationSpec = spring(dampingRatio = 0.8f, stiffness = 380f)) +
+                fadeIn(animationSpec = spring(dampingRatio = 1f, stiffness = 1600f)),
+        exit = shrinkVertically(animationSpec = spring(dampingRatio = 0.8f, stiffness = 380f)) +
+                fadeOut(animationSpec = spring(dampingRatio = 1f, stiffness = 1600f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
 internal fun SettingsGroupItem(
     index: Int,
     total: Int,
     modifier: Modifier = Modifier,
     outerCornerRadius: Dp = 20.dp,
-    innerCornerRadius: Dp = 4.dp,
+    innerCornerRadius: Dp = 0.dp,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
     content: @Composable () -> Unit
 ) {
@@ -179,12 +161,14 @@ internal fun SettingsGroupItem(
             bottomStart = innerCornerRadius,
             bottomEnd = innerCornerRadius
         )
+
         index == total - 1 -> RoundedCornerShape(
             topStart = innerCornerRadius,
             topEnd = innerCornerRadius,
             bottomStart = outerCornerRadius,
             bottomEnd = outerCornerRadius
         )
+
         else -> RoundedCornerShape(innerCornerRadius)
     }
     Surface(
@@ -208,8 +192,8 @@ fun SettingsCard(modifier: Modifier = Modifier, content: @Composable ColumnScope
 fun CardDivider(startPadding: Dp = 16.dp) {
     HorizontalDivider(
         modifier = Modifier.padding(start = startPadding, end = 16.dp),
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant
     )
 }
 
@@ -333,7 +317,6 @@ fun InfoRow(title: String, value: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SliderRow(
     title: String,
@@ -396,17 +379,12 @@ fun SliderRow(
                 )
             },
             thumb = {
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                )
+                SliderDefaults.Thumb(interactionSource = interactionSource)
             }
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SegmentedChoiceRow(
     options: List<String>,
@@ -417,81 +395,49 @@ fun SegmentedChoiceRow(
 ) {
     if (options.isEmpty()) return
     val safeSelected = selectedIndex.coerceIn(0, options.lastIndex)
-    val textMeasurer = rememberTextMeasurer()
-    val textStyle = MaterialTheme.typography.labelMedium
-    val density = LocalDensity.current
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val availableWidthPx = with(density) { maxWidth.toPx() }
-        val iconSpacePx = with(density) { (SegmentedButtonDefaults.IconSize + 8.dp).toPx() }
-        val paddingPx = with(density) { 24.dp.toPx() }
-        val requiredWidths = remember(options, availableWidthPx, textStyle) {
-            options.map { label ->
-                val textW = textMeasurer.measure(label, textStyle).size.width
-                textW + iconSpacePx.toInt() + paddingPx.toInt()
-            }
-        }
-        val totalRequiredWidthPx = remember(requiredWidths) { requiredWidths.sum() }
-        val canFitEqually = totalRequiredWidthPx <= availableWidthPx
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        options.forEachIndexed { index, label ->
+            val isSelected = index == safeSelected
+            val isOptionEnabled = enabled?.getOrElse(index) { true } ?: true
+            val shapes = when {
+                options.size == 1 -> ToggleButtonShapes(
+                    shape = CircleShape,
+                    pressedShape = CircleShape,
+                    checkedShape = CircleShape
+                )
 
-        if (canFitEqually) {
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                options.forEachIndexed { index, label ->
-                    val isSelected = index == safeSelected
-                    SegmentedButton(
-                        selected = isSelected,
-                        onClick = { onSelect(index) },
-                        enabled = enabled?.getOrElse(index) { true } ?: true,
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                        icon = { SegmentedButtonDefaults.Icon(isSelected) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = label,
-                            style = textStyle,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+                index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                index == options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
             }
-        } else {
-            val scrollState = rememberScrollState()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(scrollState)
+
+            FilledTonalToggleButton(
+                checked = isSelected,
+                onCheckedChange = { if (!isSelected) onSelect(index) },
+                enabled = isOptionEnabled,
+                shapes = shapes,
+                modifier = Modifier.semantics { role = Role.RadioButton }
             ) {
-                SingleChoiceSegmentedButtonRow {
-                    options.forEachIndexed { index, label ->
-                        val isSelected = index == safeSelected
-                        val minWidthDp = with(density) { requiredWidths[index].toDp() }
-                        SegmentedButton(
-                            selected = isSelected,
-                            onClick = { onSelect(index) },
-                            enabled = enabled?.getOrElse(index) { true } ?: true,
-                            shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                            icon = { SegmentedButtonDefaults.Icon(isSelected) },
-                            modifier = Modifier.widthIn(min = minWidthDp)
-                        ) {
-                            Text(
-                                text = label,
-                                style = textStyle,
-                                textAlign = TextAlign.Center,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChoiceToggleRow(
     title: String,
@@ -545,6 +491,25 @@ private fun SettingsCardPreview() {
     }
 }
 
+@Preview(showBackground = true, widthDp = 320)
+@Composable
+private fun SettingsGroupVisibilityPreview() {
+    MaterialTheme {
+        var expanded by remember { mutableStateOf(false) }
+        SettingsGroup(modifier = Modifier.padding(16.dp)) {
+            item {
+                ToggleRow("展开设置", expanded, { expanded = it })
+                ExpandablePanel(expanded) {
+                    ToggleRow("展开选项", false, {})
+                }
+            }
+            item {
+                ActionRow("固定末项", {})
+            }
+        }
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 private fun ActionRowPreview() {
@@ -585,17 +550,6 @@ private fun ChoiceToggleRowPreview() {
     }
 }
 
-/** 分节面板的展开收起；默认 spring 规格即 expressive 运动。 */
-@Composable
-fun ExpandablePanel(visible: Boolean, content: @Composable ColumnScope.() -> Unit) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = expandVertically() + fadeIn(),
-        exit = shrinkVertically() + fadeOut()
-    ) {
-        Column(modifier = Modifier.fillMaxWidth(), content = content)
-    }
-}
 
 @Composable
 fun CompactSearchBar(
@@ -658,4 +612,15 @@ fun CompactSearchBar(
             }
         }
     )
+}
+
+@Preview(showBackground = true, widthDp = 320)
+@Composable
+private fun CompactSearchBarPreview() {
+    MaterialTheme {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CompactSearchBar("", {}, "搜索昵称 / QQ 号")
+            CompactSearchBar("12345678", {}, "搜索昵称 / QQ 号")
+        }
+    }
 }

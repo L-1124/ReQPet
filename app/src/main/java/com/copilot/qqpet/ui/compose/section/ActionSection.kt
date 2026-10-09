@@ -1,10 +1,12 @@
 package com.copilot.qqpet.ui.compose.section
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -13,10 +15,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
+import com.copilot.qqpet.ui.compose.QPetExpressiveTheme
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SettingsGroup
 import com.copilot.qqpet.ui.compose.SettingsState
@@ -28,26 +30,17 @@ private data class ActionItemDef(
     val confirmMessage: String,
     val confirmBtnText: String,
     val actionCmd: String,
-    val tone: ActionTone = ActionTone.NORMAL,
     val isBold: Boolean = false,
     val isDestructive: Boolean = false
 )
 
-private enum class ActionTone { NORMAL, ACCENT, WARN }
-
-private val OVERVIEW_ACTION_ITEMS = listOf(
-    ActionItemDef(
-        "立即执行全套巡检与养成", "执行全套巡检与养成？",
-        "将立即同步小宠最新资质与起居状态，按需触发进食洗澡，并依序规划自适应日程。",
-        "立即执行", "cycle", ActionTone.ACCENT, isBold = true
-    ),
+private val RECALL_ACTION_ITEMS = listOf(
     ActionItemDef(
         "立即召回宠物回家 (中断当前打工/学习)", "确认召回宠物回家？",
         "此操作将强制中断小宠当前正在进行的打工或学习派遣，提前返程回家。",
         "确认召回", "recall", isBold = true, isDestructive = true
     )
 )
-private val PATROL_ACTION_ITEMS = OVERVIEW_ACTION_ITEMS.take(1)
 
 private val TASK_ACTION_ITEMS = listOf(
     ActionItemDef(
@@ -76,7 +69,7 @@ private val CARE_ACTION_ITEMS = listOf(
     ActionItemDef(
         "立即帮全部好友喂食与洗澡", "立即帮好友宠物喂食洗澡？",
         "将立即检测全部养宠好友的实时体力与清洁度，低于设定阈值时自动帮好友喂食与搓澡。",
-        "立即照料好友", "friend_care", ActionTone.ACCENT
+        "立即照料好友", "friend_care"
     )
 )
 
@@ -84,12 +77,12 @@ private val SOCIAL_ACTION_ITEMS = listOf(
     ActionItemDef(
         "立即回踩访客 (互相踩踩)", "立即回踩访客？",
         "将拉取最近造访小家的记录，并依次向未回赠的好友与陌生访客发起回踩送心。",
-        "立即回礼", "like_back", ActionTone.ACCENT
+        "立即回礼", "like_back"
     ),
     ActionItemDef(
         "立即主动串门踩踩 (好友+随机陌生人)", "立即主动串门踩踩？",
         "将自动筛选今日尚未踩过的好友与随机陌生小宠，保持拟人离散间隔主动串门送心。",
-        "立即串门", "active_visit", ActionTone.ACCENT
+        "立即串门", "active_visit"
     )
 )
 
@@ -97,7 +90,7 @@ private val PK_ACTION_ITEMS = listOf(
     ActionItemDef(
         "立即发起 PK 挑战", "确认发起自动 PK 对决？",
         "将自动筛选三维属性低于我方的对手（包含好友与访客陌生人），每次随机休眠1~3分钟，连打10场自动领奖。",
-        "立即对决", "pk_auto", ActionTone.WARN
+        "立即对决", "pk_auto"
     )
 )
 
@@ -105,7 +98,7 @@ private val REWARD_ACTION_ITEMS = listOf(
     ActionItemDef(
         "立即领取金币福袋", "立即领取金币福袋？",
         "将立即扫描自己小窝及全部好友小窝，发现掉落福袋时自动拆袋领取金币奖励。",
-        "立即拆福袋", "coinbag", ActionTone.ACCENT
+        "立即拆福袋", "coinbag"
     )
 )
 
@@ -113,7 +106,7 @@ private val REWARD_ACTION_ITEMS = listOf(
 fun OverviewActions(state: SettingsState) {
     ActionGroupSection(
         title = "手动即时指令",
-        items = if (state.hasOngoingTask) OVERVIEW_ACTION_ITEMS else PATROL_ACTION_ITEMS,
+        items = if (state.hasOngoingTask) RECALL_ACTION_ITEMS else emptyList(),
         state = state
     )
 }
@@ -169,6 +162,7 @@ private fun ActionGroupSection(
     items: List<ActionItemDef>,
     state: SettingsState
 ) {
+    if (items.isEmpty()) return
     var pending by remember { mutableStateOf<ActionItemDef?>(null) }
 
     SectionHeader(title)
@@ -195,24 +189,41 @@ private fun ActionGroupSection(
 
 @Composable
 private fun ActionCommandRow(item: ActionItemDef, onClick: () -> Unit) {
-    val color: Color = when {
-        item.isDestructive -> MaterialTheme.colorScheme.error
-        item.tone == ActionTone.ACCENT -> MaterialTheme.colorScheme.primary
-        item.tone == ActionTone.WARN -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+    val color = if (item.isDestructive) MaterialTheme.colorScheme.error
+    else MaterialTheme.colorScheme.onSurface
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .toggleable(value = false, role = Role.Button, onValueChange = { onClick() })
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = item.title,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (item.isBold) FontWeight.SemiBold else FontWeight.Normal,
+            style = if (item.isBold) MaterialTheme.typography.bodyLargeEmphasized else MaterialTheme.typography.bodyLarge,
             color = color
         )
+    }
+}
+
+@Preview(name = "手动操作颜色", showBackground = true, widthDp = 412)
+@Composable
+private fun ManualActionsPreview() {
+    QPetExpressiveTheme(dark = false) {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            Column(Modifier.padding(16.dp)) {
+                SectionHeader("手动操作")
+                SettingsGroup {
+                    listOf(
+                        TASK_ACTION_ITEMS, CARE_ACTION_ITEMS, SOCIAL_ACTION_ITEMS,
+                        PK_ACTION_ITEMS, REWARD_ACTION_ITEMS, RECALL_ACTION_ITEMS
+                    ).forEach { actions ->
+                        items(actions) { item ->
+                            ActionCommandRow(item, onClick = {})
+                        }
+                    }
+                }
+            }
+        }
     }
 }

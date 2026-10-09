@@ -44,7 +44,7 @@ class OidbChannel(
         var cachedDelegateClassName: String? = null
             internal set
 
-        fun getCandidateClassLoaders(primaryLoader: ClassLoader, context: Context?): List<ClassLoader> {
+        internal fun getMetadataClassLoaders(primaryLoader: ClassLoader, context: Context?): List<ClassLoader> {
             val loaders = mutableListOf<ClassLoader>()
             loaders.add(primaryLoader)
             context?.classLoader?.let { if (!loaders.contains(it)) loaders.add(it) }
@@ -58,6 +58,11 @@ class OidbChannel(
             } catch (e: Throwable) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
             }
+            return loaders
+        }
+
+        fun getCandidateClassLoaders(primaryLoader: ClassLoader, context: Context?): List<ClassLoader> {
+            val loaders = getMetadataClassLoaders(primaryLoader, context).toMutableList()
             appendMobileQQLoaders(primaryLoader, context, loaders)
             return loaders
         }

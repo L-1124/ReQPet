@@ -146,7 +146,7 @@ class SettingsState(
             return
         }
         if (key == PreferencesHelper.KEY_MASTER_ENABLED) {
-            SettingConfigSyncer.onMasterSwitchChanged(engine, context)
+            SettingConfigSyncer.syncConfig(engine, context, wakeCycle = true)
         } else {
             SettingConfigSyncer.syncConfig(engine, context)
         }
@@ -232,4 +232,5 @@ class SettingsState(
         if (previewMode) return
         SettingConfigSyncer.triggerAction(context, engine, name)
     }
+
 }

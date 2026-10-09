@@ -29,8 +29,4 @@ object SettingConfigSyncer {
             target.wakeUpMasterCycle(appContext)
         }
     }
-
-    fun onMasterSwitchChanged(engine: PetAdventureEngine?, context: Context) {
-        syncConfig(engine, context, wakeCycle = true)
-    }
 }

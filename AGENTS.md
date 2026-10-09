@@ -8,8 +8,8 @@ Context and operational guidelines for AI coding agents working on ReQPet (fork 
 
 ReQPet (fork of QPet Companion) is an Android Xposed module built with Kotlin. It injects into the Mobile QQ main process (`com.tencent.mobileqq`) using **libxposed (API 102)** to provide an in-process management interface (Jetpack Compose) and background automation loop for the QPet feature.
 
-- **Application ID**: `io.github.congsmile.qqpet`
-- **Namespace**: `com.copilot.qqpet`
+- **Application ID**: `io.github.reqpet`
+- **Namespace**: `io.github.reqpet`
 - **Host Target**: `com.tencent.mobileqq`
 - **Minimum SDK**: 26 (Android 8.0)
 - **Target SDK**: 37
@@ -23,7 +23,7 @@ ReQPet (fork of QPet Companion) is an Android Xposed module built with Kotlin. I
 ```text
 ReQPet/
 ├── app/                  # Main module source
-│   ├── src/main/java/com/copilot/qqpet/
+│   ├── src/main/java/io/github/reqpet/
 │   │   ├── HookEntry.kt  # Libxposed module entry point (implements XposedInterface)
 │   │   ├── RuntimeSwitches.kt # Global runtime switch definitions
 │   │   ├── hook/         # HookApi, injector, crash isolation, tinker blocking, network shield
@@ -93,12 +93,12 @@ Run commands via the root Gradle wrapper:
 
 - Run a specific test class:
   ```bash
-  ./gradlew testDebugUnitTest --tests com.copilot.qqpet.engine.FaultInjectionAndConsistencyTest
+  ./gradlew testDebugUnitTest --tests io.github.reqpet.engine.FaultInjectionAndConsistencyTest
   ```
 
 - Run a single test method:
   ```bash
-  ./gradlew testDebugUnitTest --tests com.copilot.qqpet.engine.FaultInjectionAndConsistencyTest.expiredTrackedStorySettlesWhenServerClearsRunningFields
+  ./gradlew testDebugUnitTest --tests io.github.reqpet.engine.FaultInjectionAndConsistencyTest.expiredTrackedStorySettlesWhenServerClearsRunningFields
   ```
 
 ---
@@ -106,7 +106,7 @@ Run commands via the root Gradle wrapper:
 ## 5. Development Workflow & Guidelines
 
 ### 5.1 Architecture & Component Boundaries
-- **`hook/`**: Contains `HookApi` (exposes LibXposed APIs), `QQSettingInjector` (injects settings entry into host settings list), `CrashInterceptor`, `TinkerBlocker`, and `NetworkSecurityShield`. Note that module entry `HookEntry` resides in root package `com.copilot.qqpet`.
+- **`hook/`**: Contains `HookApi` (exposes LibXposed APIs), `QQSettingInjector` (injects settings entry into host settings list), `CrashInterceptor`, `TinkerBlocker`, and `NetworkSecurityShield`. Note that module entry `HookEntry` resides in root package `io.github.reqpet`.
 - **`protocol/`**: Contains `OidbChannel` (handles packet reflection via host trpc/oidb engine), `QQPetDirectBridge` (facade for host methods), and protocol clients (`PetCareerProtocolClient`, `PetCareProtocolClient`, `PetSocialProtocolClient`).
 - **`engine/`**: Implements single-state-owner background automation. `PetAdventureEngine` coordinates `PetCycleDispatcher`, `PetMaintenanceCoordinator`, `StealthScheduler`, and `RuntimeDiagnostics`.
 - **`ui/`**: Uses Jetpack Compose attached via `ComposeInjectionHost` inside self-managed full-screen `QQSettingDialog` with native platform window animations (`Animation_Translucent`) respecting system animation scale. `SettingsDialogController` manages window lifecycle and state restoration across host Activity destruction. Navigation state is managed by `SettingsBackStack` with per-page `SaveableStateProvider`.

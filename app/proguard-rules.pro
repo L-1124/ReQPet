@@ -3,7 +3,7 @@
     public <init>(...);
     public void on*(...);
 }
--keep class com.copilot.qqpet.HookEntry {
+-keep class io.github.reqpet.HookEntry {
     public <init>(...);
     public void on*(...);
 }
@@ -12,6 +12,6 @@
 -dontwarn io.github.libxposed.api.**
 
 # 设置页导航与状态恢复枚举
--keepclassmembers enum com.copilot.qqpet.ui.compose.SettingsPage {
+-keepclassmembers enum io.github.reqpet.ui.compose.SettingsPage {
     *;
 }

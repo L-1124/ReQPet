@@ -4,14 +4,14 @@ plugins {
 }
 
 android {
-    namespace = "com.copilot.qqpet"
+    namespace = "io.github.reqpet"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
         // LSPosed 官方模块仓库要求包名归属可验证：io.github.<username> 前缀或自有域名反写
-        applicationId = "io.github.congsmile.qqpet"
+        applicationId = "io.github.reqpet"
         minSdk = 26
         targetSdk = 37
         versionCode = 114

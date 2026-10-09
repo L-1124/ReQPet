@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate semantic version tag
+        id: version
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+
+          tag = os.environ['RELEASE_TAG']
+          match = re.fullmatch(
+              r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+              r'(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?'
+              r'(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?', tag)
+          if not match or any(
+              part.isdigit() and len(part) > 1 and part.startswith('0')
+              for part in (match.group(4) or '').split('.')
+          ):
+              raise SystemExit(f'Invalid semantic version tag: {tag}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={tag[1:]}\n')
+              output.write(f'prerelease={str(match.group(4) is not None).lower()}\n')
+          PY
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: 'platform-tools platforms;android-37 build-tools;37.0.0'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: basic
+          cache-read-only: true
+
+      - name: Restore release keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${KEYSTORE_BASE64:?Missing RELEASE_KEYSTORE_BASE64}"
+          : "${RELEASE_STORE_PASSWORD:?Missing RELEASE_STORE_PASSWORD}"
+          : "${RELEASE_KEY_ALIAS:?Missing RELEASE_KEY_ALIAS}"
+          : "${RELEASE_KEY_PASSWORD:?Missing RELEASE_KEY_PASSWORD}"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/reqpet-release.jks"
+
+      - name: Build release APK and run unit tests
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/reqpet-release.jks
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: bash ./gradlew assembleRelease testDebugUnitTest --no-configuration-cache --no-build-cache
+
+      - name: Verify release version and signature
+        env:
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = json.loads(Path('app/build/outputs/apk/release/output-metadata.json').read_text())
+          version = os.environ['EXPECTED_VERSION']
+          if metadata['applicationId'] != 'io.github.reqpet' or len(metadata['elements']) != 1:
+              raise SystemExit('Unexpected release APK identity or output count')
+          artifact = metadata['elements'][0]
+          if artifact['versionName'] != version:
+              raise SystemExit(f"Tag version {version} does not match APK version {artifact['versionName']}")
+          print(f"Release version: {version}; versionCode: {artifact['versionCode']}")
+          PY
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/ReQPet-$VERSION.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$asset"
+          args=(--verify-tag --title "ReQPet $VERSION" --generate-notes)
+          if [[ "$PRERELEASE" == true ]]; then
+            args+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" "$asset" "app/build/outputs/apk/release/output-metadata.json" "${args[@]}"
+
+      - name: Remove release keystore
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/reqpet-release.jks"

@@ -80,6 +80,12 @@ Run commands via the root Gradle wrapper:
   ```
   Artifact output: `app/build/outputs/apk/release/app-release.apk`. Release enables R8 optimization; debug does not.
 
+- Release starts at `versionCode = 1`, `versionName = "1.0.0"`. Increment the independent `versionCode` for each published release and use semantic `MAJOR.MINOR.PATCH` names; override with `-PversionCode=2 -PversionName=1.0.1` when needed.
+- Debug keeps the same `versionCode` and appends the Git short hash, optional `dirty`, and execution-time UTC timestamp to `versionName`. Each APK-producing debug build regenerates the marker; timestamps have second precision, not guaranteed parallel-build uniqueness. Git failures abort the build.
+- GitHub Actions builds and tests PRs and pushes to `main`, retaining debug APKs and test reports for 14 days. Pushing a `vMAJOR.MINOR.PATCH` tag publishes a signed release only when the APK version matches; semantic prerelease tags create GitHub prereleases.
+- Formal signing uses the complete `RELEASE_KEYSTORE_PATH`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, and `RELEASE_KEY_PASSWORD` environment configuration first, otherwise the ignored root `keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`). When configured, Debug and Release share this signing key; without either source, builds use the default debug key. Keep credentials outside Git and disable configuration caching when formal credentials are loaded.
+- Trusted `main` push/manual builds and tag releases restore formal signing from Actions Secrets (including `RELEASE_KEYSTORE_BASE64`). PR builds never receive the formal key and their temporary-signature APKs cannot replace formally signed installations.
+
 - Clean build:
   ```bash
   ./gradlew clean assembleDebug

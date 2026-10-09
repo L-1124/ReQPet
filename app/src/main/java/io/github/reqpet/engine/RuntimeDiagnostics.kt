@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Process
 import android.os.SystemClock
+import io.github.reqpet.ui.PreferencesHelper
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -26,6 +27,9 @@ object RuntimeDiagnostics {
     private val bound = AtomicBoolean()
     private val warned = AtomicBoolean()
 
+    @Volatile
+    var detailedMode: Boolean = false
+
     fun nowMs(): Long = SystemClock.elapsedRealtime()
 
     fun id(value: String?): String = try {
@@ -42,11 +46,34 @@ object RuntimeDiagnostics {
         }
     }
 
+    fun error(name: String, error: Throwable, vararg fields: Pair<String, Any?>) {
+        try {
+            val detailed = detailedMode
+            val errorFields = diagnosticErrorFields(error, detailed)
+            val merged = if (fields.isEmpty()) {
+                errorFields
+            } else {
+                Array(fields.size + errorFields.size) { index ->
+                    if (index < fields.size) fields[index] else errorFields[index - fields.size]
+                }
+            }
+            event(name, *merged)
+        } catch (_: Throwable) {
+            // Diagnostics must never change host behavior, including before bind.
+        }
+    }
+
     fun bind(context: Context) {
         if (!bound.compareAndSet(false, true)) return
         try {
             val buffer = checkNotNull(this.buffer)
             val appContext = context.applicationContext ?: context
+            try {
+                val prefs = appContext.getSharedPreferences("qqpet_inproc_prefs", Context.MODE_PRIVATE)
+                detailedMode = prefs.getBoolean(PreferencesHelper.KEY_DIAGNOSTICS_DETAIL, false)
+            } catch (_: Throwable) {
+                detailedMode = false
+            }
             val thread = Thread({
                 try {
                     val external = try {

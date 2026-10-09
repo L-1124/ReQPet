@@ -77,10 +77,10 @@ object PetMaintenanceCoordinator {
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             PetAdventureEngine.sendLog("[自理] 照料维护异常: ${e.message}")
-            RuntimeDiagnostics.event(
-                "maintenance_error", "cycle" to PetAdventureEngine.currentCycleId,
+            RuntimeDiagnostics.error(
+                "maintenance_error", e, "cycle" to PetAdventureEngine.currentCycleId,
                 "transaction" to PetAdventureEngine.currentTransactionId,
-                "item" to "care", "error_type" to e.javaClass.simpleName
+                "item" to "care"
             )
         }
         try {
@@ -88,10 +88,10 @@ object PetMaintenanceCoordinator {
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             PetAdventureEngine.sendLog("[福袋] 维护巡检异常: ${e.message}")
-            RuntimeDiagnostics.event(
-                "maintenance_error", "cycle" to PetAdventureEngine.currentCycleId,
+            RuntimeDiagnostics.error(
+                "maintenance_error", e, "cycle" to PetAdventureEngine.currentCycleId,
                 "transaction" to PetAdventureEngine.currentTransactionId,
-                "item" to "coin_bag", "error_type" to e.javaClass.simpleName
+                "item" to "coin_bag"
             )
         }
         try {
@@ -99,10 +99,10 @@ object PetMaintenanceCoordinator {
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             PetAdventureEngine.sendLog("[回踩] 维护巡检异常: ${e.message}")
-            RuntimeDiagnostics.event(
-                "maintenance_error", "cycle" to PetAdventureEngine.currentCycleId,
+            RuntimeDiagnostics.error(
+                "maintenance_error", e, "cycle" to PetAdventureEngine.currentCycleId,
                 "transaction" to PetAdventureEngine.currentTransactionId,
-                "item" to "like_back", "error_type" to e.javaClass.simpleName
+                "item" to "like_back"
             )
         }
         try {
@@ -110,10 +110,10 @@ object PetMaintenanceCoordinator {
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             PetAdventureEngine.sendLog("[串门] 维护巡检异常: ${e.message}")
-            RuntimeDiagnostics.event(
-                "maintenance_error", "cycle" to PetAdventureEngine.currentCycleId,
+            RuntimeDiagnostics.error(
+                "maintenance_error", e, "cycle" to PetAdventureEngine.currentCycleId,
                 "transaction" to PetAdventureEngine.currentTransactionId,
-                "item" to "active_visit", "error_type" to e.javaClass.simpleName
+                "item" to "active_visit"
             )
         }
         try {
@@ -121,10 +121,10 @@ object PetMaintenanceCoordinator {
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             PetAdventureEngine.sendLog("[自动PK] 维护巡检异常: ${e.message}")
-            RuntimeDiagnostics.event(
-                "maintenance_error", "cycle" to PetAdventureEngine.currentCycleId,
+            RuntimeDiagnostics.error(
+                "maintenance_error", e, "cycle" to PetAdventureEngine.currentCycleId,
                 "transaction" to PetAdventureEngine.currentTransactionId,
-                "item" to "pk", "error_type" to e.javaClass.simpleName
+                "item" to "pk"
             )
         }
     }

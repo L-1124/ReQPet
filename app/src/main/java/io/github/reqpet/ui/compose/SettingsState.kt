@@ -13,6 +13,7 @@ import io.github.reqpet.engine.EngineLog
 import io.github.reqpet.engine.LogEntry
 import io.github.reqpet.engine.PetAccountGateway
 import io.github.reqpet.engine.PetAdventureEngine
+import io.github.reqpet.engine.RuntimeDiagnostics
 import io.github.reqpet.engine.metrics.EngineMetrics
 import io.github.reqpet.engine.metrics.EngineMetricsImpl
 import io.github.reqpet.protocol.QQPetDirectBridge
@@ -140,6 +141,10 @@ class SettingsState(
 
     /** 总开关翻转决定主循环生死，必须唤醒；其余开关引擎每轮巡检前 reloadConfig 即可生效 */
     private fun syncOrWake(key: String) {
+        if (key == PreferencesHelper.KEY_DIAGNOSTICS_DETAIL) {
+            RuntimeDiagnostics.detailedMode = bool(PreferencesHelper.KEY_DIAGNOSTICS_DETAIL, false)
+            return
+        }
         if (key == PreferencesHelper.KEY_MASTER_ENABLED) {
             SettingConfigSyncer.onMasterSwitchChanged(engine, context)
         } else {

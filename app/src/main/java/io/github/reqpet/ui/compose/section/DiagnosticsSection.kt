@@ -103,6 +103,14 @@ fun DiagnosticsSection(state: SettingsState) {
                     subtitle = "默认静默，开启后向 libxposed 打印详细发包日志"
                 )
             }
+            item {
+                ToggleRow(
+                    title = "持久化诊断详情",
+                    checked = state.bool(PreferencesHelper.KEY_DIAGNOSTICS_DETAIL, false),
+                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_DIAGNOSTICS_DETAIL, it) },
+                    subtitle = "记录异常类和有限调用帧，不记录错误正文或原始响应；仅在排查时开启"
+                )
+            }
         }
     }
 }

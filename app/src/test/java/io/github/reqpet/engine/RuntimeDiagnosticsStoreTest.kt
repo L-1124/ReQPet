@@ -261,6 +261,215 @@ class RuntimeDiagnosticsStoreTest {
         RuntimeDiagnosticFileWriter(temporary.newFolder(), maxFileBytes = 32).use { it.append(record("large")) }
     }
 
+    @Test
+    fun `diagnosticErrorFields redacts messages and paths while exposing classes and frames only when detailed`() {
+        val directory = temporary.newFolder()
+        val buffer = RuntimeDiagnosticBuffer(run, wallClock = { 1000L }, monotonicClock = { 10L })
+        val innerCause = IllegalStateException("secret_token=tok_x9y8z7 private inner message")
+        val directCause = IllegalArgumentException("secret_uin=uin_v6u5t4 cause message", innerCause)
+        val error = RuntimeException("raw_payload=pay_s3r2q1 secret error message", directCause)
+        error.stackTrace = arrayOf(
+            StackTraceElement("io.github.reqpet.TestService", "executeAction", "TestService.kt", 42)
+        )
+        directCause.stackTrace = arrayOf(
+            StackTraceElement("io.github.reqpet.CauseService", "causeMethod", "CauseService.kt", 84)
+        )
+
+        buffer.event("err_off", diagnosticErrorFields(error, detailed = false))
+        buffer.event("err_on", diagnosticErrorFields(error, detailed = true))
+
+        RuntimeDiagnosticFileWriter(directory).use { writer ->
+            assertTrue(buffer.writeNext(writer))
+            assertTrue(buffer.writeNext(writer))
+        }
+
+        val rawContent = File(directory, "runtime.log").readText()
+        assertFalse(rawContent.contains("secret"))
+        assertFalse(rawContent.contains("tok_x9y8z7"))
+        assertFalse(rawContent.contains("uin_v6u5t4"))
+        assertFalse(rawContent.contains("pay_s3r2q1"))
+        assertFalse(rawContent.contains("TestService.kt"))
+        assertFalse(rawContent.contains("CauseService.kt"))
+        assertFalse(rawContent.contains("message"))
+
+        val records = records(directory)
+        val offRecord = records[0]
+        assertEquals("err_off", offRecord["event"])
+        assertEquals("RuntimeException", offRecord["error_type"])
+        assertFalse(offRecord.containsKey("exception_class"))
+        assertFalse(offRecord.containsKey("frame_0"))
+        assertFalse(offRecord.containsKey("cause_class"))
+        assertFalse(offRecord.containsKey("cause_frame_0"))
+        assertFalse(offRecord.containsKey("detail_truncated"))
+
+        val onRecord = records[1]
+        assertEquals("err_on", onRecord["event"])
+        assertEquals("RuntimeException", onRecord["error_type"])
+        assertEquals("java.lang.RuntimeException", onRecord["exception_class"])
+        assertEquals("io.github.reqpet.TestService.executeAction:42", onRecord["frame_0"])
+        assertEquals("java.lang.IllegalArgumentException", onRecord["cause_class"])
+        assertEquals("io.github.reqpet.CauseService.causeMethod:84", onRecord["cause_frame_0"])
+        assertEquals("true", onRecord["detail_truncated"])
+    }
+
+    @Test
+    fun `diagnosticErrorFields bounds frames to eight each and sets detail_truncated for deeper cause`() {
+        val directory = temporary.newFolder()
+        val buffer = RuntimeDiagnosticBuffer(run, wallClock = { 2000L }, monotonicClock = { 20L })
+        val thirdCause = Exception("third")
+        val secondCause = Exception("second", thirdCause)
+        val firstException = Exception("first", secondCause)
+        firstException.stackTrace = Array(9) { i ->
+            StackTraceElement("io.github.reqpet.TopClass", "topMethod$i", "TopClass.kt", 100 + i)
+        }
+        secondCause.stackTrace = Array(9) { i ->
+            StackTraceElement("io.github.reqpet.CauseClass", "causeMethod$i", "CauseClass.kt", 200 + i)
+        }
+
+        val fields = diagnosticErrorFields(firstException, detailed = true)
+        val combinedFields = fields + arrayOf("transaction" to "tx_123", "loop" to "loop_main", "source" to "manual")
+        buffer.event("err_bounded", combinedFields)
+
+        RuntimeDiagnosticFileWriter(directory).use { writer ->
+            assertTrue(buffer.writeNext(writer))
+        }
+        val logFile = File(directory, "runtime.log")
+        assertTrue(logFile.readBytes().size <= RuntimeDiagnosticFormat.MAX_RECORD_BYTES)
+        val records = records(directory)
+        val record = records[0]
+        assertEquals("err_bounded", record["event"])
+        assertEquals("Exception", record["error_type"])
+        assertEquals("java.lang.Exception", record["exception_class"])
+        for (i in 0 until 8) {
+            assertEquals("io.github.reqpet.TopClass.topMethod$i:${100 + i}", record["frame_$i"])
+            assertEquals("io.github.reqpet.CauseClass.causeMethod$i:${200 + i}", record["cause_frame_$i"])
+        }
+        assertFalse(record.containsKey("frame_8"))
+        assertFalse(record.containsKey("cause_frame_8"))
+        assertEquals("true", record["detail_truncated"])
+        assertEquals("tx_123", record["transaction"])
+        assertEquals("loop_main", record["loop"])
+        assertEquals("manual", record["source"])
+        assertFalse(record.containsKey("fields_truncated"))
+    }
+
+    @Test
+    fun `diagnosticErrorFields captures snapshot at enqueue time rather than during drainage`() {
+        val directory = temporary.newFolder()
+        val buffer = RuntimeDiagnosticBuffer(run, wallClock = { 3000L }, monotonicClock = { 30L })
+        val error = IllegalStateException("snapshot test")
+        error.stackTrace = arrayOf(StackTraceElement("io.github.reqpet.Snap", "run", "Snap.kt", 1))
+
+        buffer.event("err_first", diagnosticErrorFields(error, detailed = false))
+        buffer.event("err_second", diagnosticErrorFields(error, detailed = true))
+        buffer.event("err_third", diagnosticErrorFields(error, detailed = false))
+
+        RuntimeDiagnosticFileWriter(directory).use { writer ->
+            assertTrue(buffer.writeNext(writer))
+            assertTrue(buffer.writeNext(writer))
+            assertTrue(buffer.writeNext(writer))
+        }
+
+        val records = records(directory)
+        assertEquals(3, records.size)
+        assertEquals("IllegalStateException", records[0]["error_type"])
+        assertFalse(records[0].containsKey("exception_class"))
+        assertFalse(records[0].containsKey("frame_0"))
+
+        assertEquals("IllegalStateException", records[1]["error_type"])
+        assertEquals("java.lang.IllegalStateException", records[1]["exception_class"])
+        assertEquals("io.github.reqpet.Snap.run:1", records[1]["frame_0"])
+
+        assertEquals("IllegalStateException", records[2]["error_type"])
+        assertFalse(records[2].containsKey("exception_class"))
+        assertFalse(records[2].containsKey("frame_0"))
+    }
+
+    @Test
+    fun `diagnosticErrorFields safely handles hostile throwable and cyclic causes without propagating exceptions`() {
+        val directory = temporary.newFolder()
+        val buffer = RuntimeDiagnosticBuffer(run, wallClock = { 4000L }, monotonicClock = { 40L })
+
+        class HostileException : RuntimeException("hostile") {
+            override val message: String
+                get() = throw AssertionError("disabled mode must not read message")
+
+            override val cause: Throwable
+                get() = throw AssertionError("disabled mode must not read cause")
+
+            override fun getStackTrace(): Array<StackTraceElement> {
+                throw java.util.concurrent.CancellationException("simulated cancellation during stack reading")
+            }
+        }
+
+        val hostile = HostileException()
+        val offFields = diagnosticErrorFields(hostile, detailed = false)
+        buffer.event("hostile_off", offFields)
+
+        val onFields = diagnosticErrorFields(hostile, detailed = true)
+        buffer.event("hostile_on", onFields)
+
+        val directSelfCycleCause = object : Throwable("directSelfCycle") {
+            override val cause: Throwable
+                get() = this
+        }
+        directSelfCycleCause.stackTrace =
+            arrayOf(StackTraceElement("io.github.reqpet.Cycle", "causeRun", "Cycle.kt", 1))
+        val directCycleError = Exception("directCycleError", directSelfCycleCause)
+        directCycleError.stackTrace = arrayOf(StackTraceElement("io.github.reqpet.Cycle", "errorRun", "Cycle.kt", 2))
+        val directCycleFields = diagnosticErrorFields(directCycleError, detailed = true)
+        buffer.event("direct_cycle_event", directCycleFields)
+
+        class TopSelfCycleThrowable : Throwable("topSelfCycle") {
+            override val cause: Throwable
+                get() = this
+        }
+
+        val topSelfCycle = TopSelfCycleThrowable()
+        topSelfCycle.stackTrace = arrayOf(StackTraceElement("io.github.reqpet.Cycle", "topRun", "Cycle.kt", 3))
+        val topCycleFields = diagnosticErrorFields(topSelfCycle, detailed = true)
+        buffer.event("top_cycle_event", topCycleFields)
+
+        val anonymousError = object : Throwable("anon") {}
+        val anonFields = diagnosticErrorFields(anonymousError, detailed = false)
+        assertEquals("", anonFields.first { it.first == "error_type" }.second)
+        buffer.event("anon_event", anonFields)
+
+        RuntimeDiagnosticFileWriter(directory).use { writer ->
+            assertTrue(buffer.writeNext(writer))
+            assertTrue(buffer.writeNext(writer))
+            assertTrue(buffer.writeNext(writer))
+            assertTrue(buffer.writeNext(writer))
+            assertTrue(buffer.writeNext(writer))
+        }
+
+        val records = records(directory)
+        val offRecord = records[0]
+        assertEquals("HostileException", offRecord["error_type"])
+        assertFalse(offRecord.containsKey("detail_unavailable"))
+        assertFalse(offRecord.containsKey("frame_0"))
+
+        val onRecord = records[1]
+        assertEquals("HostileException", onRecord["error_type"])
+        assertEquals("true", onRecord["detail_unavailable"])
+        assertFalse(onRecord.containsKey("frame_0"))
+        assertFalse(onRecord.containsKey("exception_class"))
+
+        val directCycleRecord = records[2]
+        assertEquals("Exception", directCycleRecord["error_type"])
+        assertEquals("java.lang.Exception", directCycleRecord["exception_class"])
+        assertTrue(directCycleRecord.containsKey("cause_class"))
+        assertEquals("true", directCycleRecord["detail_truncated"])
+
+        val topCycleRecord = records[3]
+        assertEquals("TopSelfCycleThrowable", topCycleRecord["error_type"])
+        assertFalse(topCycleRecord.containsKey("cause_class"))
+        assertEquals("false", topCycleRecord["detail_truncated"])
+
+        val anonRecord = records[4]
+        assertEquals("[redacted]", anonRecord["error_type"])
+    }
+
     private fun record(name: String, vararg fields: Pair<String, Any?>): String = RuntimeDiagnosticFormat.record(
         run, 1L, 0L, 2L, RuntimeDiagnosticFormat.body(name, fields)
     )

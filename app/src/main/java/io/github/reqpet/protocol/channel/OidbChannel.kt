@@ -553,9 +553,9 @@ class OidbChannel(
             if (t is kotlinx.coroutines.CancellationException) throw t
             val failureAtMs = RuntimeDiagnostics.nowMs()
             EngineLog.e("OidbChannel", "sendOidb 执行反射调用异常: ${t.javaClass.simpleName}: ${t.message}")
-            RuntimeDiagnostics.event(
-                "request_send_error", "channel" to channelId, "request" to attempt.id,
-                "command" to attempt.command, "error_type" to t.javaClass.simpleName
+            RuntimeDiagnostics.error(
+                "request_send_error", t, "channel" to channelId, "request" to attempt.id,
+                "command" to attempt.command
             )
             completeLocalOnce(
                 attempt, callback, -2, null, t.message, "send_exception",
@@ -633,9 +633,9 @@ class OidbChannel(
         try {
             callback(code, data, errorMsg)
         } catch (t: Throwable) {
-            RuntimeDiagnostics.event(
-                "request_callback_error", "channel" to channelId, "request" to attempt.id,
-                "command" to attempt.command, "error_type" to t.javaClass.simpleName
+            RuntimeDiagnostics.error(
+                "request_callback_error", t, "channel" to channelId, "request" to attempt.id,
+                "command" to attempt.command
             )
             EngineLog.e(
                 "OidbChannel",

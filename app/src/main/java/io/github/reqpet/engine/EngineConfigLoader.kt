@@ -45,6 +45,11 @@ internal object EngineConfigLoader {
             // 调试开关即刻生效（原先要等 QQ 进程重启才会重新读取）
             HookLog.isDebugEnabled = debugLog
             onDebugLogChanged(debugLog)
+            RuntimeDiagnostics.detailedMode = try {
+                p.getBoolean(PreferencesHelper.KEY_DIAGNOSTICS_DETAIL, false)
+            } catch (_: Throwable) {
+                false
+            }
             PetAdventureEngine.enableHireFriend = p.getBoolean(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, false)
             PetAdventureEngine.prefHireFriendUinsCsv =
                 p.getString(PreferencesHelper.KEY_HIRE_FRIEND_UINS, "") ?: ""

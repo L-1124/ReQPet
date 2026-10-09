@@ -370,7 +370,7 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
                         executeMasterCycle(context, loopId)
                     } catch (t: Throwable) {
                         if (t is CancellationException) throw t
-                        RuntimeDiagnostics.event("loop_error", "loop" to loopId, "error_type" to t.javaClass.simpleName)
+                        RuntimeDiagnostics.error("loop_error", t, "loop" to loopId)
                         EngineLog.e(TAG, "主循环异常: ${t.javaClass.simpleName}: ${t.message}")
                         15000L
                     }
@@ -433,7 +433,12 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
             outcome = "completed"
             return result
         } catch (t: Throwable) {
-            outcome = if (t is CancellationException) "cancelled" else "error"
+            if (t is CancellationException) {
+                outcome = "cancelled"
+            } else {
+                outcome = "error"
+                RuntimeDiagnostics.error("transaction_error", t, "transaction" to transactionId, "source" to source)
+            }
             errorType = t.javaClass.simpleName
             throw t
         } finally {

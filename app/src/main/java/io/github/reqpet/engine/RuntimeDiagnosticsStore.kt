@@ -266,3 +266,46 @@ internal class RuntimeDiagnosticFileWriter(
         }
     }
 }
+
+/** Extract bounded safe error fields. Never reads stack trace or causes when detailed is false. */
+internal fun diagnosticErrorFields(error: Throwable, detailed: Boolean): Array<Pair<String, Any?>> {
+    val errorType = try {
+        error.javaClass.simpleName
+    } catch (_: Throwable) {
+        "Throwable"
+    }
+    if (!detailed) return arrayOf("error_type" to errorType)
+    return try {
+        val fields = ArrayList<Pair<String, Any?>>(20)
+        fields.add("error_type" to errorType)
+        fields.add("exception_class" to error.javaClass.name)
+
+        var truncated = false
+        val frames = error.stackTrace ?: emptyArray()
+        val frameCount = minOf(frames.size, 8)
+        for (i in 0 until frameCount) {
+            val frame = frames[i] ?: continue
+            fields.add("frame_$i" to "${frame.className ?: "unknown"}.${frame.methodName ?: "unknown"}:${frame.lineNumber}")
+        }
+        if (frames.size > 8) truncated = true
+
+        val directCause = error.cause
+        if (directCause != null && directCause !== error) {
+            fields.add("cause_class" to directCause.javaClass.name)
+            val causeFrames = directCause.stackTrace ?: emptyArray()
+            val causeFrameCount = minOf(causeFrames.size, 8)
+            for (i in 0 until causeFrameCount) {
+                val frame = causeFrames[i] ?: continue
+                fields.add("cause_frame_$i" to "${frame.className ?: "unknown"}.${frame.methodName ?: "unknown"}:${frame.lineNumber}")
+            }
+            if (causeFrames.size > 8) truncated = true
+            if (directCause.cause != null) {
+                truncated = true
+            }
+        }
+        fields.add("detail_truncated" to truncated)
+        fields.toTypedArray()
+    } catch (_: Throwable) {
+        arrayOf("error_type" to errorType, "detail_unavailable" to true)
+    }
+}

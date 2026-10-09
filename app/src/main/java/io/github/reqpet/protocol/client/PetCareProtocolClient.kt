@@ -24,9 +24,7 @@ class PetCareProtocolClient(
     companion object {
         private const val TAG = "PetCareProtocolClient"
         private const val DEFAULT_FOOD_ID = 9990032L
-        private const val CANDIDATE_T64 = "t64.b"
-        private const val CANDIDATE_ZH5 = "zh5.b"
-
+        private val FEED_PB_CANDIDATES = listOf("p54.b", "t64.b", "zh5.b")
         internal fun validateFeedPbSchema(candidateCls: Class<*>, nanoCls: Class<*>): Boolean {
             if (!nanoCls.isAssignableFrom(candidateCls)) return false
             return try {
@@ -61,25 +59,16 @@ class PetCareProtocolClient(
 
             var matched: Class<*>? = null
             var matchCount = 0
-
-            try {
-                val cls = classLoader.loadClass(CANDIDATE_T64)
-                if (validateFeedPbSchema(cls, nanoCls)) {
-                    matched = cls
-                    matchCount++
+            for (candidate in FEED_PB_CANDIDATES) {
+                try {
+                    val cls = classLoader.loadClass(candidate)
+                    if (validateFeedPbSchema(cls, nanoCls)) {
+                        matched = cls
+                        matchCount++
+                    }
+                } catch (_: Throwable) {
                 }
-            } catch (_: Throwable) {
             }
-
-            try {
-                val cls = classLoader.loadClass(CANDIDATE_ZH5)
-                if (validateFeedPbSchema(cls, nanoCls)) {
-                    matched = cls
-                    matchCount++
-                }
-            } catch (_: Throwable) {
-            }
-
             if (matchCount > 1) {
                 EngineLog.w(TAG, "检测到多个符合结构的喂食 PB 候选类歧义，执行 Fail-Closed")
                 return null
@@ -292,7 +281,7 @@ class PetCareProtocolClient(
     }
 
     private fun tryReflectFeedTimesBody(): ByteArray? {
-        val candidates = listOf("t64.d", "zh5.d")
+        val candidates = listOf("p54.d", "t64.d", "zh5.d")
         for (candidate in candidates) {
             try {
                 val dCls = channel.classLoader.loadClass(candidate)
@@ -373,9 +362,12 @@ class PetCareProtocolClient(
         itemType: String = "1",
         callback: (code: Int, rawData: ByteArray?, errorMsg: String?) -> Unit
     ) {
-        // DEF-17: 0x99df 购买食物协议已废弃 (宿主已迁移至 Kuikly 增量资源架构)，安全静默不发包
-        EngineLog.w(TAG, "buyFood: 0x99df 购买食物协议已废弃，安全静默不发包 (Safe-Fail)")
-        callback(-1, null, "0x99df 已废弃 (Safe-Fail)")
+        val body = ProtoWire.message()
+            .writeVarint(1, count)
+            .writeString(2, petId)
+            .writeString(3, itemType)
+            .toByteArray()
+        channel.sendOidb("OidbSvcTrpcTcp.0x99df_1", 39391, 1, body, callback)
     }
 
     fun refreshProfile(callback: ((code: Int) -> Unit)? = null) {

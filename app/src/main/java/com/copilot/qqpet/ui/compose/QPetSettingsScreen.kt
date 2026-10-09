@@ -2,7 +2,7 @@ package com.copilot.qqpet.ui.compose
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -19,11 +19,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.lifecycle.Lifecycle
@@ -32,12 +34,16 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.compose.section.CareerSection
@@ -49,7 +55,9 @@ import com.copilot.qqpet.ui.compose.section.PkSection
 import com.copilot.qqpet.ui.compose.section.RewardSection
 import com.copilot.qqpet.ui.compose.section.ScheduleSection
 import com.copilot.qqpet.ui.compose.section.SocialSection
+import com.copilot.qqpet.ui.compose.dialog.ConfirmDialog
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 internal enum class SettingsPage(val title: String) {
     HOME("Q宠后台伴侣"),
@@ -73,7 +81,6 @@ fun QPetSettingsScreen(
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 internal fun QPetSettingsContent(
     state: SettingsState,
     onBack: () -> Unit,
@@ -84,12 +91,13 @@ internal fun QPetSettingsContent(
     val page = navigation.currentPage
     val scope = rememberCoroutineScope()
     val stateHolder = rememberSaveableStateHolder()
+    var showInspectionConfirm by remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(state, lifecycleOwner) {
         if (!state.previewMode) {
             lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 while (true) {
-                    delay(1_000L)
+                    delay(1_000L.milliseconds)
                     state.refresh()
                 }
             }
@@ -131,10 +139,12 @@ internal fun QPetSettingsContent(
                 } else {
                     AnimatedContentTransitionScope.SlideDirection.Start
                 }
-                (slideIntoContainer(direction, tween(220), initialOffset = { it / 8 }) +
-                    fadeIn(tween(180))) togetherWith
-                    (slideOutOfContainer(direction, tween(220), targetOffset = { it / 8 }) +
-                        fadeOut(tween(140)))
+                val spatialSpec = spring<IntOffset>(dampingRatio = 0.8f, stiffness = 380f)
+                val effectsSpec = spring<Float>(dampingRatio = 1.0f, stiffness = 1600f)
+                (slideIntoContainer(direction, spatialSpec, initialOffset = { it / 8 }) +
+                        fadeIn(effectsSpec)) togetherWith
+                        (slideOutOfContainer(direction, spatialSpec, targetOffset = { it / 8 }) +
+                                fadeOut(effectsSpec))
             },
             label = "settings_page"
         ) { displayedPage ->
@@ -157,17 +167,35 @@ internal fun QPetSettingsContent(
                             }
                         }
                         item(key = "status", contentType = "status") {
-                            SettingsGroupItem(index = 0, total = 1, modifier = Modifier.padding(top = 12.dp)) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                            ) {
                                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                                    Text("运行状态", style = MaterialTheme.typography.labelLarge,
-                                        color = MaterialTheme.colorScheme.primary)
-                                    Text(state.statusText.ifBlank { "状态尚未确认" },
-                                        style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.padding(top = 8.dp))
-                                    Text(state.attributesText.ifBlank { "暂无小宠数据" },
+                                    Text(
+                                        "运行状态", style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        state.statusText.ifBlank { "状态尚未确认" },
+                                        style = MaterialTheme.typography.titleMediumEmphasized,
+                                        modifier = Modifier.padding(top = 8.dp)
+                                    )
+                                    Text(
+                                        state.attributesText.ifBlank { "暂无小宠数据" },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 4.dp))
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                    Button(
+                                        onClick = { showInspectionConfirm = true },
+                                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+                                    ) {
+                                        Text(
+                                            "立即执行全套巡检与养成",
+                                            style = MaterialTheme.typography.labelLargeEmphasized
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -203,13 +231,21 @@ internal fun QPetSettingsContent(
                             Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
                                 SectionHeader("系统")
                                 SettingsGroupItem(index = 0, total = 3) {
-                                    CategoryRow(SettingsPage.SCHEDULE, "夜间与熄屏静默 · 随机休眠", navigation::navigate)
+                                    CategoryRow(
+                                        SettingsPage.SCHEDULE,
+                                        "夜间与熄屏静默 · 随机休眠",
+                                        navigation::navigate
+                                    )
                                 }
                             }
                         }
                         item(key = "diagnostics", contentType = "category") {
                             SettingsGroupItem(index = 1, total = 3, modifier = Modifier.padding(top = 3.dp)) {
-                                CategoryRow(SettingsPage.DIAGNOSTICS, "近期日志 · 长期日志位置 · 引擎指标", navigation::navigate)
+                                CategoryRow(
+                                    SettingsPage.DIAGNOSTICS,
+                                    "近期日志 · 长期日志位置 · 引擎指标",
+                                    navigation::navigate
+                                )
                             }
                         }
                         item(key = "module", contentType = "category") {
@@ -217,9 +253,11 @@ internal fun QPetSettingsContent(
                                 CategoryRow(SettingsPage.MODULE, "宿主兼容 · 反馈", navigation::navigate)
                             }
                         }
-                        item(key = "overview_actions", contentType = "actions") {
-                            Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                                OverviewActions(state)
+                        if (state.hasOngoingTask) {
+                            item(key = "overview_actions", contentType = "actions") {
+                                Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                                    OverviewActions(state)
+                                }
                             }
                         }
                     } else {
@@ -240,6 +278,19 @@ internal fun QPetSettingsContent(
                 }
             }
         }
+    }
+    if (showInspectionConfirm) {
+        ConfirmDialog(
+            title = "执行全套巡检与养成？",
+            message = "将立即同步小宠最新资质与起居状态，按需触发进食洗澡，并依序规划自适应日程。",
+            confirmText = "立即执行",
+            isDestructive = false,
+            onConfirm = {
+                state.action("cycle")
+                showInspectionConfirm = false
+            },
+            onDismiss = { showInspectionConfirm = false }
+        )
     }
 }
 

@@ -29,12 +29,11 @@ ReQPet/
 │   │   ├── hook/         # HookApi, injector, crash isolation, tinker blocking, network shield
 │   │   ├── protocol/     # OIDB channel reflection, protobuf encoders (ProtoWire), protocol clients
 │   │   ├── engine/       # Background loop, state machine, task coordinator, diagnostics
-│   │   └── ui/           # Host Fragment injection, Jetpack Compose UI, back stack, state management
+│   │   └── ui/           # Full-screen Dialog container, controller lifecycle restore, Jetpack Compose UI, back stack, state management
 │   ├── src/main/res/     # Resources, view identifiers, drawables
 │   └── src/test/         # Unit test suite (JVM-based state, protocol, and fault injection tests)
-├── qqstub/               # Compile-only stub for host fragment (QPublicBaseFragment)
 ├── build.gradle.kts      # Root build configuration
-└── settings.gradle.kts   # Module definitions (:app, :qqstub)
+└── settings.gradle.kts   # Root Gradle settings (:app)
 ```
 
 ---
@@ -75,6 +74,12 @@ Run commands via the root Gradle wrapper:
   ```
   Artifact output: `app/build/outputs/apk/debug/app-debug.apk`
 
+- Compile optimized release APK for startup performance comparisons:
+  ```bash
+  ./gradlew assembleRelease
+  ```
+  Artifact output: `app/build/outputs/apk/release/app-release.apk`. Release enables R8 optimization; debug does not.
+
 - Clean build:
   ```bash
   ./gradlew clean assembleDebug
@@ -101,10 +106,10 @@ Run commands via the root Gradle wrapper:
 ## 5. Development Workflow & Guidelines
 
 ### 5.1 Architecture & Component Boundaries
-- **`hook/`**: Contains `HookApi` (exposes LibXposed APIs), `QQSettingInjector` (injects settings entry into host settings list), `CrashInterceptor`, `TinkerBlocker`, `PublicFragmentHostHook`, and `NetworkSecurityShield`. Note that module entry `HookEntry` resides in root package `com.copilot.qqpet`.
+- **`hook/`**: Contains `HookApi` (exposes LibXposed APIs), `QQSettingInjector` (injects settings entry into host settings list), `CrashInterceptor`, `TinkerBlocker`, and `NetworkSecurityShield`. Note that module entry `HookEntry` resides in root package `com.copilot.qqpet`.
 - **`protocol/`**: Contains `OidbChannel` (handles packet reflection via host trpc/oidb engine), `QQPetDirectBridge` (facade for host methods), and protocol clients (`PetCareerProtocolClient`, `PetCareProtocolClient`, `PetSocialProtocolClient`).
 - **`engine/`**: Implements single-state-owner background automation. `PetAdventureEngine` coordinates `PetCycleDispatcher`, `PetMaintenanceCoordinator`, `StealthScheduler`, and `RuntimeDiagnostics`.
-- **`ui/`**: Uses Jetpack Compose attached via `ComposeInjectionHost` inside `QQSettingFragment`. Navigation state is managed by `SettingsBackStack` with per-page `SaveableStateProvider`.
+- **`ui/`**: Uses Jetpack Compose attached via `ComposeInjectionHost` inside self-managed full-screen `QQSettingDialog` with native platform window animations (`Animation_Translucent`) respecting system animation scale. `SettingsDialogController` manages window lifecycle and state restoration across host Activity destruction. Navigation state is managed by `SettingsBackStack` with per-page `SaveableStateProvider`.
 
 ### 5.2 Code Style & Comment Rules
 - **Zero Decoratives**: No ASCII art, divider bars (`// ======`), or emojis in comments.
@@ -120,3 +125,14 @@ Run commands via the root Gradle wrapper:
   - `test(...)`: Adding or updating test cases
   - `docs(...)`: Documentation updates
 - When instructed to commit code changes, exclude documentation files (`*.md`) and local agent metadata (`.agents/`) unless explicitly requested.
+
+### 5.4 Settings Startup Diagnostics
+- Collect host app tracing for `com.tencent.mobileqq` together with graphics/view, Dalvik, and scheduling events. Confirm `settings.*` markers are present before comparing timings.
+- Synchronous markers cover entry clicks, controller dispatch, dialog initialization/show/release, state initialization/attachment/refresh, view creation, owner resume, and state saving.
+- `settings.open_to_first_draw` is an API 29+ async span from dialog initialization to the first observed `OnDrawListener` callback. It does not measure display presentation or the full click-to-open interval.
+- The existing `settings_first_draw` diagnostic event records `elapsed_ms` from the controller show request and `status` (`success` or `aborted`). Success means draw traversal was observed, not that the frame finished or was presented.
+- `settings.account_sync` is an API 29+ async span inside the IO coroutine. Normal account synchronization starts after the first draw callback via a tracked view post; release cancels pending work and closes outstanding spans.
+- Attribute reads in `SettingsState.refresh` use the cached snapshot rather than synchronous host reflection.
+- HOME category rows are individually keyed lazy items; each group title stays with its first row. Reuse `SettingsGroupItem` for corner/color rules, preserving 3 dp row gaps, 12 dp group gaps, and per-page saved state. Do not bundle a whole HOME category group into one lazy item.
+- Compare cold first-open after a QQ process restart separately from warm reopen, using the same release APK and capture configuration. Check `VerifyClass`, initialization/composition/measure work, and FrameTimeline missed deadlines; builds and JVM tests do not establish device startup latency.
+- The Compose mapping producer dependency follows the catalog Compose plugin version because AGP's built-in Kotlin version may differ. Keep mapping generation and R8 optimization enabled.

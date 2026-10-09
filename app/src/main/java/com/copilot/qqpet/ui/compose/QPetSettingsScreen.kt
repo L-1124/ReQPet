@@ -143,23 +143,21 @@ internal fun QPetSettingsContent(
                     modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth().fillMaxHeight(),
                     state = rememberLazyListState(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(if (displayedPage == SettingsPage.HOME) 0.dp else 12.dp)
                 ) {
                     if (displayedPage == SettingsPage.HOME) {
-                        item(key = "master") {
-                            SettingsGroup {
-                                item {
-                                    ToggleRow(
-                                        title = "自动托管",
-                                        subtitle = "关闭时不发起模块请求；配置保留，下次开启继续使用",
-                                        checked = state.bool(PreferencesHelper.KEY_MASTER_ENABLED, false),
-                                        onCheckedChange = { state.setBool(PreferencesHelper.KEY_MASTER_ENABLED, it) }
-                                    )
-                                }
+                        item(key = "master", contentType = "toggle") {
+                            SettingsGroupItem(index = 0, total = 1) {
+                                ToggleRow(
+                                    title = "自动托管",
+                                    subtitle = "关闭时不发起模块请求；配置保留，下次开启继续使用",
+                                    checked = state.bool(PreferencesHelper.KEY_MASTER_ENABLED, false),
+                                    onCheckedChange = { state.setBool(PreferencesHelper.KEY_MASTER_ENABLED, it) }
+                                )
                             }
                         }
-                        item(key = "status") {
-                            SettingsCard {
+                        item(key = "status", contentType = "status") {
+                            SettingsGroupItem(index = 0, total = 1, modifier = Modifier.padding(top = 12.dp)) {
                                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                                     Text("运行状态", style = MaterialTheme.typography.labelLarge,
                                         color = MaterialTheme.colorScheme.primary)
@@ -173,25 +171,57 @@ internal fun QPetSettingsContent(
                                 }
                             }
                         }
-                        item(key = "features") {
-                            SectionHeader("功能")
-                            SettingsGroup {
-                                item { CategoryRow(SettingsPage.TASKS, taskSummary(state), navigation::navigate) }
-                                item { CategoryRow(SettingsPage.CARE, "自己与好友的小宠 · 照料阈值", navigation::navigate) }
-                                item { CategoryRow(SettingsPage.SOCIAL, "回踩访客 · 主动串门 · 每日上限", navigation::navigate) }
-                                item { CategoryRow(SettingsPage.PK, "自动挑战 · 免战名单", navigation::navigate) }
-                                item { CategoryRow(SettingsPage.REWARDS, "自动领取 · 立即领取", navigation::navigate) }
+                        item(key = "features", contentType = "category_header") {
+                            Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                                SectionHeader("功能")
+                                SettingsGroupItem(index = 0, total = 5) {
+                                    CategoryRow(SettingsPage.TASKS, taskSummary(state), navigation::navigate)
+                                }
                             }
                         }
-                        item(key = "system") {
-                            SectionHeader("系统")
-                            SettingsGroup {
-                                item { CategoryRow(SettingsPage.SCHEDULE, "夜间与熄屏静默 · 随机休眠", navigation::navigate) }
-                                item { CategoryRow(SettingsPage.DIAGNOSTICS, "近期日志 · 长期日志位置 · 引擎指标", navigation::navigate) }
-                                item { CategoryRow(SettingsPage.MODULE, "宿主兼容 · 反馈", navigation::navigate) }
+                        item(key = "care", contentType = "category") {
+                            SettingsGroupItem(index = 1, total = 5, modifier = Modifier.padding(top = 3.dp)) {
+                                CategoryRow(SettingsPage.CARE, "自己与好友的小宠 · 照料阈值", navigation::navigate)
                             }
                         }
-                        item(key = "overview_actions") { OverviewActions(state) }
+                        item(key = "social", contentType = "category") {
+                            SettingsGroupItem(index = 2, total = 5, modifier = Modifier.padding(top = 3.dp)) {
+                                CategoryRow(SettingsPage.SOCIAL, "回踩访客 · 主动串门 · 每日上限", navigation::navigate)
+                            }
+                        }
+                        item(key = "pk", contentType = "category") {
+                            SettingsGroupItem(index = 3, total = 5, modifier = Modifier.padding(top = 3.dp)) {
+                                CategoryRow(SettingsPage.PK, "自动挑战 · 免战名单", navigation::navigate)
+                            }
+                        }
+                        item(key = "rewards", contentType = "category") {
+                            SettingsGroupItem(index = 4, total = 5, modifier = Modifier.padding(top = 3.dp)) {
+                                CategoryRow(SettingsPage.REWARDS, "自动领取 · 立即领取", navigation::navigate)
+                            }
+                        }
+                        item(key = "system", contentType = "category_header") {
+                            Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                                SectionHeader("系统")
+                                SettingsGroupItem(index = 0, total = 3) {
+                                    CategoryRow(SettingsPage.SCHEDULE, "夜间与熄屏静默 · 随机休眠", navigation::navigate)
+                                }
+                            }
+                        }
+                        item(key = "diagnostics", contentType = "category") {
+                            SettingsGroupItem(index = 1, total = 3, modifier = Modifier.padding(top = 3.dp)) {
+                                CategoryRow(SettingsPage.DIAGNOSTICS, "近期日志 · 长期日志位置 · 引擎指标", navigation::navigate)
+                            }
+                        }
+                        item(key = "module", contentType = "category") {
+                            SettingsGroupItem(index = 2, total = 3, modifier = Modifier.padding(top = 3.dp)) {
+                                CategoryRow(SettingsPage.MODULE, "宿主兼容 · 反馈", navigation::navigate)
+                            }
+                        }
+                        item(key = "overview_actions", contentType = "actions") {
+                            Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                                OverviewActions(state)
+                            }
+                        }
                     } else {
                         item(key = displayedPage.name) {
                             when (displayedPage) {

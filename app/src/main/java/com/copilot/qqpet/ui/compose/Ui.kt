@@ -146,28 +146,12 @@ fun SettingsGroup(
         verticalArrangement = Arrangement.spacedBy(spacing)
     ) {
         items.forEachIndexed { index, itemContent ->
-            val shape = when {
-                total <= 1 -> RoundedCornerShape(outerCornerRadius)
-                index == 0 -> RoundedCornerShape(
-                    topStart = outerCornerRadius,
-                    topEnd = outerCornerRadius,
-                    bottomStart = innerCornerRadius,
-                    bottomEnd = innerCornerRadius
-                )
-
-                index == total - 1 -> RoundedCornerShape(
-                    topStart = innerCornerRadius,
-                    topEnd = innerCornerRadius,
-                    bottomStart = outerCornerRadius,
-                    bottomEnd = outerCornerRadius
-                )
-
-                else -> RoundedCornerShape(innerCornerRadius)
-            }
-            Surface(
-                shape = shape,
-                color = containerColor,
-                modifier = Modifier.fillMaxWidth()
+            SettingsGroupItem(
+                index = index,
+                total = total,
+                outerCornerRadius = outerCornerRadius,
+                innerCornerRadius = innerCornerRadius,
+                containerColor = containerColor
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     itemContent()
@@ -175,6 +159,40 @@ fun SettingsGroup(
             }
         }
     }
+}
+
+@Composable
+internal fun SettingsGroupItem(
+    index: Int,
+    total: Int,
+    modifier: Modifier = Modifier,
+    outerCornerRadius: Dp = 20.dp,
+    innerCornerRadius: Dp = 4.dp,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
+    content: @Composable () -> Unit
+) {
+    val shape = when {
+        total <= 1 -> RoundedCornerShape(outerCornerRadius)
+        index == 0 -> RoundedCornerShape(
+            topStart = outerCornerRadius,
+            topEnd = outerCornerRadius,
+            bottomStart = innerCornerRadius,
+            bottomEnd = innerCornerRadius
+        )
+        index == total - 1 -> RoundedCornerShape(
+            topStart = innerCornerRadius,
+            topEnd = innerCornerRadius,
+            bottomStart = outerCornerRadius,
+            bottomEnd = outerCornerRadius
+        )
+        else -> RoundedCornerShape(innerCornerRadius)
+    }
+    Surface(
+        shape = shape,
+        color = containerColor,
+        modifier = modifier.fillMaxWidth(),
+        content = content
+    )
 }
 
 @Composable

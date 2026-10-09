@@ -2,6 +2,7 @@ package com.copilot.qqpet.ui.theme
 
 import android.content.Context
 import android.content.res.Configuration
+import com.copilot.qqpet.hook.HookLog
 
 /** 宿主（QQ）当前是否深色皮肤；配色本身交给 Material3 动态色。 */
 object HostTheme {
@@ -21,12 +22,16 @@ object HostTheme {
         }
     }
 
-    fun isNight(context: Context): Boolean {
+    fun isNight(
+        context: Context,
+        configuration: Configuration? = null,
+        phase: String? = null
+    ): Boolean {
         try {
             val qqThemeClass = context.classLoader.loadClass("com.tencent.mobileqq.utils.QQTheme")
             val method = qqThemeClass.getMethod("isNowThemeIsNight")
             val res = method.invoke(null) as? Boolean
-            if (res != null) return res
+            if (res != null) return reportNight(context, configuration, phase, "QQTheme", res)
         } catch (e: Throwable) {
             if (e is kotlinx.coroutines.CancellationException) throw e
         }
@@ -36,7 +41,7 @@ object HostTheme {
             for (m in themeUtilClass.methods) {
                 if (m.name == "isNowThemeIsNight" && m.parameterTypes.isEmpty()) {
                     val res = m.invoke(null) as? Boolean
-                    if (res != null) return res
+                    if (res != null) return reportNight(context, configuration, phase, "ThemeUtil", res)
                 }
             }
         } catch (e: Throwable) {
@@ -44,11 +49,33 @@ object HostTheme {
         }
 
         return try {
-            (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-                    Configuration.UI_MODE_NIGHT_YES
+            val config = configuration ?: context.resources.configuration
+            val dark = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            reportNight(context, configuration, phase, "configuration", dark)
         } catch (e: Throwable) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             false
         }
+    }
+
+    private fun reportNight(
+        context: Context,
+        configuration: Configuration?,
+        phase: String?,
+        source: String,
+        dark: Boolean
+    ): Boolean {
+        if (phase != null) {
+            try {
+                val activityNight = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                val callbackNight = configuration?.let { it.uiMode and Configuration.UI_MODE_NIGHT_MASK }
+                HookLog.trace(
+                    "HostTheme",
+                    "phase=$phase source=$source dark=$dark activityNight=$activityNight callbackNight=$callbackNight"
+                )
+            } catch (_: Throwable) {
+            }
+        }
+        return dark
     }
 }

@@ -7,6 +7,7 @@ import android.content.ContextWrapper
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import android.widget.Toast
 import com.copilot.qqpet.HookEntry
 import com.copilot.qqpet.engine.RuntimeDiagnostics
@@ -37,7 +38,9 @@ internal object SettingsDialogController {
         var isOpenRequested: Boolean = false,
         var dialog: QQSettingDialog? = null,
         var pendingRestoreBundle: Bundle? = null,
-        var showRequestTimestampMs: Long = 0L
+        var showRequestTimestampMs: Long = 0L,
+        var pendingAttachListener: View.OnAttachStateChangeListener? = null,
+        var pendingAttachView: WeakReference<View>? = null
     )
 
     private val records = IdentityHashMap<Activity, ActivityRecord>()
@@ -159,7 +162,9 @@ internal object SettingsDialogController {
 
         val record = getOrCreateRecord(owner)
         record.isOpenRequested = true
-        record.showRequestTimestampMs = RuntimeDiagnostics.nowMs()
+        if (record.showRequestTimestampMs <= 0L) {
+            record.showRequestTimestampMs = RuntimeDiagnostics.nowMs()
+        }
         val existingDialog = record.dialog
         if (existingDialog != null) {
             if (existingDialog.isShowing) {
@@ -167,10 +172,11 @@ internal object SettingsDialogController {
             }
             cleanupRecordDialog(record)
             record.isOpenRequested = true
+            record.showRequestTimestampMs = RuntimeDiagnostics.nowMs()
         }
 
         if (record.stage == ActivityStage.RESUMED) {
-            createAndShowDialog(record, owner)
+            requestDisplayOrDefer(record, owner)
         } else {
             HookLog.trace(TAG, "show requested while activity in stage ${record.stage}; keeping pending for resume")
         }
@@ -211,6 +217,86 @@ internal object SettingsDialogController {
         return null
     }
 
+    private fun removePendingAttachListener(record: ActivityRecord) {
+        val listener = record.pendingAttachListener ?: return
+        record.pendingAttachListener = null
+        try {
+            val view = record.pendingAttachView?.get()
+            view?.removeOnAttachStateChangeListener(listener)
+        } catch (t: Throwable) {
+            HookLog.e(TAG, "Failed to remove decorView attach listener", t)
+        } finally {
+            record.pendingAttachView = null
+        }
+    }
+
+    private fun requestDisplayOrDefer(record: ActivityRecord, activity: Activity) {
+        if (records[activity] !== record || !record.isOpenRequested ||
+            record.stage != ActivityStage.RESUMED || record.dialog != null
+        ) return
+        if (activity.isFinishing || activity.isDestroyed) {
+            cleanupRecordDialog(record)
+            return
+        }
+
+        val decorView = activity.window?.decorView
+        if (decorView == null) {
+            cleanupRecordDialog(record)
+            showToast(activity, MSG_OPEN_FAILED)
+            return
+        }
+        if (decorView.windowToken != null) {
+            removePendingAttachListener(record)
+            createAndShowDialog(record, activity)
+            return
+        }
+        if (record.pendingAttachListener != null && record.pendingAttachView?.get() === decorView) return
+
+        removePendingAttachListener(record)
+        if (record.showRequestTimestampMs <= 0L) {
+            record.showRequestTimestampMs = RuntimeDiagnostics.nowMs()
+        }
+        val listener = object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                try {
+                    if (records[activity] !== record || record.pendingAttachListener !== this ||
+                        record.pendingAttachView?.get() !== v
+                    ) return
+                    removePendingAttachListener(record)
+                    if (!record.isOpenRequested || record.stage != ActivityStage.RESUMED ||
+                        record.dialog != null
+                    ) return
+                    if (activity.isFinishing || activity.isDestroyed) {
+                        cleanupRecordDialog(record)
+                        return
+                    }
+                    if (v.windowToken == null) {
+                        HookLog.trace(TAG, "display deferred: attached decorView has no windowToken")
+                        return
+                    }
+                    createAndShowDialog(record, activity)
+                } catch (t: Throwable) {
+                    HookLog.e(TAG, "decorView attach callback failed", t)
+                    cleanupRecordDialog(record)
+                    showToast(activity, MSG_OPEN_FAILED)
+                }
+            }
+
+            override fun onViewDetachedFromWindow(v: View) {}
+        }
+        record.pendingAttachListener = listener
+        record.pendingAttachView = WeakReference(decorView)
+        try {
+            decorView.addOnAttachStateChangeListener(listener)
+            HookLog.trace(TAG, "display deferred: waiting for decorView attach")
+            if (decorView.windowToken != null) listener.onViewAttachedToWindow(decorView)
+        } catch (t: Throwable) {
+            HookLog.e(TAG, "decorView attach registration failed", t)
+            cleanupRecordDialog(record)
+            showToast(activity, MSG_OPEN_FAILED)
+        }
+    }
+
     private fun createAndShowDialog(record: ActivityRecord, activity: Activity) {
         if (activity.isFinishing || activity.isDestroyed) {
             HookLog.trace(TAG, "createAndShowDialog rejected: activity finishing or destroyed")
@@ -220,25 +306,22 @@ internal object SettingsDialogController {
 
         val decorToken = activity.window?.decorView?.windowToken
         if (decorToken == null) {
-            HookLog.trace(TAG, "createAndShowDialog rejected: decorView windowToken is null")
-            cleanupRecordDialog(record)
-            showToast(activity, MSG_OPEN_FAILED)
+            HookLog.trace(TAG, "display deferred: decorView windowToken unavailable before creation")
             return
         }
         val restoreBundle = record.pendingRestoreBundle
-        record.pendingRestoreBundle = null
         val showRequestTimestampMs = if (record.showRequestTimestampMs > 0L) {
             record.showRequestTimestampMs
         } else {
             RuntimeDiagnostics.nowMs()
         }
-        record.showRequestTimestampMs = 0L
         val openToDrawCookie = SettingsTrace.nextAsyncCookie()
         val onClosed: () -> Unit = {
             record.isOpenRequested = false
             record.dialog = null
             record.pendingRestoreBundle = null
             record.showRequestTimestampMs = 0L
+            removePendingAttachListener(record)
         }
 
         val dialog: QQSettingDialog = try {
@@ -261,11 +344,14 @@ internal object SettingsDialogController {
                 return
             }
         }
+        record.pendingRestoreBundle = null
+        record.showRequestTimestampMs = 0L
         if (activity.isFinishing || activity.isDestroyed || activity.window?.decorView?.windowToken == null) {
             HookLog.trace(TAG, "createAndShowDialog rejected before show(): activity invalid or token lost")
             try {
                 dialog.dismiss()
-            } catch (_: Throwable) {}
+            } catch (_: Throwable) {
+            }
             cleanupRecordDialog(record)
             showToast(activity, MSG_OPEN_FAILED)
             return
@@ -284,6 +370,7 @@ internal object SettingsDialogController {
     }
 
     private fun cleanupRecordDialog(record: ActivityRecord) {
+        removePendingAttachListener(record)
         try {
             record.dialog?.dismiss()
         } catch (t: Throwable) {
@@ -365,7 +452,7 @@ internal object SettingsDialogController {
 
                 if (record.isOpenRequested) {
                     if (record.dialog == null) {
-                        createAndShowDialog(record, activity)
+                        requestDisplayOrDefer(record, activity)
                     } else {
                         record.dialog?.onOwnerResumed()
                     }
@@ -385,6 +472,7 @@ internal object SettingsDialogController {
             try {
                 val record = getOrCreateRecord(activity)
                 record.stage = ActivityStage.PAUSED
+                removePendingAttachListener(record)
                 record.dialog?.onOwnerPaused()
             } catch (t: Throwable) {
                 HookLog.e(TAG, "onActivityPaused error", t)

@@ -49,7 +49,7 @@ internal class QQSettingDialog(
     private val openToDrawCookie: Int = SettingsTrace.nextAsyncCookie()
 ) : Dialog(activity, getThemeResId(activity)) {
 
-    private val isDarkTheme = mutableStateOf(HostTheme.isNight(activity))
+    private val isDarkTheme = mutableStateOf(HostTheme.isNight(activity, phase = "init"))
     private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var isReleased = false
     private var isRootAttached = false
@@ -59,6 +59,7 @@ internal class QQSettingDialog(
     private var isAccountSyncTriggered = false
     private var firstDrawListener: ViewTreeObserver.OnDrawListener? = null
     private var pendingAfterDrawRunnable: Runnable? = null
+    private var pendingThemeSyncRunnable: Runnable? = null
     private var onClosedCallback: (() -> Unit)? = onClosed
 
     private var composeHost: ComposeInjectionHost? = null
@@ -71,6 +72,7 @@ internal class QQSettingDialog(
     private enum class OwnerStage {
         CREATED, STARTED, RESUMED, STOPPED
     }
+
     private var ownerStage = OwnerStage.CREATED
 
     init {
@@ -85,8 +87,8 @@ internal class QQSettingDialog(
                 win.setWindowAnimations(android.R.style.Animation_Translucent)
                 win.clearFlags(
                     WindowManager.LayoutParams.FLAG_DIM_BEHIND or
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                 )
                 applyLegacySoftInputMode(win)
                 applyTransparentSystemBars(win)
@@ -119,10 +121,16 @@ internal class QQSettingDialog(
                     override fun onConfigurationChanged(newConfig: Configuration) {
                         super.onConfigurationChanged(newConfig)
                         try {
-                            updateThemeAndSystemBars()
+                            updateThemeAndSystemBars(newConfig, "configuration")
+                            scheduleThemeSync()
                         } catch (t: Throwable) {
                             HookLog.w(TAG, "Configuration change handling failed: ${t.message}")
                         }
+                    }
+
+                    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+                        super.onWindowFocusChanged(hasWindowFocus)
+                        if (hasWindowFocus) scheduleThemeSync()
                     }
                 }.apply {
                     layoutParams = ViewGroup.LayoutParams(
@@ -312,7 +320,8 @@ internal class QQSettingDialog(
         SettingsTrace.trace("settings.owner_resumed") {
             if (isReleased) return
             ownerStage = OwnerStage.RESUMED
-            updateThemeAndSystemBars()
+            updateThemeAndSystemBars(phase = "resume")
+            scheduleThemeSync()
             if (isFirstResume) {
                 // 首次 resume 紧接在构造后发生，SettingsState init 已获取最新缓存快照，跳过冗余即时 refresh
                 isFirstResume = false
@@ -326,12 +335,14 @@ internal class QQSettingDialog(
     fun onOwnerPaused() {
         if (isReleased) return
         ownerStage = OwnerStage.STARTED
+        cancelPendingThemeSync()
         syncLifecycleState()
     }
 
     fun onOwnerStopped() {
         if (isReleased) return
         ownerStage = OwnerStage.STOPPED
+        cancelPendingThemeSync()
         syncLifecycleState()
     }
 
@@ -364,9 +375,37 @@ internal class QQSettingDialog(
         release(notifyClosed = true)
     }
 
-    private fun updateThemeAndSystemBars() {
+    private fun scheduleThemeSync() {
+        if (isReleased || pendingThemeSyncRunnable != null) return
+        val root = rootView ?: return
         try {
-            val dark = HostTheme.isNight(activity)
+            val runnable = Runnable {
+                pendingThemeSyncRunnable = null
+                if (isReleased || ownerStage != OwnerStage.RESUMED ||
+                    !root.isAttachedToWindow || activity.isFinishing || activity.isDestroyed
+                ) return@Runnable
+                updateThemeAndSystemBars(phase = "window_ready")
+            }
+            pendingThemeSyncRunnable = runnable
+            if (!root.post(runnable)) pendingThemeSyncRunnable = null
+        } catch (t: Throwable) {
+            HookLog.w(TAG, "Failed scheduling theme synchronization: ${t.message}")
+        }
+    }
+
+    private fun cancelPendingThemeSync() {
+        val runnable = pendingThemeSyncRunnable ?: return
+        pendingThemeSyncRunnable = null
+        try {
+            rootView?.removeCallbacks(runnable)
+        } catch (t: Throwable) {
+            HookLog.w(TAG, "Failed cancelling theme synchronization: ${t.message}")
+        }
+    }
+
+    private fun updateThemeAndSystemBars(configuration: Configuration? = null, phase: String? = null) {
+        try {
+            val dark = HostTheme.isNight(activity, configuration, phase)
             if (isDarkTheme.value != dark) {
                 isDarkTheme.value = dark
             }
@@ -400,6 +439,7 @@ internal class QQSettingDialog(
                     host.onResume()
                 }
             }
+
             OwnerStage.STARTED -> {
                 if (host.lifecycle.currentState < Lifecycle.State.STARTED) {
                     host.onStart()
@@ -407,6 +447,7 @@ internal class QQSettingDialog(
                     host.onPause()
                 }
             }
+
             OwnerStage.STOPPED, OwnerStage.CREATED -> {
                 if (host.lifecycle.currentState > Lifecycle.State.CREATED) {
                     host.onStop()
@@ -445,13 +486,15 @@ internal class QQSettingDialog(
         SettingsTrace.trace("settings.release") {
             if (isReleased) return
             isReleased = true
+            cancelPendingThemeSync()
 
             // 1. 始终独立闭合异步 trace 跨度，不依赖 isFirstDrawHandled 状态
             if (isOpenToDrawTracing) {
                 isOpenToDrawTracing = false
                 try {
                     SettingsTrace.endAsync("settings.open_to_first_draw", openToDrawCookie)
-                } catch (_: Throwable) {}
+                } catch (_: Throwable) {
+                }
             }
 
             // 2. 移除未完成的 draw 遍历监听器与待执行的 post 回调（全异常隔离，绝不中断后续清理）

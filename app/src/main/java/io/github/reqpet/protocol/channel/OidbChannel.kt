@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * 底层 OIDB / SSO 反射通道与 ClassLoader 发现管道
  */
-class OidbChannel(
+open class OidbChannel(
     val classLoader: ClassLoader,
     val context: Context? = null
 ) {
@@ -438,7 +438,7 @@ class OidbChannel(
         return ""
     }
 
-    fun sendOidb(
+    open fun sendOidb(
         commandName: String,
         command: Int,
         subCommand: Int,

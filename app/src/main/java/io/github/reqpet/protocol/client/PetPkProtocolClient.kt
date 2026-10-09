@@ -17,24 +17,33 @@ class PetPkProtocolClient(
         private const val TAG = "PetPkProtocolClient"
     }
 
+    internal fun buildQueryFriendPkStatusBody(
+        friendUin: Long,
+        friendPetId: String,
+        ownPetId: String
+    ): ByteArray {
+        return ProtoWire.message()
+            .writeString(1, friendPetId)
+            .writeString(2, friendUin.toString())
+            .writeString(3, ownPetId)
+            .writeVarint(4, 0L)
+            .toByteArray()
+    }
+
     fun queryFriendPkStatus(
         friendUin: Long,
         friendPetId: String,
         ownPetId: String,
         callback: (code: Int, info: PkStatusInfo?, errorMsg: String?) -> Unit
     ) {
-        val body = ProtoWire.message()
-            .writeString(1, friendPetId)
-            .writeString(2, friendUin.toString())
-            .writeString(3, ownPetId)
-            .writeVarint(4, 0L)
-            .writeVarint(100, 2L)
-            .toByteArray()
+        val body = buildQueryFriendPkStatusBody(friendUin, friendPetId, ownPetId)
         channel.sendOidb("OidbSvcTrpcTcp.0x9875_1", 39029, 1, body) { code, data, errorMsg ->
             if (code == 0 && data != null) {
                 val pkStatusBytes = ProtoWire.firstBytes(data, 2)
                 val rawStatus = (ProtoWire.firstVarint(pkStatusBytes, 1) ?: 0L).toInt()
-                val countDown = ProtoWire.firstVarint(pkStatusBytes, 3) ?: 0L
+                val countDown = ProtoWire.firstVarint(pkStatusBytes, 4)
+                    ?: ProtoWire.firstVarint(pkStatusBytes, 3)
+                    ?: 0L
                 val storyId = ProtoWire.firstString(pkStatusBytes, 5)
                 val canPk = (rawStatus == 100 || rawStatus == 300)
                 EngineLog.i(
@@ -83,10 +92,10 @@ class PetPkProtocolClient(
         }
     }
 
-    private fun parsePkBattleResult(data: ByteArray): PkBattleResult {
+    internal fun parsePkBattleResult(data: ByteArray): PkBattleResult {
         val storyId = ProtoWire.firstString(data, 1)
         val statusInfoBytes = ProtoWire.firstBytes(data, 4)
-        val leftDuration = ProtoWire.firstVarint(statusInfoBytes, 7) ?: 0L
+        val leftDuration = ProtoWire.firstVarint(statusInfoBytes, 4) ?: 0L
         val battleInfoBytes = ProtoWire.firstBytes(data, 5)
         val mySideBytes = ProtoWire.firstBytes(battleInfoBytes, 1)
         val oppSideBytes = ProtoWire.firstBytes(battleInfoBytes, 2)
@@ -122,15 +131,22 @@ class PetPkProtocolClient(
         }
     }
 
-    private fun parsePkSettleResult(storyId: String, data: ByteArray): PkSettleResult {
+    internal fun parsePkSettleResult(storyId: String, data: ByteArray): PkSettleResult {
         val endInfoBytes = ProtoWire.firstBytes(data, 1)
         val pkEndBytes = ProtoWire.firstBytes(endInfoBytes, 18)
         val title = ProtoWire.firstString(pkEndBytes, 1) ?: ProtoWire.firstString(endInfoBytes, 6)
         val desc = ProtoWire.firstString(pkEndBytes, 2) ?: ProtoWire.firstString(endInfoBytes, 7)
-        var goldEarned = ProtoWire.firstVarint(pkEndBytes, 3) ?: ProtoWire.firstVarint(endInfoBytes, 3) ?: 0L
-        if (goldEarned <= 0L || goldEarned > 1_000_000L) {
-            val candidateGold = ProtoWire.firstVarint(endInfoBytes, 4) ?: 0L
-            goldEarned = if (candidateGold in 1..1_000_000L) candidateGold else 0L
+
+        var goldEarned = 0L
+        val itemNodes = if (endInfoBytes != null) ProtoWire.allBytes(endInfoBytes, 9) else emptyList()
+        for (item in itemNodes) {
+            val count = ProtoWire.firstVarint(item, 1) ?: 0L
+            val name = ProtoWire.firstString(item, 3).orEmpty()
+            if (name.contains("金币") || name.contains("coin", ignoreCase = true)) {
+                goldEarned += count
+            } else if (goldEarned == 0L && count in 1..1_000_000L) {
+                goldEarned = count
+            }
         }
         return PkSettleResult(0, goldEarned, title, desc, null)
     }

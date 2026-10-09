@@ -5,6 +5,8 @@ import io.github.reqpet.protocol.ProtoWire
 import io.github.reqpet.protocol.channel.OidbChannel
 import io.github.reqpet.protocol.model.BathItemConfig
 import io.github.reqpet.protocol.model.BathResult
+import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 
 /**
  * 宠物洗澡、香皂道具商城与清洁度协议客户端
@@ -13,8 +15,248 @@ class PetBathProtocolClient(
     private val channel: OidbChannel,
     private val onCleanUpdated: (newClean: Int) -> Unit = {}
 ) {
+    internal data class BathPbSchema(
+        val requestClass: Class<*>,
+        val eventClass: Class<*>,
+        val extInfoClass: Class<*>,
+        val itemClass: Class<*>
+    )
+
     companion object {
         private const val TAG = "PetBathProtocolClient"
+
+        private fun isInstancePublicWritable(field: Field, expectedType: Class<*>): Boolean {
+            val mod = field.modifiers
+            return Modifier.isPublic(mod) &&
+                    !Modifier.isStatic(mod) &&
+                    !Modifier.isFinal(mod) &&
+                    field.type == expectedType
+        }
+
+        internal fun validateEventClass(cls: Class<*>, nanoCls: Class<*>): Boolean {
+            if (!nanoCls.isAssignableFrom(cls)) return false
+            return try {
+                cls.getDeclaredConstructor()
+                val fA = cls.getField("a")
+                val fB = cls.getField("b")
+                val fC = cls.getField("c")
+                isInstancePublicWritable(fA, Int::class.javaPrimitiveType!!) &&
+                        isInstancePublicWritable(fB, Int::class.javaPrimitiveType!!) &&
+                        isInstancePublicWritable(fC, Int::class.javaPrimitiveType!!)
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        internal fun validateExtInfoClass(cls: Class<*>, nanoCls: Class<*>): Boolean {
+            if (!nanoCls.isAssignableFrom(cls)) return false
+            return try {
+                cls.getDeclaredConstructor()
+                val fB = cls.getField("b")
+                val fH = cls.getField("h")
+                isInstancePublicWritable(fB, Long::class.javaPrimitiveType!!) &&
+                        isInstancePublicWritable(fH, Int::class.javaPrimitiveType!!)
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        internal fun validateItemClass(cls: Class<*>, nanoCls: Class<*>): Boolean {
+            if (!nanoCls.isAssignableFrom(cls)) return false
+            return try {
+                cls.getDeclaredConstructor()
+                val fD = cls.getField("d")
+                isInstancePublicWritable(fD, Int::class.javaPrimitiveType!!)
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        internal fun validateRequestClass(
+            cls: Class<*>,
+            eventCls: Class<*>,
+            extInfoCls: Class<*>,
+            itemCls: Class<*>,
+            nanoCls: Class<*>
+        ): Boolean {
+            if (!nanoCls.isAssignableFrom(cls)) return false
+            return try {
+                cls.getDeclaredConstructor()
+                val fA = cls.getField("a")
+                val fB = cls.getField("b")
+                val fC = cls.getField("c")
+                val fD = cls.getField("d")
+                val fE = cls.getField("e")
+
+                isInstancePublicWritable(fA, String::class.java) &&
+                        isInstancePublicWritable(fB, String::class.java) &&
+                        isInstancePublicWritable(fC, eventCls) &&
+                        isInstancePublicWritable(fD, extInfoCls) &&
+                        isInstancePublicWritable(fE, itemCls)
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        internal fun deriveBathSchema(classLoader: ClassLoader): BathPbSchema? {
+            val nanoCls = try {
+                classLoader.loadClass("com.google.protobuf.nano.MessageNano")
+            } catch (_: Throwable) {
+                return null
+            }
+
+            val adapterCls = try {
+                classLoader.loadClass("com.tencent.ergo.behavior.net.EGBehaviorNetworkAdapter")
+            } catch (_: Throwable) {
+                return null
+            }
+
+            val matchedSchemas = mutableListOf<BathPbSchema>()
+
+            for (method in adapterCls.declaredMethods) {
+                val params = method.parameterTypes
+                if (params.size != 7) continue
+                if (params[0] != String::class.java) continue
+                if (params[1] != String::class.java) continue
+
+                val eventCls = params[2]
+                val extInfoCls = params[3]
+                val itemCls = params[4]
+                val behaviorCls = params[5]
+                val contCls = params[6]
+
+                if (!nanoCls.isAssignableFrom(eventCls)) continue
+                if (!nanoCls.isAssignableFrom(extInfoCls)) continue
+                if (!nanoCls.isAssignableFrom(itemCls)) continue
+                if (!nanoCls.isAssignableFrom(behaviorCls)) continue
+                if (!kotlin.coroutines.Continuation::class.java.isAssignableFrom(contCls) &&
+                    contCls.name != "kotlin.coroutines.Continuation"
+                ) {
+                    continue
+                }
+
+                if (!validateEventClass(eventCls, nanoCls)) continue
+                if (!validateExtInfoClass(extInfoCls, nanoCls)) continue
+                if (!validateItemClass(itemCls, nanoCls)) continue
+
+                val pkg = itemCls.name.substringBeforeLast('.')
+                val reqCandidates = mutableListOf<Class<*>>()
+                for (c in 'a'..'z') {
+                    val candidateName = "$pkg.$c"
+                    if (candidateName == itemCls.name) continue
+                    val candidate = try {
+                        classLoader.loadClass(candidateName)
+                    } catch (_: Throwable) {
+                        continue
+                    }
+                    if (validateRequestClass(candidate, eventCls, extInfoCls, itemCls, nanoCls)) {
+                        reqCandidates.add(candidate)
+                    }
+                }
+
+                if (reqCandidates.size == 1) {
+                    val schema = BathPbSchema(reqCandidates.single(), eventCls, extInfoCls, itemCls)
+                    if (matchedSchemas.none { it.requestClass == schema.requestClass && it.eventClass == schema.eventClass }) {
+                        matchedSchemas.add(schema)
+                    }
+                } else if (reqCandidates.size > 1) {
+                    EngineLog.w(
+                        TAG,
+                        "推导洗澡 requestCls 存在候选歧义 (${reqCandidates.map { it.name }})，执行 Fail-Closed"
+                    )
+                    return null
+                }
+            }
+
+            if (matchedSchemas.size > 1) {
+                EngineLog.w(TAG, "存在多个洗澡 Schema 歧义，执行 Fail-Closed")
+                return null
+            }
+
+            return matchedSchemas.singleOrNull()
+        }
+
+        internal fun resolvePetStatus(classLoader: ClassLoader, targetUin: String): Int? {
+            return try {
+                val upmCls = classLoader.loadClass("com.tencent.ergo.user.UserPetManager")
+                val instanceField = upmCls.getField("a")
+                val managerInstance = instanceField.get(null) ?: return null
+                val mMethod = upmCls.getMethod("m", String::class.java)
+                val petObj = try {
+                    mMethod.invoke(managerInstance, targetUin)
+                } catch (e: java.lang.reflect.InvocationTargetException) {
+                    val cause = e.targetException ?: e.cause
+                    if (cause is kotlinx.coroutines.CancellationException) throw cause
+                    return null
+                }
+                if (petObj == null) return 0
+
+                val eField = petObj.javaClass.getField("e")
+                val statusObj = eField.get(petObj) ?: return 0
+
+                val bField = statusObj.javaClass.getField("b")
+                if (!isInstancePublicWritable(bField, Int::class.javaPrimitiveType!!)) return null
+                bField.getInt(statusObj)
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                null
+            }
+        }
+
+        internal fun buildBathRequestBody(
+            petId: String,
+            petUin: String,
+            cleanValue: Int,
+            now: Long,
+            status: Int,
+            schema: BathPbSchema,
+            nanoCls: Class<*>
+        ): ByteArray {
+            val eventInst = schema.eventClass.getDeclaredConstructor().newInstance()
+            schema.eventClass.getField("a").set(eventInst, 5000)
+            schema.eventClass.getField("b").set(eventInst, 500)
+            schema.eventClass.getField("c").set(eventInst, 501)
+
+            val extInfoInst = schema.extInfoClass.getDeclaredConstructor().newInstance()
+            schema.extInfoClass.getField("b").set(extInfoInst, now)
+            schema.extInfoClass.getField("h").set(extInfoInst, status)
+
+            val itemInst = schema.itemClass.getDeclaredConstructor().newInstance()
+            schema.itemClass.getField("d").set(itemInst, cleanValue)
+
+            val reqInst = schema.requestClass.getDeclaredConstructor().newInstance()
+            schema.requestClass.getField("a").set(reqInst, petId)
+            schema.requestClass.getField("b").set(reqInst, petUin)
+            schema.requestClass.getField("c").set(reqInst, eventInst)
+            schema.requestClass.getField("d").set(reqInst, extInfoInst)
+            schema.requestClass.getField("e").set(reqInst, itemInst)
+
+            val toByteArrayMethod = nanoCls.getMethod("toByteArray", nanoCls)
+            return toByteArrayMethod.invoke(null, reqInst) as ByteArray
+        }
+    }
+
+    @Volatile
+    private var cachedSchema: BathPbSchema? = null
+
+    internal fun tryReflectBathBody(
+        petId: String,
+        petUin: String,
+        cleanValue: Int,
+        now: Long
+    ): ByteArray? {
+        return try {
+            val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
+            val schema =
+                cachedSchema ?: deriveBathSchema(channel.classLoader)?.also { cachedSchema = it } ?: return null
+            val targetUin = petUin.ifEmpty { channel.getCurrentRuntimeUin() }
+            val status = resolvePetStatus(channel.classLoader, targetUin) ?: return null
+            buildBathRequestBody(petId, petUin, cleanValue, now, status, schema, nanoCls)
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            EngineLog.w(TAG, "反射构造洗澡 PB 异常: ${e.message}")
+            null
+        }
     }
 
     fun bath(
@@ -35,37 +277,6 @@ class PetBathProtocolClient(
             callback(code, data, err)
         }
     }
-
-    private fun tryReflectBathBody(petId: String, petUin: String, cleanValue: Int, now: Long): ByteArray? {
-        return try {
-            val dCls = channel.classLoader.loadClass("ci5.d")
-            val dInst = dCls.getDeclaredConstructor().newInstance()
-            dCls.getField("a").set(dInst, petId)
-            dCls.getField("b").set(dInst, petUin)
-            val jCls = channel.classLoader.loadClass("uh5.j")
-            val jInst = jCls.getDeclaredConstructor().newInstance()
-            jCls.getField("a").set(jInst, 5000)
-            jCls.getField("b").set(jInst, 500)
-            jCls.getField("c").set(jInst, 501)
-            dCls.getField("c").set(dInst, jInst)
-            val iCls = channel.classLoader.loadClass("uh5.i")
-            val iInst = iCls.getDeclaredConstructor().newInstance()
-            iCls.getField("b").set(iInst, now - 3000L)
-            iCls.getField("h").set(iInst, 1)
-            dCls.getField("d").set(dInst, iInst)
-            val bCls = channel.classLoader.loadClass("ci5.b")
-            val bInst = bCls.getDeclaredConstructor().newInstance()
-            bCls.getField("d").set(bInst, cleanValue)
-            dCls.getField("e").set(dInst, bInst)
-            val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
-            val toByteArrayMethod = nanoCls.getMethod("toByteArray", nanoCls)
-            toByteArrayMethod.invoke(null, dInst) as ByteArray
-        } catch (e: Throwable) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            null
-        }
-    }
-
 
     fun fetchBathItemConfig(callback: (code: Int, items: List<BathItemConfig>) -> Unit) {
         channel.sendOidb("OidbSvcTrpcTcp.0x9bf1_1", 39921, 1, ByteArray(0)) { code, data, err ->

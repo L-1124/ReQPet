@@ -11,6 +11,7 @@ import io.github.reqpet.protocol.model.FoodInventoryItem
 import io.github.reqpet.engine.AccountSessionGuard
 import io.github.reqpet.engine.PetAdventureEngine
 import io.github.reqpet.engine.state.AccountSessionStore
+import java.lang.reflect.Modifier
 
 /**
  * 宠物基础照料与属性维护协议客户端 (投喂、食物商城、三围拉取与状态同步)
@@ -23,6 +24,69 @@ class PetCareProtocolClient(
     companion object {
         private const val TAG = "PetCareProtocolClient"
         private const val DEFAULT_FOOD_ID = 9990032L
+        private const val CANDIDATE_T64 = "t64.b"
+        private const val CANDIDATE_ZH5 = "zh5.b"
+
+        internal fun validateFeedPbSchema(candidateCls: Class<*>, nanoCls: Class<*>): Boolean {
+            if (!nanoCls.isAssignableFrom(candidateCls)) return false
+            return try {
+                candidateCls.getDeclaredConstructor()
+                val fieldA = candidateCls.getField("a")
+                val fieldB = candidateCls.getField("b")
+                val fieldC = candidateCls.getField("c")
+                val fieldD = candidateCls.getField("d")
+                val fieldE = candidateCls.getField("e")
+
+                !Modifier.isStatic(fieldA.modifiers) &&
+                        !Modifier.isStatic(fieldB.modifiers) &&
+                        !Modifier.isStatic(fieldC.modifiers) &&
+                        !Modifier.isStatic(fieldD.modifiers) &&
+                        !Modifier.isStatic(fieldE.modifiers) &&
+                        fieldA.type == String::class.java &&
+                        fieldB.type == String::class.java &&
+                        fieldC.type == String::class.java &&
+                        fieldD.type == String::class.java &&
+                        fieldE.type == Int::class.javaPrimitiveType
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        internal fun findFeedPbClass(classLoader: ClassLoader): Class<*>? {
+            val nanoCls = try {
+                classLoader.loadClass("com.google.protobuf.nano.MessageNano")
+            } catch (_: Throwable) {
+                return null
+            }
+
+            var matched: Class<*>? = null
+            var matchCount = 0
+
+            try {
+                val cls = classLoader.loadClass(CANDIDATE_T64)
+                if (validateFeedPbSchema(cls, nanoCls)) {
+                    matched = cls
+                    matchCount++
+                }
+            } catch (_: Throwable) {
+            }
+
+            try {
+                val cls = classLoader.loadClass(CANDIDATE_ZH5)
+                if (validateFeedPbSchema(cls, nanoCls)) {
+                    matched = cls
+                    matchCount++
+                }
+            } catch (_: Throwable) {
+            }
+
+            if (matchCount > 1) {
+                EngineLog.w(TAG, "检测到多个符合结构的喂食 PB 候选类歧义，执行 Fail-Closed")
+                return null
+            }
+
+            return matched
+        }
     }
 
     fun queryOwnPet(callback: (code: Int, petId: String?, rawData: ByteArray?) -> Unit) {
@@ -106,7 +170,7 @@ class PetCareProtocolClient(
     ) {
         // DEF-16: 食物 ID 严格锁定官方白名单 9990032L
         val targetFoodId = if (foodId == DEFAULT_FOOD_ID) DEFAULT_FOOD_ID else resolveFoodId()
-        val bodyBytes = tryReflectFeedBody(petId, targetFoodId)
+        val bodyBytes = tryReflectFeedBody(petId, targetFoodId, petUin)
         if (bodyBytes == null) {
             // 若宿主反射未命中，严禁发送私造畸形字节流，直接执行 Safe-Fail 记录日志并安全退出
             EngineLog.w(TAG, "feed: 宿主反射未命中，严格落实 Safe-Fail 静默安全退出，严禁私造字节流")
@@ -116,71 +180,38 @@ class PetCareProtocolClient(
         channel.sendOidb("OidbSvcTrpcTcp.0x992d_1", 39213, 1, bodyBytes, callback)
     }
 
-    private fun findFeedPbClass(): Class<*>? {
-        // 1. 优先从宿主业务门面 MainPageViewModel 推导形参类型
-        val vmClassNames = listOf(
-            "com.tencent.ergo.view.mainpage.MainPageViewModel",
-            "com.tencent.ergo.view.mainpage.viewmodel.MainPageViewModel"
-        )
-        for (vmName in vmClassNames) {
-            try {
-                val vmCls = channel.classLoader.loadClass(vmName)
-                val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
-                for (m in vmCls.declaredMethods) {
-                    for (paramType in m.parameterTypes) {
-                        if (nanoCls.isAssignableFrom(paramType)) {
-                            EngineLog.d(TAG, "从 MainPageViewModel 方法 ${m.name} 推导出 Nano PB 类: ${paramType.name}")
-                            return paramType
-                        }
-                    }
-                }
-            } catch (_: Throwable) {
-            }
-        }
+    @Volatile
+    private var cachedFeedPbClass: Class<*>? = null
 
-        // 2. 动态探测版本候选 Nano PB 类 (9.3.70 为 t64.b，旧版为 zh5.b)
-        val candidates = listOf("t64.b", "zh5.b")
-        for (candidate in candidates) {
-            try {
-                val cls = channel.classLoader.loadClass(candidate)
-                val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
-                if (nanoCls.isAssignableFrom(cls)) {
-                    return cls
-                }
-            } catch (_: Throwable) {
+    internal fun resolveFeedPbClass(): Class<*>? {
+        val cached = cachedFeedPbClass
+        if (cached != null) return cached
+        synchronized(this) {
+            val existing = cachedFeedPbClass
+            if (existing != null) return existing
+            val resolved = findFeedPbClass(channel.classLoader)
+            if (resolved != null) {
+                cachedFeedPbClass = resolved
             }
+            return resolved
         }
-
-        return null
     }
 
-    private fun tryReflectFeedBody(petId: String, targetFoodId: Long): ByteArray? {
+    internal fun tryReflectFeedBody(
+        petId: String,
+        targetFoodId: Long,
+        petUin: String = ""
+    ): ByteArray? {
         return try {
-            val bCls = findFeedPbClass() ?: return null
+            val bCls = resolveFeedPbClass() ?: return null
             val bInst = bCls.getDeclaredConstructor().newInstance()
-            try {
-                bCls.getField("a").set(bInst, "")
-                bCls.getField("b").set(bInst, "")
-                bCls.getField("c").set(bInst, "")
-                bCls.getField("d").set(bInst, petId)
-                bCls.getField("e").set(bInst, targetFoodId.toInt())
-            } catch (_: NoSuchFieldException) {
-                // 自适应字段注入：若字母漂移，按类型特征注入 (最后一个 String 注入 petId，Int 注入 foodId)
-                val stringFields = bCls.fields.filter { it.type == String::class.java }
-                if (stringFields.isNotEmpty()) {
-                    stringFields.last().set(bInst, petId)
-                }
-                val intFields =
-                    bCls.fields.filter { it.type == Int::class.javaPrimitiveType || it.type == Long::class.javaPrimitiveType }
-                if (intFields.isNotEmpty()) {
-                    val f = intFields.first()
-                    if (f.type == Long::class.javaPrimitiveType) {
-                        f.set(bInst, targetFoodId)
-                    } else {
-                        f.set(bInst, targetFoodId.toInt())
-                    }
-                }
-            }
+
+            bCls.getField("a").set(bInst, petUin)
+            bCls.getField("b").set(bInst, "")
+            bCls.getField("c").set(bInst, "")
+            bCls.getField("d").set(bInst, petId)
+            bCls.getField("e").set(bInst, targetFoodId.toInt())
+
             val nanoCls = channel.classLoader.loadClass("com.google.protobuf.nano.MessageNano")
             val toByteArrayMethod = nanoCls.getMethod("toByteArray", nanoCls)
             toByteArrayMethod.invoke(null, bInst) as ByteArray

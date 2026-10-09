@@ -1,7 +1,10 @@
 package com.copilot.qqpet.ui.compose.dialog
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,16 +15,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,8 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -48,12 +53,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val HIRE_LIST_HEIGHT = 260.dp
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isInspection = LocalInspectionMode.current
+    val sheetState = rememberBottomSheetState(
+        initialValue = if (isInspection) SheetValue.Expanded else SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+    )
     val selected = remember {
         mutableStateListOf<Long>().apply { addAll(PetAccountGateway.loadSavedHireFriendUins(context)) }
     }
@@ -69,7 +78,9 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
     fun refreshFriends() {
         val active = HookEntry.globalEngine
         if (active == null) {
-            Toast.makeText(context, "引擎尚未就绪，请稍候再试", Toast.LENGTH_SHORT).show()
+            if (!isInspection) {
+                Toast.makeText(context, "引擎尚未就绪，请稍候再试", Toast.LENGTH_SHORT).show()
+            }
             return
         }
         if (refreshing) return
@@ -113,7 +124,7 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
     }
 
     LaunchedEffect(Unit) {
-        if (state.hireableFriends.isEmpty()) refreshFriends()
+        if (!isInspection && state.hireableFriends.isEmpty()) refreshFriends()
     }
 
     val friends = state.hireableFriends
@@ -128,98 +139,151 @@ fun HireWhitelistDialog(state: SettingsState, onDismiss: () -> Unit) {
         }
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(text = "选择雇佣好友白名单", style = MaterialTheme.typography.titleLarge)
+    ModalBottomSheet(
+        onDismissRequest = {
+            persistSelection()
+            onDismiss()
         },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "未勾选的好友不会雇佣；已勾选好友中默认优先雇佣空闲且总资质最高者。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                CompactSearchBar(
-                    query = query,
-                    onQueryChange = { query = it },
-                    placeholder = "搜索昵称 / QQ 号"
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (refreshing) "正在同步..." else "已选 ${selected.size} / ${friends.size}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (selected.isNotEmpty()) {
-                        TextButton(
-                            onClick = {
-                                selected.clear()
-                                persistSelection()
-                            }
-                        ) {
-                            Text(
-                                text = "清空",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                    }
-                    TextButton(onClick = { refreshFriends() }) {
-                        Text(text = "刷新", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                if (filtered.isEmpty()) {
-                    Text(
-                        text = when {
-                            refreshing -> "正在拉取养宠好友列表，请稍候..."
-                            keyword.isNotEmpty() -> "未找到匹配「$keyword」的养宠好友"
-                            else -> "暂无数据，请点击「刷新」"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 36.dp)
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(HIRE_LIST_HEIGHT)
-                    ) {
-                        itemsIndexed(filtered, key = { _, friend -> friend.uin }) { index, friend ->
-                            HireFriendRow(
-                                friend = friend,
-                                checked = selected.contains(friend.uin),
-                                onToggle = { toggleFriend(friend) }
-                            )
-                            if (index != filtered.lastIndex) CardDivider(startPadding = 0)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
+        sheetState = sheetState,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 16.dp, top = 0.dp, bottom = 0.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "选择雇佣好友白名单",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
                 onClick = {
                     persistSelection()
-                    onDismiss()
+                    scope.launch {
+                        try {
+                            sheetState.hide()
+                        } finally {
+                            onDismiss()
+                        }
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "关闭",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+        ) {
+            Text(
+                text = "未勾选的好友不会雇佣；已勾选好友中默认优先雇佣空闲且总资质最高者。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            CompactSearchBar(
+                query = query,
+                onQueryChange = { query = it },
+                placeholder = "搜索昵称 / QQ 号"
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (refreshing) "正在同步..." else "已选 ${selected.size} / ${friends.size}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                if (selected.isNotEmpty()) {
+                    TextButton(
+                        onClick = {
+                            selected.clear()
+                            persistSelection()
+                        }
+                    ) {
+                        Text(
+                            text = "清空",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+                TextButton(onClick = { refreshFriends() }) {
+                    Text(text = "刷新", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        if (filtered.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .padding(horizontal = 24.dp, vertical = 36.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = when {
+                        refreshing -> "正在拉取养宠好友列表，请稍候..."
+                        keyword.isNotEmpty() -> "未找到匹配「$keyword」的养宠好友"
+                        else -> "暂无数据，请点击「刷新」"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp)
+            ) {
+                itemsIndexed(filtered, key = { _, friend -> friend.uin }) { index, friend ->
+                    HireFriendRow(
+                        friend = friend,
+                        checked = selected.contains(friend.uin),
+                        onToggle = { toggleFriend(friend) }
+                    )
+                    if (index != filtered.lastIndex) CardDivider(startPadding = 0)
+                }
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(
+                onClick = {
+                    persistSelection()
+                    scope.launch {
+                        try {
+                            sheetState.hide()
+                        } finally {
+                            onDismiss()
+                        }
+                    }
                 }
             ) {
                 Text(text = "完成并保存", style = MaterialTheme.typography.labelLarge)
             }
         }
-    )
+    }
 }
 
 @Composable
@@ -238,8 +302,7 @@ private fun HireFriendRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "${friend.friendNick.ifEmpty { "QQ好友" }} (${friend.uin})",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (checked) FontWeight.Bold else FontWeight.Normal,
+                style = if (checked) MaterialTheme.typography.bodyLargeEmphasized else MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface
             )
             val petPart = "小宠: ${friend.petNick.ifEmpty { "未知" }}"
@@ -273,7 +336,7 @@ private fun HireFriendRow(
 private fun HireWhitelistDialogPreview() {
     MaterialTheme {
         HireWhitelistDialog(
-            state = SettingsState(LocalContext.current, null),
+            state = SettingsState(LocalContext.current, null, previewMode = true),
             onDismiss = {}
         )
     }

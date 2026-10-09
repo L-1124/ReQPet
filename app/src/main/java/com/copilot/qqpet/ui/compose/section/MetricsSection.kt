@@ -11,13 +11,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.material3.Surface
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.engine.metrics.EngineMetrics
+import com.copilot.qqpet.engine.metrics.EngineMetricsImpl
 import com.copilot.qqpet.protocol.channel.ProtocolBreakers
-import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SettingsCard
+import com.copilot.qqpet.ui.compose.QPetExpressiveTheme
 
 private val DOMAIN_LABELS = listOf(
     "care" to "照顾",
@@ -33,60 +36,57 @@ private fun formatBytes(bytes: Long): String = when {
     else -> "$bytes B"
 }
 
-/**
- * 指标卡片：展示熔断器状态与内存水位，数据全部来自进程内快照，无额外请求
- */
+// 数据来自进程内快照，不触发额外请求。
 @Composable
 fun MetricsSection(metrics: EngineMetrics?) {
     SectionHeader("引擎指标")
+    val snapshot = metrics?.exportSnapshot()
+    val breakers = remember(snapshot?.timestamp) {
+        if (snapshot == null) emptyMap() else ProtocolBreakers.stateSnapshot()
+    }
     SettingsCard {
-        val snapshot = metrics?.exportSnapshot()
         if (snapshot == null) {
             Text(
                 text = "指标未就绪（引擎尚未初始化）",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(16.dp)
             )
-            return@SettingsCard
-        }
-
-        val breakers = remember(snapshot.timestamp) { ProtocolBreakers.stateSnapshot() }
-        val memory = snapshot.memoryUsage
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            MetricCell("内存", formatBytes(memory.usedBytes))
-            MetricCell("水位", "${memory.utilizationPercent.toInt()}%")
-            MetricCell("事件", "${snapshot.recentEvents.size}")
-        }
-        CardDivider()
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            DOMAIN_LABELS.forEach { (domain, label) ->
-                val stats = breakers[domain]
-                val state = stats?.get("state")?.toString()?.substringAfterLast('.') ?: "无记录"
-                val failures = stats?.get("failureCount")?.toString() ?: "0"
+        } else {
+            val memory = snapshot.memoryUsage
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "$state · 失败 $failures",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = if (state == "Open") MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    MetricCell("内存", formatBytes(memory.usedBytes))
+                    MetricCell("水位", "${memory.utilizationPercent.toInt()}%")
+                    MetricCell("事件", "${snapshot.recentEvents.size}")
+                }
+                DOMAIN_LABELS.forEach { (domain, label) ->
+                    val stats = breakers[domain]
+                    val state = stats?.get("state")?.toString()?.substringAfterLast('.') ?: "无记录"
+                    val failures = stats?.get("failureCount")?.toString() ?: "0"
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "$state · 失败 $failures",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (state == "Open") MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -109,10 +109,16 @@ private fun MetricCell(label: String, value: String) {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, widthDp = 412)
 @Composable
 private fun MetricsSectionPreview() {
-    MaterialTheme {
-        MetricsSection(metrics = null)
+    val context = LocalContext.current
+    val metrics = remember(context) { EngineMetricsImpl.getInstance(context) }
+    QPetExpressiveTheme(dark = false) {
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            Column(Modifier.padding(16.dp)) {
+                MetricsSection(metrics = metrics)
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.copilot.qqpet.ui.compose.section
 
 import android.content.Context
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,7 +20,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -29,11 +29,10 @@ import com.copilot.qqpet.engine.PetAdventureEngine
 import com.copilot.qqpet.protocol.QQPetDirectBridge
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.compose.ActionRow
-import com.copilot.qqpet.ui.compose.CardDivider
-import com.copilot.qqpet.ui.compose.ExpandablePanel
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SegmentedChoiceRow
 import com.copilot.qqpet.ui.compose.SettingsGroup
+import com.copilot.qqpet.ui.compose.ExpandablePanel
 import com.copilot.qqpet.ui.compose.SettingsState
 import com.copilot.qqpet.ui.compose.ToggleRow
 import com.copilot.qqpet.ui.compose.dialog.HireWhitelistDialog
@@ -82,9 +81,7 @@ fun CareerSection(state: SettingsState) {
                 subtitle = schoolStageSubtitle(state, schoolDetails)
             )
             ExpandablePanel(studyEnabled) {
-                CardDivider()
                 StudyPanel(state = state, details = schoolDetails)
-                Spacer(modifier = Modifier.height(6.dp))
             }
         }
         item {
@@ -95,7 +92,6 @@ fun CareerSection(state: SettingsState) {
                 subtitle = workSubtitle(state, workPlaces)
             )
             ExpandablePanel(workEnabled) {
-                CardDivider()
                 WorkPanel(
                     state = state,
                     workPlaces = workPlaces,
@@ -105,7 +101,6 @@ fun CareerSection(state: SettingsState) {
                         refreshWorkJobs(context = context, scope = scope, state = state, careerId = careerId)
                     }
                 )
-                CardDivider()
                 ToggleRow(
                     title = "打工自动雇佣好友",
                     checked = state.bool(PreferencesHelper.KEY_HIRE_FRIEND_ENABLED, false),
@@ -118,7 +113,6 @@ fun CareerSection(state: SettingsState) {
                     subtitle = hireWhitelistSummary(context),
                     trailing = "管理"
                 )
-                Spacer(modifier = Modifier.height(6.dp))
             }
         }
         item {
@@ -167,34 +161,35 @@ fun CareerSection(state: SettingsState) {
 @Composable
 private fun StudyPanel(state: SettingsState, details: QQPetDirectBridge.SecondMapDetails?) {
     val stageItems = UiDescUtils.buildSchoolStageOptions(details)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 12.dp)
-    ) {
-        OptionLabel("学园阶段")
-        SegmentedChoiceRow(
-            options = stageItems.map { it.title },
-            enabled = stageItems.map { it.enabled },
-            selectedIndex = state.int(PreferencesHelper.KEY_SCHOOL_STAGE, 0),
-            onSelect = { state.setInt(PreferencesHelper.KEY_SCHOOL_STAGE, it) },
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
-        OptionLabel("专攻科目")
-        SegmentedChoiceRow(
-            options = listOf("轮换", "智力", "力量", "魅力"),
-            selectedIndex = state.int(PreferencesHelper.KEY_COURSE_SUBJECT, 0),
-            onSelect = { state.setInt(PreferencesHelper.KEY_COURSE_SUBJECT, it) },
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
-        OptionLabel("课时时长偏好")
-        SegmentedChoiceRow(
-            options = listOf("任意课时", "基础短课", "进阶长课"),
-            selectedIndex = state.int(PreferencesHelper.KEY_COURSE_DURATION, 0),
-            onSelect = { state.setInt(PreferencesHelper.KEY_COURSE_DURATION, it) },
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            OptionLabel("学园阶段")
+            SegmentedChoiceRow(
+                options = stageItems.map { it.title },
+                enabled = stageItems.map { it.enabled },
+                selectedIndex = state.int(PreferencesHelper.KEY_SCHOOL_STAGE, 0),
+                onSelect = { state.setInt(PreferencesHelper.KEY_SCHOOL_STAGE, it) },
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            OptionLabel("专攻科目")
+            SegmentedChoiceRow(
+                options = listOf("轮换", "智力", "力量", "魅力"),
+                selectedIndex = state.int(PreferencesHelper.KEY_COURSE_SUBJECT, 0),
+                onSelect = { state.setInt(PreferencesHelper.KEY_COURSE_SUBJECT, it) },
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            OptionLabel("课时时长偏好")
+            SegmentedChoiceRow(
+                options = listOf("任意课时", "基础短课", "进阶长课"),
+                selectedIndex = state.int(PreferencesHelper.KEY_COURSE_DURATION, 0),
+                onSelect = { state.setInt(PreferencesHelper.KEY_COURSE_DURATION, it) },
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+        }
     }
 }
 
@@ -209,35 +204,34 @@ private fun WorkPanel(
     val workTypePref = state.int(PreferencesHelper.KEY_WORK_TYPE, 0)
     val placeIndex = placeOptions.indexOfFirst { it.careerId == workTypePref }.let { if (it >= 0) it else 0 }
     val durationOptions = workDurationOptions(workJobs)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 4.dp)
-    ) {
-        OptionLabel("打工场所")
-        SegmentedChoiceRow(
-            options = placeOptions.map { it.title },
-            enabled = placeOptions.map { it.enabled },
-            selectedIndex = placeIndex,
-            onSelect = { index -> placeOptions.getOrNull(index)?.let { onWorkTypeSelected(it.careerId) } },
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
-        OptionLabel("打工时长偏好")
-        SegmentedChoiceRow(
-            options = durationOptions.labels,
-            enabled = durationOptions.enabled,
-            selectedIndex = state.int(PreferencesHelper.KEY_WORK_DURATION, 0),
-            onSelect = { state.setInt(PreferencesHelper.KEY_WORK_DURATION, it) },
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
-        durationOptions.tips.filterNotNull().forEach { tip ->
-            Text(
-                text = tip,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            OptionLabel("打工场所")
+            SegmentedChoiceRow(
+                options = placeOptions.map { it.title },
+                enabled = placeOptions.map { it.enabled },
+                selectedIndex = placeIndex,
+                onSelect = { index -> placeOptions.getOrNull(index)?.let { onWorkTypeSelected(it.careerId) } },
+                modifier = Modifier.padding(vertical = 4.dp)
             )
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            OptionLabel("打工时长偏好")
+            SegmentedChoiceRow(
+                options = durationOptions.labels,
+                enabled = durationOptions.enabled,
+                selectedIndex = state.int(PreferencesHelper.KEY_WORK_DURATION, 0),
+                onSelect = { state.setInt(PreferencesHelper.KEY_WORK_DURATION, it) },
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+            durationOptions.tips.filterNotNull().forEach { tip ->
+                Text(
+                    text = tip,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
         }
     }
 }
@@ -254,8 +248,7 @@ private fun HiredRecallPanel(state: SettingsState) {
     ) {
         Text(
             text = "被好友雇佣时提前召回",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodyMediumEmphasized,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
@@ -293,7 +286,12 @@ private fun OptionLabel(text: String) {
 @Composable
 private fun StudyPanelPreview() {
     MaterialTheme {
-        StudyPanel(state = SettingsState(LocalContext.current, null, previewMode = true), details = null)
+        val state = SettingsState(LocalContext.current, null, previewMode = true)
+        SettingsGroup {
+            item {
+                StudyPanel(state = state, details = null)
+            }
+        }
     }
 }
 
@@ -380,7 +378,7 @@ private fun hireWhitelistSummary(context: Context): String {
         return "当前未勾选好友 (未选择的好友不会雇佣 · 点击搜索勾选)"
     }
     val cachedFriends = PetAccountGateway.loadCachedHireableFriends(context)
-    val matchedNames = selectedUins.mapNotNull { uin ->
+    val matchedNames = selectedUins.map { uin ->
         val friend = cachedFriends.find { it.uin == uin }
         if (friend != null && friend.friendNick.isNotBlank()) friend.friendNick else uin.toString()
     }

@@ -12,7 +12,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.ui.PreferencesHelper
-import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.ChoiceToggleRow
 import com.copilot.qqpet.ui.compose.ExpandablePanel
 import com.copilot.qqpet.ui.compose.SectionHeader
@@ -66,14 +65,12 @@ fun SocialSection(state: SettingsState) {
                     subtitle = "主动串门送心，支持全量养宠好友与全自动随机陌生小宠"
                 )
                 ExpandablePanel(activeVisitEnabled) {
-                    CardDivider()
                     ToggleRow(
                         title = "主动踩全部好友",
                         checked = state.bool(PreferencesHelper.KEY_ACTIVE_VISIT_FRIENDS, true),
                         onCheckedChange = { state.setBool(PreferencesHelper.KEY_ACTIVE_VISIT_FRIENDS, it) },
                         subtitle = "每天自动遍历好友小宠小窝，主动串门送心续火花"
                     )
-                    CardDivider()
                     ToggleRow(
                         title = "主动踩随机陌生人",
                         checked = state.bool(PreferencesHelper.KEY_ACTIVE_VISIT_STRANGERS, true),
@@ -93,7 +90,6 @@ fun SocialSection(state: SettingsState) {
                             )
                         }
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
                 }
             }
         }

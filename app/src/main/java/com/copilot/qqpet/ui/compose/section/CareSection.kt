@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.ui.PreferencesHelper
-import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.ExpandablePanel
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SettingsGroup
@@ -37,7 +36,6 @@ fun CareSection(state: SettingsState) {
                     )
                 )
                 ExpandablePanel(careEnabled) {
-                    CardDivider()
                     ThresholdSliderRow(
                         state = state,
                         key = PreferencesHelper.KEY_CARE_ENERGY_THRESHOLD,
@@ -50,7 +48,6 @@ fun CareSection(state: SettingsState) {
                         title = "洗澡清洁阈值",
                         defaultValue = 60
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
                 }
             }
 
@@ -66,7 +63,6 @@ fun CareSection(state: SettingsState) {
                     )
                 )
                 ExpandablePanel(friendCareEnabled) {
-                    CardDivider()
                     FriendCareThresholdSliderRow(
                         state = state,
                         key = PreferencesHelper.KEY_FRIEND_CARE_ENERGY_THRESHOLD,
@@ -79,7 +75,6 @@ fun CareSection(state: SettingsState) {
                         title = "清洁阈值",
                         defaultValue = 60
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
                 }
             }
         }

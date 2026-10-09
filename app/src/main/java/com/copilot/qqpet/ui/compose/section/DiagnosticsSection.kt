@@ -17,7 +17,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.copilot.qqpet.ui.PreferencesHelper
 import com.copilot.qqpet.ui.compose.ActionRow
-import com.copilot.qqpet.ui.compose.CardDivider
 import com.copilot.qqpet.ui.compose.SectionHeader
 import com.copilot.qqpet.ui.compose.SettingsGroup
 import com.copilot.qqpet.ui.compose.SettingsState
@@ -75,7 +74,8 @@ fun DiagnosticsSection(state: SettingsState) {
                         }
                     }
                 )
-                CardDivider()
+            }
+            item {
                 ActionRow(
                     title = "内部兜底目录",
                     subtitle = "$fallbackPath\n（外置目录不可用或无法写入时使用，读取通常需要 root 权限）",

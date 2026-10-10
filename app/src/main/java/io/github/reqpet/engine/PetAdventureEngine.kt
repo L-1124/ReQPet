@@ -240,6 +240,9 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
         var lastOwnPetCheckMillis = 0L
 
         @Volatile
+        var lastMasterOffNoticeUin: String? = null
+
+        @Volatile
         var cachedSchoolDetails: QQPetDirectBridge.SecondMapDetails? = null
 
         @Volatile
@@ -330,9 +333,14 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
     fun startBackgroundLoop(context: Context) {
         reloadConfig(context)
         if (!masterEnabled) {
-            sendLog("[总开关] 未开启，主循环不启动（默认关闭，请在设置页打开总开关）")
+            val uinKey = currentActiveUin.ifEmpty { "unbound" }
+            if (lastMasterOffNoticeUin != uinKey) {
+                lastMasterOffNoticeUin = uinKey
+                sendLog("[总开关] 未开启，主循环不启动（默认关闭，请在设置页打开总开关）")
+            }
             return
         }
+        lastMasterOffNoticeUin = null
         if (isLoopRunning) return
         isLoopRunning = true
         launchLoop(context)
@@ -729,6 +737,7 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
                 previousGeneration, if (nextUin.isEmpty()) "account_unavailable" else "account_changed"
             )
             clearAccountBoundMemoryCache(context)
+            lastMasterOffNoticeUin = null
             currentActiveUin = nextUin
         }
         if (nextUin.isEmpty()) {

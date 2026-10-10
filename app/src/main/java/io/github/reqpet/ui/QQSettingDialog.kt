@@ -19,6 +19,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import io.github.reqpet.HookEntry
+import io.github.reqpet.RuntimeSwitches
 import io.github.reqpet.engine.PetAccountGateway
 import io.github.reqpet.engine.PetAdventureEngine
 import io.github.reqpet.engine.RuntimeDiagnostics
@@ -79,7 +80,7 @@ internal class QQSettingDialog(
         isOpenToDrawTracing = SettingsTrace.beginAsync("settings.open_to_first_draw", openToDrawCookie)
         SettingsTrace.trace("settings.dialog_init") {
             try {
-        setOwnerActivity(activity)
+                setOwnerActivity(activity)
                 setCanceledOnTouchOutside(false)
 
                 requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -582,6 +583,9 @@ internal class QQSettingDialog(
         val appContext = activity.applicationContext ?: activity
         val activeEngine = HookEntry.globalEngine ?: run {
             HookLog.w(TAG, "syncAccountData: globalEngine is null, skipping")
+            return
+        }
+        if (!PetAdventureEngine.masterEnabled && !RuntimeSwitches.masterEnabled) {
             return
         }
         try {

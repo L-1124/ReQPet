@@ -30,11 +30,13 @@ object PetMaintenanceCoordinator {
         isOuting: Boolean = false
     ): Long {
         val due = ArrayList<Long>(5)
-        if (PetAdventureEngine.enableCare) due += maxOf(careRetry.waitMillis(now), waitAfter(
-            PetAdventureEngine.lastCareTimeMillis,
-            CARE_CHECK_INTERVAL_MS,
-            now
-        ))
+        if (PetAdventureEngine.enableOneClickCare || PetAdventureEngine.enableCare) due += maxOf(
+            careRetry.waitMillis(now), waitAfter(
+                PetAdventureEngine.lastCareTimeMillis,
+                CARE_CHECK_INTERVAL_MS,
+                now
+            )
+        )
         if (PetAdventureEngine.enableClaimCoinBag) due += waitAfter(
             PetAdventureEngine.lastCoinBagTimeMillis,
             COIN_BAG_INTERVAL_MS,
@@ -137,7 +139,7 @@ object PetMaintenanceCoordinator {
         now: Long,
         forceCheck: Boolean = false
     ) {
-        if (!PetAdventureEngine.enableCare) return
+        if (!PetAdventureEngine.enableOneClickCare && !PetAdventureEngine.enableCare) return
         if (careRetry.waitMillis(now) > 0L) return
         if (!forceCheck && (now - PetAdventureEngine.lastCareTimeMillis <= CARE_CHECK_INTERVAL_MS)) return
         PetAdventureEngine.lastCareTimeMillis = now
@@ -149,6 +151,18 @@ object PetMaintenanceCoordinator {
             if (attrs == null || !attrs.energy.isFinite() || !attrs.clean.isFinite() ||
                 attrs.energy < 0f || attrs.clean < 0f
             ) return
+            if (PetAdventureEngine.enableOneClickCare) {
+                val oneClickRes = PetCareTask.executeOneClickCareWithAutoBuyAwait(bridge, petId, attrs) { level, msg ->
+                    PetAdventureEngine.sendLog(level, msg)
+                }
+                if (oneClickRes.code == 1 || oneClickRes.code == 2) {
+                    success = true
+                    return
+                } else {
+                    PetAdventureEngine.sendLog("[自理] 一键呵护暂停: ${oneClickRes.errorMsg ?: "code=${oneClickRes.code}"}，进入退避")
+                    return
+                }
+            }
             if (attrs.energy < PetAdventureEngine.prefCareEnergyThreshold) {
                 val result = PetCareTask.feedWithAutoBuyAwait(
                     context,

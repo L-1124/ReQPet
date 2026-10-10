@@ -6,6 +6,7 @@ object PreferencesHelper {
     const val KEY_STUDY = "key_study"
     const val KEY_WORK = "key_work"
     const val KEY_CARE = "key_care"
+    const val KEY_ONE_CLICK_CARE = "key_one_click_care"
     const val KEY_CARE_ENERGY_THRESHOLD = "key_care_energy_threshold"
     const val KEY_CARE_CLEAN_THRESHOLD = "key_care_clean_threshold"
     const val KEY_ADVENTURE = "key_adventure"

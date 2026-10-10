@@ -10,6 +10,8 @@ import io.github.reqpet.protocol.channel.OidbChannel
 import io.github.reqpet.protocol.channel.ProtocolBreakers
 import io.github.reqpet.protocol.model.FeedDetailResult
 import io.github.reqpet.protocol.model.FoodInventoryItem
+import io.github.reqpet.protocol.model.OneClickCareConfig
+import io.github.reqpet.protocol.model.OneClickCareResult
 import io.github.reqpet.protocol.model.PetProfileDetail
 import io.github.reqpet.engine.AccountSessionGuard
 import io.github.reqpet.engine.PetAdventureEngine
@@ -160,6 +162,101 @@ class PetCareProtocolClient(
             species = species,
             petName = petName,
             level = level
+        )
+    }
+
+    fun fetchOneClickCareConfig(
+        petId: String,
+        callback: (code: Int, config: OneClickCareConfig?, errorMsg: String?) -> Unit
+    ) {
+        val body = ProtoWire.message()
+            .writeString(1, petId)
+            .writeVarint(2, 4L)
+            .toByteArray()
+        channel.sendOidb("OidbSvcTrpcTcp.0x9b7f_1", 39807, 1, body) { code, data, errorMsg ->
+            if (code == 0 && data != null) {
+                val config = parseOneClickCareConfig(data)
+                callback(0, config, null)
+            } else {
+                EngineLog.w(TAG, "fetchOneClickCareConfig 失败 (petId=$petId): code=$code, err=$errorMsg")
+                callback(code, null, errorMsg)
+            }
+        }
+    }
+
+    internal fun parseOneClickCareConfig(data: ByteArray): OneClickCareConfig {
+        val thresholdBytes = ProtoWire.firstBytes(data, 1)
+        val moodTh = if (thresholdBytes != null) (ProtoWire.firstVarint(thresholdBytes, 1) ?: 0L).toInt() else 0
+        val hungerTh = if (thresholdBytes != null) (ProtoWire.firstVarint(thresholdBytes, 2) ?: 0L).toInt() else 0
+        val cleanTh = if (thresholdBytes != null) (ProtoWire.firstVarint(thresholdBytes, 3) ?: 0L).toInt() else 0
+
+        val gainBytes = ProtoWire.firstBytes(data, 2)
+        val hungerPerBiscuit = if (gainBytes != null) (ProtoWire.firstVarint(gainBytes, 1) ?: 20L).toInt() else 20
+        val expPerHunger = if (gainBytes != null) (ProtoWire.firstFloat(gainBytes, 4) ?: 1.0f) else 1.0f
+        val expCanGainHost = if (gainBytes != null) (ProtoWire.firstVarint(gainBytes, 5) ?: 1000L).toInt() else 1000
+        val cleanPerSoap = if (gainBytes != null) (ProtoWire.firstVarint(gainBytes, 7) ?: 20L).toInt() else 20
+        val expPerClean = if (gainBytes != null) (ProtoWire.firstFloat(gainBytes, 8) ?: 1.0f) else 1.0f
+
+        val capHostBytes = if (gainBytes != null) ProtoWire.firstBytes(gainBytes, 9) else null
+        val hungerCap = if (capHostBytes != null) (ProtoWire.firstVarint(capHostBytes, 2) ?: 0L).toInt() else 0
+        val cleanCap = if (capHostBytes != null) (ProtoWire.firstVarint(capHostBytes, 3) ?: 0L).toInt() else 0
+
+        return OneClickCareConfig(
+            hungerThreshold = hungerTh,
+            cleanThreshold = cleanTh,
+            moodThreshold = moodTh,
+            hungerPerBiscuit = hungerPerBiscuit,
+            cleanPerSoap = cleanPerSoap,
+            expPerHunger = expPerHunger,
+            expPerClean = expPerClean,
+            hungerCap = hungerCap,
+            cleanCap = cleanCap,
+            dailyExpLimitHost = expCanGainHost
+        )
+    }
+
+    fun doOneClickCare(
+        petId: String,
+        biscuitCost: Int,
+        soapCost: Int,
+        expGain: Int,
+        isGuestCare: Boolean = false,
+        callback: (OneClickCareResult) -> Unit
+    ) {
+        val body = ProtoWire.message()
+            .writeString(1, petId)
+            .writeVarint(2, biscuitCost.toLong())
+            .writeVarint(3, expGain.toLong())
+            .writeVarint(4, 0L)
+            .writeVarint(5, 4L)
+            .writeVarint(6, soapCost.toLong())
+            .writeVarint(7, if (isGuestCare) 1L else 0L)
+            .toByteArray()
+        channel.sendOidb("OidbSvcTrpcTcp.0x9b80_1", 39808, 1, body) { code, data, errorMsg ->
+            if (code == 0 && data != null) {
+                val res = parseOneClickCareResult(data)
+                EngineLog.i(
+                    TAG,
+                    "doOneClickCare 回包: petId=$petId, resultCode=${res.code}, biscuitCostOrShortfall=${res.biscuitCostOrShortfall}, soapCostOrShortfall=${res.soapCostOrShortfall}"
+                )
+                callback(res)
+            } else {
+                EngineLog.w(TAG, "doOneClickCare 失败 (petId=$petId): code=$code, err=$errorMsg")
+                callback(OneClickCareResult(if (code != 0) code else -1, 0, 0, errorMsg))
+            }
+        }
+    }
+
+    internal fun parseOneClickCareResult(data: ByteArray): OneClickCareResult {
+        val resultCode = (ProtoWire.firstVarint(data, 1) ?: -1L).toInt()
+        val resultNode = ProtoWire.firstBytes(data, 2)
+        val biscuitVal = if (resultNode != null) (ProtoWire.firstVarint(resultNode, 1) ?: 0L).toInt() else 0
+        val soapVal = if (resultNode != null) (ProtoWire.firstVarint(resultNode, 2) ?: 0L).toInt() else 0
+        return OneClickCareResult(
+            code = resultCode,
+            biscuitCostOrShortfall = biscuitVal,
+            soapCostOrShortfall = soapVal,
+            errorMsg = null
         )
     }
 
@@ -429,20 +526,27 @@ class PetCareProtocolClient(
             }
             sendFoodPurchase(petId, count, itemType) { code, data, error ->
                 val confirmed = code == 0 && ProtoWire.firstVarint(data, 3) == count &&
-                    (ProtoWire.firstVarint(data, 1) ?: -1L) >= count
+                        (ProtoWire.firstVarint(data, 1) ?: -1L) >= count
                 val outcome = when {
                     confirmed -> PurchaseGuard.Outcome.SUCCESS
                     code == OidbChannel.MASTER_OFF_CODE || code == ProtocolBreakers.FAST_FAIL_CODE -> PurchaseGuard.Outcome.REJECTED
                     else -> PurchaseGuard.Outcome.UNKNOWN
                 }
                 purchaseGuard.complete(reservation, outcome)
-                callback(if (code == 0 && !confirmed) -104 else code, data,
-                    error ?: if (confirmed) null else "食物订单未确认，暂停补购")
+                callback(
+                    if (code == 0 && !confirmed) -104 else code, data,
+                    error ?: if (confirmed) null else "食物订单未确认，暂停补购"
+                )
             }
         }
     }
 
-    private fun sendFoodPurchase(petId: String, count: Long, itemType: String, callback: (Int, ByteArray?, String?) -> Unit) {
+    private fun sendFoodPurchase(
+        petId: String,
+        count: Long,
+        itemType: String,
+        callback: (Int, ByteArray?, String?) -> Unit
+    ) {
         val body = ProtoWire.message()
             .writeVarint(1, count)
             .writeString(2, petId)

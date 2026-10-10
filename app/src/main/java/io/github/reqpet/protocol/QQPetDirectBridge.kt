@@ -201,6 +201,26 @@ class QQPetDirectBridge(classLoader: ClassLoader, context: Context? = null) {
         val level: Int = 0
     )
 
+    data class OneClickCareConfig(
+        val hungerThreshold: Int = 0,
+        val cleanThreshold: Int = 0,
+        val moodThreshold: Int = 0,
+        val hungerPerBiscuit: Int = 20,
+        val cleanPerSoap: Int = 20,
+        val expPerHunger: Float = 1.0f,
+        val expPerClean: Float = 1.0f,
+        val hungerCap: Int = 0,
+        val cleanCap: Int = 0,
+        val dailyExpLimitHost: Int = 1000
+    )
+
+    data class OneClickCareResult(
+        val code: Int,
+        val biscuitCostOrShortfall: Int = 0,
+        val soapCostOrShortfall: Int = 0,
+        val errorMsg: String? = null
+    )
+
     companion object {
         private const val TAG = "QQPetDirectBridge"
 
@@ -508,6 +528,20 @@ class QQPetDirectBridge(classLoader: ClassLoader, context: Context? = null) {
         petId: String = "",
         callback: (code: Int, profile: PetProfileDetail?, rawData: ByteArray?) -> Unit
     ) = careClient.queryPetProfile(petId, callback)
+
+    fun fetchOneClickCareConfig(
+        petId: String,
+        callback: (code: Int, config: OneClickCareConfig?, errorMsg: String?) -> Unit
+    ) = careClient.fetchOneClickCareConfig(petId, callback)
+
+    fun doOneClickCare(
+        petId: String,
+        biscuitCost: Int,
+        soapCost: Int,
+        expGain: Int,
+        isGuestCare: Boolean = false,
+        callback: (OneClickCareResult) -> Unit
+    ) = careClient.doOneClickCare(petId, biscuitCost, soapCost, expGain, isGuestCare, callback)
 
     fun queryFriendPkStatus(
         friendUin: Long,

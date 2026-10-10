@@ -24,18 +24,33 @@ fun CareSection(state: SettingsState) {
     Column(modifier = Modifier.fillMaxWidth()) {
         SectionHeader("宠物照料")
         SettingsGroup {
+            val oneClickCareEnabled = state.bool(PreferencesHelper.KEY_ONE_CLICK_CARE, false)
             val careEnabled = state.bool(PreferencesHelper.KEY_CARE, false)
             item {
                 ToggleRow(
+                    title = "一键呵护恢复",
+                    checked = oneClickCareEnabled,
+                    onCheckedChange = { enabled ->
+                        state.setBool(PreferencesHelper.KEY_ONE_CLICK_CARE, enabled)
+                        if (enabled) {
+                            state.setBool(PreferencesHelper.KEY_CARE, false)
+                        }
+                    },
+                    subtitle = "体力或清洁降低时，一键原子加满三围并自动补购缺口道具"
+                )
+            }
+            item {
+                ToggleRow(
                     title = "自动进食与沐浴",
-                    checked = careEnabled,
+                    checked = !oneClickCareEnabled && careEnabled,
                     onCheckedChange = { state.setBool(PreferencesHelper.KEY_CARE, it) },
-                    subtitle = UiDescUtils.getCareSubtitle(
+                    enabled = !oneClickCareEnabled,
+                    subtitle = if (oneClickCareEnabled) "已开启一键呵护恢复，逐步进食与沐浴已自动接管并停用" else UiDescUtils.getCareSubtitle(
                         state.int(PreferencesHelper.KEY_CARE_ENERGY_THRESHOLD, 60),
                         state.int(PreferencesHelper.KEY_CARE_CLEAN_THRESHOLD, 60)
                     )
                 )
-                ExpandablePanel(careEnabled) {
+                ExpandablePanel(!oneClickCareEnabled && careEnabled) {
                     ThresholdSliderRow(
                         state = state,
                         key = PreferencesHelper.KEY_CARE_ENERGY_THRESHOLD,

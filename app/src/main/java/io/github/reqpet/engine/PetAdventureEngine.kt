@@ -105,6 +105,9 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
         var enableCare = false
 
         @Volatile
+        var enableOneClickCare = false
+
+        @Volatile
         var enableAdventure = false
 
         @Volatile
@@ -477,6 +480,7 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
                 "cycle_config", "cycle" to cycleId, "transaction" to currentTransactionId,
                 "master" to masterEnabled, "study" to enableStudy, "work" to enableWork,
                 "adventure" to enableAdventure, "settle" to enableSettle, "care" to enableCare,
+                "one_click_care" to enableOneClickCare,
                 "pk" to enableAutoPk, "night_silent" to prefNightSleepMode,
                 "screen_silent" to prefScreenOffSilent, "recall_percent" to prefHiredRecallProgress
             )

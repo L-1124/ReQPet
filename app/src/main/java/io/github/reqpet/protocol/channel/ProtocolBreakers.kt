@@ -54,6 +54,8 @@ object ProtocolBreakers {
         put("0x9949", DOMAIN_CARE)
         put("0x99f2", DOMAIN_CARE)
         put("0x9c44", DOMAIN_CARE)
+        put("0x9b7f", DOMAIN_CARE)
+        put("0x9b80", DOMAIN_CARE)
         put("0x975a", DOMAIN_QUERY)
         put("0x975e", DOMAIN_CAREER)
         put("0x975f", DOMAIN_CAREER)

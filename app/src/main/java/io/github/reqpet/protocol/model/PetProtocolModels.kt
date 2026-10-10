@@ -21,3 +21,5 @@ typealias HireableFriend = QQPetDirectBridge.HireableFriend
 typealias FriendPetSnapshot = QQPetDirectBridge.FriendPetSnapshot
 typealias GuestPetStatus = QQPetDirectBridge.GuestPetStatus
 typealias PetProfileDetail = QQPetDirectBridge.PetProfileDetail
+typealias OneClickCareConfig = QQPetDirectBridge.OneClickCareConfig
+typealias OneClickCareResult = QQPetDirectBridge.OneClickCareResult

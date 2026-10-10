@@ -20,7 +20,9 @@ internal object EngineConfigLoader {
             RuntimeSwitches.masterEnabled = PetAdventureEngine.masterEnabled
             PetAdventureEngine.enableStudy = p.getBoolean("key_study", false)
             PetAdventureEngine.enableWork = p.getBoolean("key_work", false)
-            PetAdventureEngine.enableCare = p.getBoolean("key_care", false)
+            val rawOneClickCare = p.getBoolean(PreferencesHelper.KEY_ONE_CLICK_CARE, false)
+            PetAdventureEngine.enableOneClickCare = rawOneClickCare
+            PetAdventureEngine.enableCare = !rawOneClickCare && p.getBoolean("key_care", false)
             PetAdventureEngine.enableAdventure = p.getBoolean("key_adventure", false)
             val hasAnyTask =
                 PetAdventureEngine.enableStudy || PetAdventureEngine.enableWork || PetAdventureEngine.enableAdventure
@@ -80,6 +82,7 @@ internal object EngineConfigLoader {
         val masterEnabled = PetAdventureEngine.masterEnabled
         val enableStudy = PetAdventureEngine.enableStudy
         val enableWork = PetAdventureEngine.enableWork
+        val enableOneClickCare = PetAdventureEngine.enableOneClickCare
         val enableCare = PetAdventureEngine.enableCare
         val enableAdventure = PetAdventureEngine.enableAdventure
         val enableSettle = PetAdventureEngine.enableSettle
@@ -108,7 +111,11 @@ internal object EngineConfigLoader {
         PetAdventureEngine.sendLog("总开关:${onOff(masterEnabled)}（默认关闭；关闭时模块不发起任何请求）")
         val hireCount = prefHireFriendUinsCsv.split(',').count { it.isNotBlank() }
         PetAdventureEngine.sendLog(
-            "配置生效 学习:${onOff(enableStudy)} 打工:${onOff(enableWork)} 照顾:${onOff(enableCare)} 冒险:${
+            "配置生效 学习:${onOff(enableStudy)} 打工:${onOff(enableWork)} 一键呵护:${onOff(enableOneClickCare)} 照顾:${
+                onOff(
+                    enableCare
+                )
+            } 冒险:${
                 onOff(
                     enableAdventure
                 )

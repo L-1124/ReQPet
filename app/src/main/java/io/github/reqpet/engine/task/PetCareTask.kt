@@ -168,6 +168,132 @@ object PetCareTask {
             Pair(-99, t.message)
         }
 
+    suspend fun fetchOneClickCareConfigAwait(
+        bridge: QQPetDirectBridge,
+        petId: String,
+        timeoutMs: Long = NETWORK_TIMEOUT_MS
+    ): Pair<Int, QQPetDirectBridge.OneClickCareConfig?> =
+        try {
+            withTimeoutOrNull(timeoutMs) {
+                suspendCancellableCoroutine { cont ->
+                    bridge.fetchOneClickCareConfig(petId) { code, config, _ ->
+                        if (cont.isActive) cont.resume(Pair(code, config))
+                    }
+                }
+            } ?: Pair(-99, null)
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            Pair(-99, null)
+        }
+
+    suspend fun doOneClickCareAwait(
+        bridge: QQPetDirectBridge,
+        petId: String,
+        biscuitCost: Int,
+        soapCost: Int,
+        expGain: Int,
+        isGuestCare: Boolean = false,
+        timeoutMs: Long = NETWORK_TIMEOUT_MS
+    ): QQPetDirectBridge.OneClickCareResult =
+        try {
+            withTimeoutOrNull(timeoutMs) {
+                suspendCancellableCoroutine { cont ->
+                    bridge.doOneClickCare(petId, biscuitCost, soapCost, expGain, isGuestCare) { res ->
+                        if (cont.isActive) cont.resume(res)
+                    }
+                }
+            } ?: QQPetDirectBridge.OneClickCareResult(-99, 0, 0, "超时")
+        } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            QQPetDirectBridge.OneClickCareResult(-99, 0, 0, e.message)
+        }
+
+    suspend fun executeOneClickCareWithAutoBuyAwait(
+        bridge: QQPetDirectBridge,
+        petId: String,
+        attrs: QQPetDirectBridge.PetAttributes,
+        onLog: TaskLogger
+    ): QQPetDirectBridge.OneClickCareResult {
+        val (_, fetchedConfig) = fetchOneClickCareConfigAwait(bridge, petId)
+        val config = fetchedConfig ?: QQPetDirectBridge.OneClickCareConfig()
+
+        val curEnergy = attrs.energy.toInt().coerceAtLeast(0)
+        val maxEnergy = attrs.maxEnergy.toInt().takeIf { it > 0 } ?: 100
+        val curClean = attrs.clean.toInt().coerceAtLeast(0)
+        val maxClean = attrs.maxClean.toInt().takeIf { it > 0 } ?: 100
+
+        val hungerDiff = (maxEnergy - curEnergy).coerceAtLeast(0)
+        val cleanDiff = (maxClean - curClean).coerceAtLeast(0)
+
+        if (hungerDiff == 0 && cleanDiff == 0) {
+            onLog("[一键呵护] 宠物体力与清洁均已全满 ($curEnergy/$maxEnergy, $curClean/$maxClean)，无需照料")
+            return QQPetDirectBridge.OneClickCareResult(1, 0, 0, null)
+        }
+
+        val cappedHunger =
+            if (config.hungerCap > 0) hungerDiff.coerceAtMost((config.hungerCap - curEnergy).coerceAtLeast(0)) else hungerDiff
+        val cappedClean =
+            if (config.cleanCap > 0) cleanDiff.coerceAtMost((config.cleanCap - curClean).coerceAtLeast(0)) else cleanDiff
+
+        val needBiscuits =
+            if (config.hungerPerBiscuit > 0 && cappedHunger > 0) (cappedHunger + config.hungerPerBiscuit - 1) / config.hungerPerBiscuit else 0
+        val needSoaps =
+            if (config.cleanPerSoap > 0 && cappedClean > 0) (cappedClean + config.cleanPerSoap - 1) / config.cleanPerSoap else 0
+
+        val staminaExp = (cappedHunger * config.expPerHunger).toInt()
+        val cleanExp = (cappedClean * config.expPerClean).toInt()
+        val expectExpGain = (staminaExp + cleanExp).coerceAtMost(config.dailyExpLimitHost)
+
+        onLog("[一键呵护] 开始发起恢复: 预估需饼干 $needBiscuits 块, 香皂 $needSoaps 块, 预期经验 +$expectExpGain")
+        var result = doOneClickCareAwait(bridge, petId, needBiscuits, needSoaps, expectExpGain)
+
+        if (result.code == 3) {
+            val biscuitShortfall = result.biscuitCostOrShortfall
+            val soapShortfall = result.soapCostOrShortfall
+            onLog("[一键呵护] 道具不足 (缺饼干 $biscuitShortfall 块, 缺香皂 $soapShortfall 块)，正在自动补购...")
+
+            var buySuccess = true
+            if (biscuitShortfall > 0) {
+                val (foodCode, foodErr) = buyFoodAwait(bridge, petId, count = biscuitShortfall.toLong())
+                if (foodCode != 0) {
+                    onLog("[一键呵护] 补购饼干失败 ($foodErr)，终止自动恢复")
+                    buySuccess = false
+                }
+            }
+            if (buySuccess && soapShortfall > 0) {
+                val (_, configs) = fetchBathItemConfigAwait(bridge)
+                val soapItem = configs.firstOrNull { it.cleanValue > 0 }
+                val soapItemId = soapItem?.itemId ?: "2000001"
+                val (soapCode, orderRes, soapErr) = buyBathItemAwait(
+                    bridge,
+                    petId,
+                    itemId = soapItemId,
+                    count = soapShortfall
+                )
+                if (soapCode != 0 || orderRes != 1) {
+                    onLog("[一键呵护] 补购香皂失败 ($soapErr)，终止自动恢复")
+                    buySuccess = false
+                }
+            }
+
+            if (buySuccess) {
+                onLog("[一键呵护] 缺额补购完成，正在重试一键拉满...")
+                delay(randomJitter(500L, 1000L))
+                result = doOneClickCareAwait(bridge, petId, needBiscuits, needSoaps, expectExpGain)
+            }
+        }
+
+        when (result.code) {
+            1 -> onLog("[一键呵护] 恢复成功！实际消耗饼干 ${result.biscuitCostOrShortfall} 块, 香皂 ${result.soapCostOrShortfall} 块")
+            2 -> onLog("[一键呵护] 宠物状态目前良好，无需照料")
+            3 -> onLog("[一键呵护] 道具仍不足，暂停照料")
+            5 -> onLog("[一键呵护] 金币不足，无法完成恢复")
+            else -> onLog("[一键呵护] 恢复未成功 (code=${result.code}, err=${result.errorMsg ?: "无"})")
+        }
+
+        return result
+    }
+
     private data class FeedLoopParam(
         val startEnergy: Int,
         val targetThreshold: Int,
@@ -274,8 +400,10 @@ object PetCareTask {
         if (attrs == null || !attrs.clean.isFinite() || !attrs.maxClean.isFinite()) {
             return QQPetDirectBridge.BathResult(-104, -1, 0, -1, false, "实时清洁度未确认，暂停照料")
         }
-        return bathTargetWithAutoBuyAwait(bridge, petId, petId, "", attrs.clean.toInt(),
-            attrs.maxClean.toInt(), targetThreshold, onLog)
+        return bathTargetWithAutoBuyAwait(
+            bridge, petId, petId, "", attrs.clean.toInt(),
+            attrs.maxClean.toInt(), targetThreshold, onLog
+        )
     }
 
     internal suspend fun bathTargetWithAutoBuyAwait(

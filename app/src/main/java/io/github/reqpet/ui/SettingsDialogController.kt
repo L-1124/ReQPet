@@ -213,7 +213,6 @@ internal object SettingsDialogController {
             }
             current = current.baseContext
         }
-        if (current is Activity) return current
         return null
     }
 

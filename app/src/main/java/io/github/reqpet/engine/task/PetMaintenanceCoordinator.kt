@@ -198,6 +198,7 @@ object PetMaintenanceCoordinator {
         } catch (e: RateLimitExceededException) {
             PetAdventureEngine.sendLog("[福袋巡检] 今日好友金币福袋领取已达官方上限，暂停后续巡检")
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             PetAdventureEngine.sendLog("[福袋巡检] 领福袋异常：${e.message}")
         } finally {
             PetAdventureEngine.lastCoinBagTimeMillis = System.currentTimeMillis()

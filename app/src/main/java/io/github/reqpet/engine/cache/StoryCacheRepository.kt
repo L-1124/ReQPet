@@ -52,6 +52,7 @@ object StoryCacheRepository {
 
             return freshStory
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             EngineLog.w("StoryCacheRepo", "Failed to refresh story info: ${e.message}")
             return null
         }

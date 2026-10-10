@@ -95,6 +95,7 @@ class OutdoorStatusMonitor(
             }
             result.code == 0 || wasUpdated
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             EngineLog.w("OutdoorStatusMonitor", "同步状态查询失败：${e.message}")
             false
         }

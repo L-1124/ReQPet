@@ -66,6 +66,7 @@ object PetActiveVisitTask {
             onLog.warn("[主动串门] 因达到官方限额终止会话")
             return 0
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             EngineLog.w("PetActiveVisitTask", "串门会话异常：${e.message}")
             return 0
         }
@@ -135,6 +136,7 @@ object PetActiveVisitTask {
                 onLog.warn("[主动串门] 检测到每日点赞/串门次数已达官方上限，立即终止会话")
                 throw e
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 EngineLog.w("PetActiveVisitTask", "串门异常：${e.message}")
                 // 异常也继续下一个目标
             }

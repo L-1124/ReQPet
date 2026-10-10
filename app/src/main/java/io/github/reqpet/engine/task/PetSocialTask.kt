@@ -222,9 +222,6 @@ object PetSocialTask {
             null
         }
 
-    suspend fun refreshOwnCoinBagFromProfileAwait(_bridge: QQPetDirectBridge): String? =
-        QQPetDirectBridge.cachedOwnCoinBagId
-
     enum class SnatchOutcome { SUCCESS, LIMIT_REACHED, SKIP, FAIL }
 
     suspend fun executeAutoClaimCoinBags(
@@ -264,6 +261,7 @@ object PetSocialTask {
             // 速率限制已处理，不再捕获
             throw e
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             EngineLog.w("PetSocialTask", "福袋领取异常：${e.message}")
             return 0
         }

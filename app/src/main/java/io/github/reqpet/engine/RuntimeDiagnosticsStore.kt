@@ -98,7 +98,7 @@ internal object RuntimeDiagnosticFormat {
         if (normalized.contains("error") || normalized == "err" || normalized.contains("exception")) {
             return when {
                 normalized.endsWith("code") && (value is Int || value is Long) -> value.toString()
-                (normalized.endsWith("type") || normalized.endsWith("class")) && classLabel -> value as String
+                (normalized.endsWith("type") || normalized.endsWith("class")) && classLabel -> value
                 else -> "[redacted]"
             }
         }

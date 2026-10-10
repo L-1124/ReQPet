@@ -462,8 +462,7 @@ open class OidbChannel(
             return attempt.id
         }
         val currentGen = PetAdventureEngine.sessionGeneration
-        val currentUin = liveRuntimeUin
-        val attempt = registerAttempt(commandName, currentGen, currentUin)
+        val attempt = registerAttempt(commandName, currentGen, liveRuntimeUin)
         val requestId = attempt.id
         requestTracker.sweepExpired().forEach {
             EngineLog.d("OidbChannel", "请求 #${it.id} ${it.command} 超时未回包，配对已释放")

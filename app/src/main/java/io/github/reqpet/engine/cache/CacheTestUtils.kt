@@ -93,7 +93,7 @@ object CacheTestUtils {
     /**
      * 测试好友缓存仓库的完整流程
      */
-    suspend fun testFriendCacheWithMockData(
+    fun testFriendCacheWithMockData(
         context: Context,
         bridge: QQPetDirectBridge? = null
     ) {
@@ -124,7 +124,7 @@ object CacheTestUtils {
         cacheManager.recordMiss(cacheKey)
 
         val hitRate = cacheManager.getHitRate(cacheKey)
-        EngineLog.i("Simulated hit rate: ${hitRate.toString()}")
+        EngineLog.i("Simulated hit rate: $hitRate")
     }
 
     /**

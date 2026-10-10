@@ -40,7 +40,7 @@ object FriendCacheRepository {
         // 检查缓存（除非强制刷新）
         if (!forceRefresh) {
             val cached = cm.get<List<QQPetDirectBridge.HireableFriend>>(cacheKey, FRIEND_CACHE_TTL_MS)
-            if (cached != null && cached.isNotEmpty()) {
+            if (!cached.isNullOrEmpty()) {
                 EngineLog.d("FriendCacheRepo", "Friend cache HIT: $currentUin (${cached.size} friends)")
                 return cached
             }
@@ -75,6 +75,7 @@ object FriendCacheRepository {
                 return freshList
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             EngineLog.w("FriendCacheRepo", "Failed to fetch hireable friends: ${e.message}")
         }
 
@@ -116,6 +117,7 @@ object FriendCacheRepository {
                     }
                     delay(1000L) // 避免过快请求
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     EngineLog.w("FriendCacheRepo", "Failed to enrich friend details: ${e.message}")
                 }
             }

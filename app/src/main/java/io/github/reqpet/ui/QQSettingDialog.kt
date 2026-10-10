@@ -79,7 +79,7 @@ internal class QQSettingDialog(
         isOpenToDrawTracing = SettingsTrace.beginAsync("settings.open_to_first_draw", openToDrawCookie)
         SettingsTrace.trace("settings.dialog_init") {
             try {
-                setOwnerActivity(activity)
+        setOwnerActivity(activity)
                 setCanceledOnTouchOutside(false)
 
                 requestWindowFeature(Window.FEATURE_NO_TITLE)

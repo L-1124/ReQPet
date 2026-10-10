@@ -260,7 +260,7 @@ class EngineMetricsImpl private constructor(
         return MemoryUsage(
             usedBytes = used,
             maxBytes = max,
-            utilizationPercent = ((used.toDouble() / max) * 100).toDouble()
+            utilizationPercent = (used.toDouble() / max) * 100
         )
     }
 

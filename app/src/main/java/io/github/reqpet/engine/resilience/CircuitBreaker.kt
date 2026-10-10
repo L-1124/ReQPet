@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.pow
 
 /**
  * 熔断器状态机 - 三态模式
@@ -84,7 +85,7 @@ object ExponentialBackoffRetryPolicy {
         jitterFactor: Double,
         attempt: Int
     ): Long {
-        val baseDelay = (initialDelayMs * Math.pow(multiplier, attempt.toDouble())).toLong()
+        val baseDelay = (initialDelayMs * multiplier.pow(attempt.toDouble())).toLong()
         val cappedDelay = minOf(baseDelay, maxDelayMs)
 
         // 添加 jitter: ±jitterFactor * delay
@@ -103,8 +104,7 @@ class CircuitBreaker(
     private val name: String,
     private val config: CircuitBreakerConfig = CircuitBreakerConfig()
 ) {
-    @Volatile
-    private var stateRef: AtomicReference<CircuitState> = AtomicReference(CircuitState.Closed)
+    private val stateRef = AtomicReference<CircuitState>(CircuitState.Closed)
 
     // 滑动窗口记录最近失败的时间戳
     private val recentFailures = ConcurrentLinkedDeque<Long>()
@@ -120,7 +120,7 @@ class CircuitBreaker(
     /**
      * 获取当前状态
      */
-    fun getState(): CircuitState = stateRef.get()
+    fun getState(): CircuitState = checkNotNull(stateRef.get())
 
     /**
      * 熔断器名称
@@ -131,7 +131,7 @@ class CircuitBreaker(
      * 是否允许请求通过
      */
     fun allowRequest(): Boolean {
-        val currentState = stateRef.get()
+        val currentState = getState()
 
         return when (currentState) {
             is CircuitState.Closed -> true
@@ -153,7 +153,7 @@ class CircuitBreaker(
      * 记录成功请求
      */
     fun recordSuccess() {
-        when (val currentState = stateRef.get()) {
+        when (getState()) {
             is CircuitState.Closed -> {
                 // 清除失败计数
                 resetFailureWindow()
@@ -180,7 +180,7 @@ class CircuitBreaker(
      * @return true 如果应该继续执行，false 如果应该停止
      */
     fun recordFailure(e: Throwable): Boolean {
-        val currentState = stateRef.get()
+        val currentState = getState()
 
         when (currentState) {
             is CircuitState.Closed -> {
@@ -221,7 +221,7 @@ class CircuitBreaker(
             }
         }
 
-        return when (stateRef.get()) {
+        return when (getState()) {
             is CircuitState.Open -> false
             else -> true
         }

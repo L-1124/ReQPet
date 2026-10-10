@@ -133,8 +133,8 @@ object PetFriendCareTask {
         friends: List<QQPetDirectBridge.HireableFriend>,
         onLog: TaskLogger
     ): CareResultSummary {
-        var checked = 0;
-        var fed = 0;
+        var checked = 0
+        var fed = 0
         var bathed = 0
         for (friend in friends) {
             val attrs = PetCareTask.queryPetAttributesAwait(params.bridge, friend.petId, isSelf = false)
@@ -157,9 +157,9 @@ object PetFriendCareTask {
         attrs: QQPetDirectBridge.PetAttributes,
         onLog: TaskLogger
     ): Pair<Boolean, Boolean> {
-        val curEnergy = attrs.energy.toInt();
+        val curEnergy = attrs.energy.toInt()
         val maxEnergy = attrs.maxEnergy.toInt().coerceAtLeast(100)
-        val curClean = attrs.clean.toInt();
+        val curClean = attrs.clean.toInt()
         val maxClean = attrs.maxClean.toInt().coerceAtLeast(100)
         val friendName = friend.friendNick.ifEmpty { friend.uin.toString() }
         val petName = friend.petNick.ifEmpty { "小宠" }
@@ -170,7 +170,7 @@ object PetFriendCareTask {
             val suffix = if (!needFeed && !needBath) " (状态健康，无需照料)" else ""
             onLog("[好友检测] 「$friendName」· $petName：体力 $curEnergy/$maxEnergy，清洁 $curClean/$maxClean$suffix")
         }
-        var fedOk = false;
+        var fedOk = false
         var bathOk = false
         if (needFeed) {
             onLog("[好友喂食] 「$friendName」的「$petName」体力偏低，开始自动投喂...")
@@ -204,7 +204,7 @@ object PetFriendCareTask {
         val petLabel =
             if (req.friend.petNick.isNotEmpty()) "${friendName}的「${req.friend.petNick}」" else "好友「$friendName」的宠物"
         var foodItemId = ensureFoodInventory(req.bridge, req.ownPetId, petLabel, onLog)
-        var curEnergy = req.startEnergy;
+        var curEnergy = req.startEnergy
         var feedCount = 0
 
         while (curEnergy < req.targetThreshold && curEnergy < req.maxEnergy && feedCount < 8) {

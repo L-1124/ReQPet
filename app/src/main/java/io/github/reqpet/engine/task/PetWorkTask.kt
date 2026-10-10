@@ -142,7 +142,7 @@ object PetWorkTask {
         return WorkStartWithHireResult(soloCode, soloStoryId, soloErr, null)
     }
 
-    suspend fun selectBestHireCandidatesAwait(
+    fun selectBestHireCandidatesAwait(
         context: Context,
         bridge: QQPetDirectBridge,
         ownPetId: String,

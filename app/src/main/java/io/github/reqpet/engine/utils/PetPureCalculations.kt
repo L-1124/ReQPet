@@ -15,7 +15,7 @@ object PetPureCalculations {
 
     fun resolveEffectiveTotalSec(totalSec: Long, remainingSec: Long): Long {
         if (totalSec > 0L && totalSec >= remainingSec) return totalSec
-        if (remainingSec <= 0L) return if (totalSec > 0L) totalSec else 0L
+        if (remainingSec <= 0L) return 0L
         val standardTiers = listOf(600L, 2700L, 7200L, 14400L)
         return standardTiers.firstOrNull { it >= remainingSec } ?: maxOf(remainingSec, 14400L)
     }
@@ -127,19 +127,10 @@ object PetPureCalculations {
         maxRoundsPerSession: Int = MAX_FEED_ROUNDS_PER_SESSION,
         maxValue: Int = 100
     ): Int {
-        if (currentEnergy < 0 || energyPerFeed <= 0) return 0
-        if (currentEnergy >= targetThreshold) return 0
-        if (maxValue > 0 && currentEnergy >= maxValue) return 0
-        var energy = currentEnergy
-        var rounds = 0
-        while (energy < targetThreshold && rounds < maxRoundsPerSession) {
-            energy += energyPerFeed
-            if (maxValue > 0 && energy > maxValue) energy = maxValue
-            rounds++
-            if (energy >= targetThreshold) break
-            if (maxValue > 0 && energy >= maxValue) break
-        }
-        return rounds
+        val target = if (maxValue > 0) minOf(targetThreshold, maxValue) else targetThreshold
+        if (currentEnergy < 0 || energyPerFeed <= 0 || maxRoundsPerSession <= 0 || currentEnergy >= target) return 0
+        val gap = target.toLong() - currentEnergy
+        return ((gap + energyPerFeed - 1L) / energyPerFeed).coerceAtMost(maxRoundsPerSession.toLong()).toInt()
     }
 
     fun filterPendingCoinBags(

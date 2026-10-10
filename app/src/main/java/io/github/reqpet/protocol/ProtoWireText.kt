@@ -94,10 +94,8 @@ object ProtoWireText {
         return result
     }
 
-    private fun looksLikeUin(value: Long): Boolean {
-        if (value !in 10_000_000L..9_999_999_999L) return false
-        return value !in 1_600_000_000L..2_000_000_000L
-    }
+    private fun looksLikeUin(value: Long): Boolean =
+        value in 10_000_000L..9_999_999_999L && value !in 1_600_000_000L..2_000_000_000L
 
     private fun asciiDigitRuns(data: ByteArray): List<String> {
         val runs = mutableListOf<String>()

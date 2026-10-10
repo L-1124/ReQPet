@@ -53,8 +53,11 @@ fun LogSection(state: SettingsState) {
         if (lastLine != null && atBottom) {
             val count = listState.layoutInfo.totalItemsCount
             if (count > 0) {
-                runCatching {
+                try {
                     listState.animateScrollToItem(count - 1)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    // 避免滚动失败写入新日志，再次触发自动滚动。
                 }
             }
         }

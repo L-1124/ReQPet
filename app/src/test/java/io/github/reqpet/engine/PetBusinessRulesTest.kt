@@ -8,6 +8,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PetBusinessRulesTest {
+    @Test
+    fun feedingRoundsHandleOverflowAndInvalidLimits() {
+        assertEquals(1, PetPureCalculations.calculateFeedingRounds(
+            Int.MAX_VALUE - 5, Int.MAX_VALUE, maxValue = Int.MAX_VALUE
+        ))
+        assertEquals(3, PetPureCalculations.calculateFeedingRounds(
+            0, Int.MAX_VALUE, energyPerFeed = 1, maxRoundsPerSession = 3, maxValue = 0
+        ))
+        assertEquals(0, PetPureCalculations.calculateFeedingRounds(0, 60, maxRoundsPerSession = -1))
+    }
+
 
     @Test
     fun calculateFeedingRoundsShouldHonorDeficitAndSessionLimit() {
@@ -160,20 +171,4 @@ class PetBusinessRulesTest {
         assertEquals(103L, manualPending[1].uin)
     }
 
-    @Test
-    fun testFriendCareThresholdRules() {
-        val curEnergy = 45
-        val energyThreshold = 60
-        val needFeed = curEnergy in 0 until energyThreshold
-        assertTrue(needFeed)
-
-        val highEnergy = 85
-        val noFeed = highEnergy in 0 until energyThreshold
-        assertFalse(noFeed)
-
-        val curClean = 30
-        val cleanThreshold = 60
-        val needBath = curClean in 0 until cleanThreshold
-        assertTrue(needBath)
-    }
 }

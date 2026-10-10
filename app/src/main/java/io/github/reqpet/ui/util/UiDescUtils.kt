@@ -125,7 +125,7 @@ object UiDescUtils {
                 val realTitle = if (rawTitle.isNotEmpty() && rawTitle != "???") rawTitle else "隐藏职业"
                 val displayTitle = if (isLocked) "$realTitle(锁)" else realTitle
                 val tip =
-                    if (isLocked) (if (s.lockReason.isNotEmpty()) s.lockReason else "还没有解锁这个职业") else null
+                    if (isLocked) s.lockReason.ifEmpty { "还没有解锁这个职业" } else null
                 list.add(WorkPlaceOption(s.stage, displayTitle, enabled = !isLocked, disabledTip = tip))
             }
         } else {

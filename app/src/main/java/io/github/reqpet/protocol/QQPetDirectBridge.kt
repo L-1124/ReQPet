@@ -16,7 +16,7 @@ import java.lang.reflect.Method
  * QQ 宠物宿主反射发包桥接门面 (Facade)
  * 封装并委托底层 OIDB 发包通道与领域协议客户端
  */
-class QQPetDirectBridge(private val classLoader: ClassLoader, private val context: Context? = null) {
+class QQPetDirectBridge(classLoader: ClassLoader, context: Context? = null) {
 
     constructor(classLoader: ClassLoader) : this(classLoader, null)
 

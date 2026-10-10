@@ -99,25 +99,25 @@ object PetAdaptiveWorkTask {
         if (!story.bodyNote.isNullOrBlank()) onLog?.log(EngineLog.Level.INFO, "[外出回包] ${story.bodyNote}")
         val rem = story.remaining
         val storyId = story.storyId?.takeIf { it.isNotEmpty() }
-        val reject = when {
-            story.code != 0 -> "状态查询未成功"
-            rem == null -> "回包没有剩余时间。子状态为 0 或没有字段 1 时，不把这次当成外出"
-            storyId == null -> "回包没有 StoryID"
-            rem <= 0L -> "剩余时间是 0"
-            else -> null
-        }
-        if (reject != null) {
+        fun reject(reason: String): Pair<StoryStatusResult, String?> {
             val prefix = if (story.code != 0) "状态没查完" else "因此视为未在外出"
-            onLog?.log(EngineLog.Level.INFO, "[外出判定] $prefix：$reject")
+            onLog?.log(EngineLog.Level.INFO, "[外出判定] $prefix：$reason")
             return Pair(story, null)
         }
-        if (rem == null || rem <= 0L || storyId == null) return Pair(story, null)
-        val kind = when {
-            storyId.startsWith("6100") -> "学园修习"
-            storyId.startsWith("6400") -> "小镇打工"
-            else -> "森林探险"
+        return when {
+            story.code != 0 -> reject("状态查询未成功")
+            rem == null -> reject("回包没有剩余时间。子状态为 0 或没有字段 1 时，不把这次当成外出")
+            storyId == null -> reject("回包没有 StoryID")
+            rem <= 0L -> reject("剩余时间是 0")
+            else -> {
+                val kind = when {
+                    storyId.startsWith("6100") -> "学园修习"
+                    storyId.startsWith("6400") -> "小镇打工"
+                    else -> "森林探险"
+                }
+                Pair(story, "$kind，StoryID=$storyId，剩余 ${PetPureCalculations.formatDuration(rem)}")
+            }
         }
-        return Pair(story, "$kind，StoryID=$storyId，剩余 ${PetPureCalculations.formatDuration(rem)}")
     }
 
     private fun resolveCareerTypeAndPlace(param: WorkDispatchParam): Pair<Int, String> {

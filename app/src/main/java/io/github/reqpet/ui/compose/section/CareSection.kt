@@ -97,7 +97,7 @@ private fun ThresholdSliderRow(
     SliderRow(
         title = title,
         value = index,
-        range = 0..CARE_THRESHOLD_VALUES.lastIndex,
+        range = CARE_THRESHOLD_VALUES.indices,
         valueLabel = CARE_THRESHOLD_VALUES[index].toString(),
         onValueChange = { state.setInt(key, CARE_THRESHOLD_VALUES.getOrElse(it) { defaultValue }) }
     )
@@ -116,7 +116,7 @@ private fun FriendCareThresholdSliderRow(
     SliderRow(
         title = title,
         value = index,
-        range = 0..FRIEND_CARE_THRESHOLD_VALUES.lastIndex,
+        range = FRIEND_CARE_THRESHOLD_VALUES.indices,
         valueLabel = FRIEND_CARE_THRESHOLD_VALUES[index].toString(),
         onValueChange = { state.setInt(key, FRIEND_CARE_THRESHOLD_VALUES.getOrElse(it) { defaultValue }) }
     )

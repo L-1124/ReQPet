@@ -76,6 +76,7 @@ object TimeConfigManager {
             val result = PetWorkTask.queryStoryStatusAwait(bridge, petId)
             extractAndConfigureDuration(result)
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             EngineLog.w("TimeConfigManager", "Failed to reload durations from server: ${e.message}")
         }
     }

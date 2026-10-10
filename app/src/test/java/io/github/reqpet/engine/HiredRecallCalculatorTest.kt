@@ -82,21 +82,13 @@ class HiredRecallCalculatorTest {
     }
 
     @Test
-    fun `hired sleep duration clamp prevents long sleep when target progress is reached or exceeded`() {
+    fun `hired monitor retries after one minute when target progress is exceeded`() {
         val total = 14400L
         val rem = 8343L
         val targetProgress = 42
 
-        val targetElapsedSec = (total * targetProgress) / 100L
-        val currentElapsedSec = total - rem
-        val neededSec = targetElapsedSec - currentElapsedSec
-
-        val safeSleepSec = if (neededSec > 0L) {
-            neededSec.coerceIn(15L, 120L)
-        } else {
-            15L
-        }
-        assertEquals(15L, safeSleepSec)
+        val neededSec = PetPureCalculations.calculateHiredRemainingToTarget(total, rem, targetProgress)
+        assertEquals(60_000L, StealthScheduler.calculateHiredMonitorSleepMillis(neededSec, hasReachedTarget = true))
     }
 
     @Test

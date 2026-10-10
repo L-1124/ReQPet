@@ -85,14 +85,14 @@ class PetPkProtocolClientTest {
     }
 
     @Test
-    fun parsePkBattleResultExtractsRemainingSecondsFromTag4() {
+    fun parsePkBattleResultSeparatesRemainingSecondsFromStartTimestamp() {
         val client = createClient()
 
         val statusInfo = ProtoWire.message()
             .writeVarint(1, 2L)
-            .writeVarint(2, 1000L)
-            .writeVarint(3, 1060L)
-            .writeVarint(4, 60L)
+            .writeVarint(2, 60L)
+            .writeVarint(3, 90L)
+            .writeVarint(4, 1700000000L)
             .toByteArray()
 
         val mySide = ProtoWire.message()

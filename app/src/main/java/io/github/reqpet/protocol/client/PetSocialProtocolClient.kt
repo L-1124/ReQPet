@@ -190,7 +190,7 @@ class PetSocialProtocolClient(
         cookie: String = "",
         callback: (code: Int, friends: List<HireableFriend>, hasMore: Boolean, nextCookie: String, errorMsg: String?) -> Unit
     ) {
-        val body = ProtoWire.message().writeString(1, cookie).writeVarint(2, 1L).writeVarint(3, 0L).toByteArray()
+        val body = ProtoWire.message().writeString(1, cookie).writeVarint(2, 6L).writeVarint(3, 0L).toByteArray()
         val currentOwnUin = channel.getCurrentRuntimeUin()
         channel.sendOidb("OidbSvcTrpcTcp.0x985d_0", 39005, 0, body) { code, data, errorMsg ->
             if (code == 0 && data != null) {

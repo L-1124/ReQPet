@@ -99,7 +99,7 @@ class PetPkProtocolClient(
     internal fun parsePkBattleResult(data: ByteArray): PkBattleResult {
         val storyId = ProtoWire.firstString(data, 1)
         val statusInfoBytes = ProtoWire.firstBytes(data, 4)
-        val leftDuration = ProtoWire.firstVarint(statusInfoBytes, 4) ?: 0L
+        val leftDuration = ProtoWire.firstVarint(statusInfoBytes, 2) ?: 0L
         val battleInfoBytes = ProtoWire.firstBytes(data, 5)
         val mySideBytes = ProtoWire.firstBytes(battleInfoBytes, 1)
         val oppSideBytes = ProtoWire.firstBytes(battleInfoBytes, 2)

@@ -47,6 +47,28 @@ class PetSocialFriendStatusProtocolTest {
     }
 
     @Test
+    fun workCandidatesUseCareerSourceAndPreservePagination() {
+        var callbackCalled = false
+        val client = createSocialClient { name, command, subCommand, request, callback ->
+            assertEquals("OidbSvcTrpcTcp.0x985d_0", name)
+            assertEquals(39005, command)
+            assertEquals(0, subCommand)
+            assertEquals("current_page", ProtoWire.firstString(request, 1))
+            assertEquals(6L, ProtoWire.firstVarint(request, 2))
+            callback(0, ProtoWire.message().writeString(2, "next_page").writeVarint(3, 1L).toByteArray(), null)
+        }
+        client.fetchPetFriendsPage("current_page") { code, friends, hasMore, cookie, error ->
+            callbackCalled = true
+            assertEquals(0, code)
+            assertTrue(friends.isEmpty())
+            assertTrue(hasMore)
+            assertEquals("next_page", cookie)
+            assertEquals(null, error)
+        }
+        assertTrue(callbackCalled)
+    }
+
+    @Test
     fun parseFriendPetSnapshotsFrom0x985dResponse() {
         val client = createSocialClient()
 

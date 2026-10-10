@@ -17,6 +17,9 @@ import kotlin.coroutines.resume
  */
 object PetPkTask {
 
+    internal fun settlementDelayMillis(remainingSec: Long): Long =
+        (remainingSec.coerceIn(0L, Long.MAX_VALUE / 1000L) * 1000L).coerceAtLeast(6800L)
+
     data class CandidateItem(
         val uin: Long,
         val petId: String,
@@ -160,8 +163,7 @@ object PetPkTask {
         }
         val outcomeStr = if (battleRes.isWin) "战斗大捷！" else "战斗惜败"
         onLog("[对决进行中] 我方「${battleRes.myNick}」战力 ${battleRes.myPower} VS 对方「${battleRes.oppNick}」战力 ${battleRes.oppPower} -> 判定: $outcomeStr")
-        val waitSec = if (battleRes.leftDurationSec in 1..25) battleRes.leftDurationSec else 5L
-        delay(waitSec * 1000L + 500L)
+        delay(settlementDelayMillis(battleRes.leftDurationSec))
         val settleRes = kotlinx.coroutines.withTimeoutOrNull(8000L) {
             suspendCancellableCoroutine<QQPetDirectBridge.PkSettleResult> { cont ->
                 bridge.settlePkBattle(battleRes.storyId, ownPetId) { res ->
@@ -202,7 +204,7 @@ object PetPkTask {
             if (!checkAndPrepareOpponent(bridge, ownPetId, cand, onLog)) continue
             onLog("[对手锁定] 选中碾压对手: 「${cand.userNick}」的小宠「${cand.petNick}」(对手三维: ${cand.totalAttr} <= 我方: $myTotal)")
             val settle = challengeOpponent(bridge, ownPetId, cand, onLog)
-            if (settle != null) {
+            if (settle?.code == 0) {
                 val newCount = AccountSessionStore.incrementDailyPkCount(context, currentUin)
                 val goldStr = if (settle.goldEarned in 1..1_000_000L) "，斩获金币: +${settle.goldEarned}" else ""
                 onLog("[PK结算] 第 $newCount/10 场对决完成: ${settle.title ?: "大捷"}$goldStr！")

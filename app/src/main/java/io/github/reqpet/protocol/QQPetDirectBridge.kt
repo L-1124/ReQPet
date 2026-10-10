@@ -382,7 +382,7 @@ class QQPetDirectBridge(private val classLoader: ClassLoader, private val contex
     fun buyFood(
         petId: String,
         count: Long = 5L,
-        itemType: String = "1",
+        itemType: String = "9990032",
         callback: (code: Int, rawData: ByteArray?, errorMsg: String?) -> Unit
     ) = careClient.buyFood(petId, count, itemType, callback)
 

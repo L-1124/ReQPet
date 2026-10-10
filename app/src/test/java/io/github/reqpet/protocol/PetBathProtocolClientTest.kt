@@ -194,6 +194,99 @@ class PetBathProtocolClientTest {
         return MockHostClassLoader(map)
     }
 
+    private fun createDirectClient(
+        onCleanUpdated: (Int) -> Unit = {},
+        onSend: (String, Int, Int, ByteArray, (Int, ByteArray?, String?) -> Unit) -> Unit
+    ): PetBathProtocolClient {
+        val channel = object : OidbChannel(ClassLoader.getSystemClassLoader(), null) {
+            override fun sendOidb(
+                commandName: String,
+                command: Int,
+                subCommand: Int,
+                request: ByteArray,
+                callback: (Int, ByteArray?, String?) -> Unit
+            ): Int {
+                onSend(commandName, command, subCommand, request, callback)
+                return 1
+            }
+        }
+        return PetBathProtocolClient(channel, onCleanUpdated = onCleanUpdated)
+    }
+
+    @Test
+    fun doBathOnceConsumesRequestedItemAndUsesServerState() {
+        var updatedClean: Int? = null
+        var callbackCalled = false
+        val client = createDirectClient({ updatedClean = it }) { name, command, subCommand, request, callback ->
+            assertEquals("OidbSvcTrpcTcp.0x9bf3_1", name)
+            assertEquals(39923, command)
+            assertEquals(1, subCommand)
+            assertEquals("own_pet", ProtoWire.firstString(request, 1))
+            assertEquals("2010104", ProtoWire.firstString(request, 2))
+            assertEquals(2L, ProtoWire.firstVarint(request, 3))
+            assertEquals("", ProtoWire.firstString(request, 4))
+            callback(0, ProtoWire.message().writeVarint(1, 73L).writeVarint(3, 4L).toByteArray(), null)
+        }
+
+        client.doBathOnce("own_pet", "2010104", 2) { result ->
+            callbackCalled = true
+            assertEquals(0, result.code)
+            assertEquals(73, result.newClean)
+            assertEquals(4, result.remainBalance)
+            assertFalse(result.isFullClean)
+        }
+        assertTrue(callbackCalled)
+        assertEquals(73, updatedClean)
+    }
+
+    @Test
+    fun friendBathDoesNotOverwriteOwnClean() {
+        var callbackCalled = false
+        val client = createDirectClient({ throw AssertionError("好友回包不得更新自己的属性") }) { _, _, _, request, callback ->
+            assertEquals("friend_pet", ProtoWire.firstString(request, 1))
+            assertEquals("12345678", ProtoWire.firstString(request, 4))
+            callback(0, ProtoWire.message().writeVarint(1, 120L).writeVarint(4, 1L).toByteArray(), null)
+        }
+        client.doBathOnce("friend_pet", "2010104", petUin = "12345678") { result ->
+            callbackCalled = true
+            assertEquals(120, result.newClean)
+            assertEquals(0, result.remainBalance)
+            assertTrue(result.isFullClean)
+        }
+        assertTrue(callbackCalled)
+    }
+
+    @Test
+    fun failedOrMalformedBathDoesNotReportCompletion() {
+        val client = createDirectClient { _, _, _, _, _ -> throw AssertionError("不应发包") }
+        for (data in listOf(null, byteArrayOf(), byteArrayOf(0x08, 0x80.toByte()), ProtoWire.message().writeVarint(3, 4L).toByteArray())) {
+            val result = client.parseBathResult(0, data, null)
+            assertEquals(-1, result.code)
+            assertEquals(-1, result.newClean)
+            assertEquals(-1, result.remainBalance)
+            assertFalse(result.isFullClean)
+        }
+        val result = client.parseBathResult(123, null, "拒绝消费")
+        assertEquals(123, result.code)
+        assertEquals("拒绝消费", result.errorMsg)
+        assertFalse(result.isFullClean)
+    }
+
+    @Test
+    fun invalidBathAndPurchaseParametersDoNotSend() {
+        val client = createDirectClient { _, _, _, _, _ -> throw AssertionError("无效参数不得发包") }
+        var callbacks = 0
+        client.doBathOnce("own_pet", "2010104", 0) { result ->
+            callbacks++
+            assertEquals(-1, result.code)
+        }
+        client.buyBathItem("own_pet", "invalid_item") { code, _, _ ->
+            callbacks++
+            assertEquals(-1, code)
+        }
+        assertEquals(2, callbacks)
+    }
+
     @Test
     fun `before failing proof - 宿主类缺失时安全退出`() {
         val emptyLoader = MockHostClassLoader(emptyMap())

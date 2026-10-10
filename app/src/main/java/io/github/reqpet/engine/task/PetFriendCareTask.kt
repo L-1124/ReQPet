@@ -211,7 +211,7 @@ object PetFriendCareTask {
             var res = feedDetailedAwait(req.bridge, req.friend.petId, req.friend.uin.toString(), foodItemId)
             if (res.code == 1000210) {
                 onLog("[好友投喂采购] 背包食物耗尽，自动补购 5 份爱心饼干...")
-                val (buyCode, buyErr) = PetCareTask.buyFoodAwait(req.bridge, req.ownPetId, 5L, "1")
+                val (buyCode, buyErr) = PetCareTask.buyFoodAwait(req.bridge, req.ownPetId, 5L)
                 if (buyCode == 0) {
                     delay(randomJitter(720L, 1680L))
                     val (_, _, items) = fetchFoodInventoryAwait(req.bridge)
@@ -252,7 +252,7 @@ object PetFriendCareTask {
         val balance = chosen?.balance ?: -1
         if (invCode == 0 && balance == 0) {
             onLog("[好友投喂采购] 背包食物库存为 0，正在为$petLabel 自动采购 5 份爱心饼干...")
-            val (buyCode, _) = PetCareTask.buyFoodAwait(bridge, ownPetId, 5L, "1")
+            val (buyCode, _) = PetCareTask.buyFoodAwait(bridge, ownPetId, 5L)
             if (buyCode == 0) {
                 onLog("[好友投喂采购] 成功采购 5 份爱心饼干！")
                 delay(randomJitter(720L, 1680L))
@@ -265,73 +265,10 @@ object PetFriendCareTask {
         req: FriendBathRequest,
         onLog: TaskLogger
     ): QQPetDirectBridge.BathResult {
-        val friendName = req.friend.friendNick.ifEmpty { req.friend.uin.toString() }
-        val petLabel =
-            if (req.friend.petNick.isNotEmpty()) "${friendName}的「${req.friend.petNick}」" else "好友「$friendName」的宠物"
-        val (_, configs) = PetCareTask.fetchBathItemConfigAwait(req.bridge)
-        val (_, inventory) = PetCareTask.fetchBathInventoryAwait(req.bridge)
-        val chosenConfig = configs.firstOrNull { it.cleanValue > 0 } ?: configs.firstOrNull()
-        val itemId = chosenConfig?.itemId ?: inventory.keys.firstOrNull() ?: "2010104"
-        val itemName = chosenConfig?.name ?: "香皂片"
-        var balance = inventory[itemId] ?: 0
-        var curClean = req.startClean.coerceAtLeast(0)
-        var totalAdded = 0;
-        var steps = 0
-
-        while (curClean < req.targetThreshold && curClean < req.maxClean && steps < 10) {
-            steps++
-            if (balance <= 0) {
-                val buyRes = purchaseFriendSoap(req.bridge, req.ownPetId, itemId, itemName, petLabel, onLog)
-                if (!buyRes.first) {
-                    return QQPetDirectBridge.BathResult(-2, curClean, totalAdded, balance, false, buyRes.second)
-                }
-                balance += 5
-            }
-            val res = PetCareTask.doBathOnceAwait(req.bridge, req.friend.petId, itemId, 1, req.friend.uin.toString())
-            if (res.code != 0) {
-                if (balance > 0 && steps == 1) {
-                    balance = 0; continue
-                }
-                onLog("[好友洗澡] 帮$petLabel 搓澡回包: code=${res.code} ${res.errorMsg ?: ""}")
-                return QQPetDirectBridge.BathResult(res.code, curClean, totalAdded, balance, false, res.errorMsg)
-            }
-            curClean = res.newClean; totalAdded += res.addedClean; balance = res.remainBalance
-            onLog("[好友搓澡] 帮$petLabel 消耗 1 份$itemName (+${res.addedClean}) -> 清洁度 $curClean/${req.maxClean}")
-            if (curClean >= req.targetThreshold || res.isFullClean || curClean >= req.maxClean) break
-            delay(randomJitter(1200L, 2000L))
-        }
-        if (steps >= 10 && curClean < req.targetThreshold) {
-            onLog.warn("[好友洗澡] 洗澡步数已达 10 步上限，停止继续搓澡")
-        }
-        if (totalAdded > 0) {
-            try {
-                PetCareTask.bathAwait(req.bridge, req.friend.petId, req.friend.uin.toString())
-            } catch (e: Throwable) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-            }
-        }
-        return QQPetDirectBridge.BathResult(0, curClean, totalAdded, balance, curClean >= req.maxClean, null)
-    }
-
-    private suspend fun purchaseFriendSoap(
-        bridge: QQPetDirectBridge,
-        ownPetId: String,
-        itemId: String,
-        itemName: String,
-        petLabel: String,
-        onLog: TaskLogger
-    ): Pair<Boolean, String?> {
-        onLog("[好友洗护采购] 背包${itemName}不足，正在自动采购 5 份${itemName}用于帮$petLabel 洗澡...")
-        val (buyCode, orderResult, buyErr) = PetCareTask.buyBathItemAwait(bridge, ownPetId, itemId, 5, scene = 21L)
-        return if (buyCode == 0 && (orderResult == 1 || orderResult == 0)) {
-            onLog("[好友洗护采购] 成功购入 5 份${itemName}！")
-            delay(randomJitter(720L, 1680L))
-            Pair(true, null)
-        } else {
-            val reason = if (orderResult == 2) "金币不足" else (buyErr ?: "code=$buyCode, orderResult=$orderResult")
-            onLog.error("[好友洗护采购] 购买${itemName}失败: $reason")
-            Pair(false, reason)
-        }
+        return PetCareTask.bathTargetWithAutoBuyAwait(
+            req.bridge, req.ownPetId, req.friend.petId, req.friend.uin.toString(),
+            req.startClean, req.maxClean, req.targetThreshold, onLog
+        )
     }
 
     suspend fun feedDetailedAwait(

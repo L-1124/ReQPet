@@ -70,6 +70,7 @@ object ProtocolBreakers {
         put("0x96a6", DOMAIN_BATH)
         put("0x9bf1", DOMAIN_BATH)
         put("0x9bf2", DOMAIN_BATH)
+        put("0x9bf3", DOMAIN_BATH)
         put("0x9bd0", DOMAIN_BATH)
     }
 

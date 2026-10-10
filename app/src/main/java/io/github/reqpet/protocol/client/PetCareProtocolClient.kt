@@ -2,10 +2,12 @@ package io.github.reqpet.protocol.client
 
 import io.github.reqpet.engine.EngineLog
 import io.github.reqpet.protocol.ProtoWire
+import io.github.reqpet.protocol.PurchaseGuard
 import io.github.reqpet.protocol.ProtoWireText
 import io.github.reqpet.protocol.QQPetDirectBridge
 import io.github.reqpet.protocol.QQPetDirectBridge.PetAttributes
 import io.github.reqpet.protocol.channel.OidbChannel
+import io.github.reqpet.protocol.channel.ProtocolBreakers
 import io.github.reqpet.protocol.model.FeedDetailResult
 import io.github.reqpet.protocol.model.FoodInventoryItem
 import io.github.reqpet.protocol.model.PetProfileDetail
@@ -19,6 +21,7 @@ import java.lang.reflect.Modifier
  */
 class PetCareProtocolClient(
     private val channel: OidbChannel,
+    private val purchaseGuard: PurchaseGuard? = channel.context?.let { runCatching { PurchaseGuard.forContext(it) }.getOrNull() },
     private val onAttributesUpdated: (PetAttributes) -> Unit = {},
     private val onOwnBagFound: (bagId: String) -> Unit = {}
 ) {
@@ -274,6 +277,7 @@ class PetCareProtocolClient(
     fun fetchFoodInventory(
         callback: (code: Int, remain: Int, total: Int, items: List<FoodInventoryItem>) -> Unit
     ) {
+        val uin = PetAdventureEngine.currentActiveUin
         channel.sendOidb("OidbSvcTrpcTcp.0x9949_1", 39241, 1, ByteArray(0)) { code, data, err ->
             val items = mutableListOf<FoodInventoryItem>()
             var remain = 0
@@ -298,7 +302,12 @@ class PetCareProtocolClient(
             } else {
                 EngineLog.w("PetCareClient", "fetchFoodInventory 失败: code=$code, err=$err")
             }
-            callback(code, remain, total, items)
+            items.forEach { item ->
+                if (code == 0 && data != null) purchaseGuard?.observeInventory(
+                    uin, "food:${item.itemId}", item.balance
+                )
+            }
+            callback(if (code == 0 && data == null) -104 else code, remain, total, items)
         }
     }
 
@@ -369,9 +378,9 @@ class PetCareProtocolClient(
         val cleanBytes = ProtoWire.firstBytes(displayBytes, 3)
         val moodCur = if (feelingBytes != null) (ProtoWire.firstFloat(feelingBytes, 3) ?: 0f) else 0f
         val energyMax = if (hungerBytes != null) (ProtoWire.firstFloat(hungerBytes, 2) ?: 100f) else 100f
-        val energyCur = if (hungerBytes != null) (ProtoWire.firstFloat(hungerBytes, 3) ?: 0f) else 0f
+        val energyCur = if (hungerBytes != null) (ProtoWire.firstFloat(hungerBytes, 3) ?: 0f) else -1f
         val cleanMax = if (cleanBytes != null) (ProtoWire.firstFloat(cleanBytes, 2) ?: 100f) else 100f
-        val cleanCur = if (cleanBytes != null) (ProtoWire.firstFloat(cleanBytes, 3) ?: 0f) else 0f
+        val cleanCur = if (cleanBytes != null) (ProtoWire.firstFloat(cleanBytes, 3) ?: 0f) else -1f
         return PetAttributes(
             energy = energyCur,
             maxEnergy = if (energyMax > 0f) energyMax else 100f,
@@ -396,9 +405,44 @@ class PetCareProtocolClient(
     fun buyFood(
         petId: String,
         count: Long = 5L,
-        itemType: String = "1",
+        itemType: String = "9990032",
         callback: (code: Int, rawData: ByteArray?, errorMsg: String?) -> Unit
     ) {
+        if (count !in 1L..PurchaseGuard.MAX_PER_PURCHASE.toLong() || purchaseGuard == null ||
+            itemType.toLongOrNull()?.let { it > 0L } != true || petId.isBlank()
+        ) {
+            callback(PurchaseGuard.BLOCKED_CODE, null, "采购保护不可用或采购参数无效，暂停补购")
+            return
+        }
+        fetchFoodInventory { inventoryCode, _, _, items ->
+            if (inventoryCode != 0 || items.any { it.balance < 0 } ||
+                (items.firstOrNull { it.itemId == itemType }?.balance ?: 0) != 0
+            ) {
+                callback(PurchaseGuard.BLOCKED_CODE, null, "库存未确认缺货，暂停补购")
+                return@fetchFoodInventory
+            }
+            val (reservation, reason) = purchaseGuard.reserveForPet(petId, "food:$itemType", count.toInt(), 0)
+            if (reservation == null) {
+                EngineLog.w(TAG, "采购拦截: $reason")
+                callback(PurchaseGuard.BLOCKED_CODE, null, reason)
+                return@fetchFoodInventory
+            }
+            sendFoodPurchase(petId, count, itemType) { code, data, error ->
+                val confirmed = code == 0 && ProtoWire.firstVarint(data, 3) == count &&
+                    (ProtoWire.firstVarint(data, 1) ?: -1L) >= count
+                val outcome = when {
+                    confirmed -> PurchaseGuard.Outcome.SUCCESS
+                    code == OidbChannel.MASTER_OFF_CODE || code == ProtocolBreakers.FAST_FAIL_CODE -> PurchaseGuard.Outcome.REJECTED
+                    else -> PurchaseGuard.Outcome.UNKNOWN
+                }
+                purchaseGuard.complete(reservation, outcome)
+                callback(if (code == 0 && !confirmed) -104 else code, data,
+                    error ?: if (confirmed) null else "食物订单未确认，暂停补购")
+            }
+        }
+    }
+
+    private fun sendFoodPurchase(petId: String, count: Long, itemType: String, callback: (Int, ByteArray?, String?) -> Unit) {
         val body = ProtoWire.message()
             .writeVarint(1, count)
             .writeString(2, petId)

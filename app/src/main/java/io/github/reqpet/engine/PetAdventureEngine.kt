@@ -263,6 +263,7 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
         private fun clearAccountBoundMemoryCache(context: Context) {
             AccountSessionStore.clearAccountBoundMemoryCache(context)
             PetCycleDispatcher.resetFailureCount()
+            PetMaintenanceCoordinator.resetCareBackoff()
             cachedPetId = null
             hasSyncedServerState = false
             lastActiveStoryId = null

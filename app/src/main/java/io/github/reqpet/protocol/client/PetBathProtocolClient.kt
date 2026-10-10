@@ -1,8 +1,11 @@
 package io.github.reqpet.protocol.client
 
 import io.github.reqpet.engine.EngineLog
+import io.github.reqpet.engine.PetAdventureEngine
 import io.github.reqpet.protocol.ProtoWire
+import io.github.reqpet.protocol.PurchaseGuard
 import io.github.reqpet.protocol.channel.OidbChannel
+import io.github.reqpet.protocol.channel.ProtocolBreakers
 import io.github.reqpet.protocol.model.BathItemConfig
 import io.github.reqpet.protocol.model.BathResult
 import java.lang.reflect.Field
@@ -13,6 +16,7 @@ import java.lang.reflect.Modifier
  */
 class PetBathProtocolClient(
     private val channel: OidbChannel,
+    private val purchaseGuard: PurchaseGuard? = channel.context?.let { runCatching { PurchaseGuard.forContext(it) }.getOrNull() },
     private val onCleanUpdated: (newClean: Int) -> Unit = {}
 ) {
     internal data class BathPbSchema(
@@ -287,7 +291,7 @@ class PetBathProtocolClient(
                     val name = ProtoWire.firstString(bBytes, 1) ?: "香皂片"
                     val itemId = ProtoWire.firstString(bBytes, 2) ?: ""
                     val gold = (ProtoWire.firstVarint(bBytes, 5) ?: 5L).toInt()
-                    val cleanVal = (ProtoWire.firstVarint(bBytes, 6) ?: 10L).toInt()
+                    val cleanVal = (ProtoWire.firstVarint(bBytes, 6) ?: 0L).toInt()
                     val defBuy = (ProtoWire.firstVarint(bBytes, 8) ?: 5L).toInt()
                     if (itemId.isNotEmpty()) {
                         list.add(BathItemConfig(itemId, name, gold, cleanVal, defBuy))
@@ -297,14 +301,15 @@ class PetBathProtocolClient(
             } else {
                 EngineLog.w("PetBathClient", "fetchBathItemConfig 失败: code=$code, err=$err")
             }
-            callback(code, list)
+            callback(if (code == 0 && (data == null || list.isEmpty())) -104 else code, list)
         }
     }
 
     fun fetchBathInventory(callback: (code: Int, balances: Map<String, Int>) -> Unit) {
+        val uin = PetAdventureEngine.currentActiveUin
         channel.sendOidb("OidbSvcTrpcTcp.0x9bf2_1", 39922, 1, ByteArray(0)) { code, data, err ->
             val map = linkedMapOf<String, Int>()
-            if (code == 0 && data != null) {
+            if (code == 0 && ProtoWire.firstBytes(data, 1) != null) {
                 val invInfoBytes = ProtoWire.firstBytes(data, 1)
                 val itemBytesList = ProtoWire.allBytes(invInfoBytes, 1)
                 for (cBytes in itemBytesList) {
@@ -315,10 +320,13 @@ class PetBathProtocolClient(
                     }
                 }
                 EngineLog.i("PetBathClient", "fetchBathInventory 成功: balances=$map")
+                map.forEach { (item, balance) ->
+                    purchaseGuard?.observeInventory(uin, "bath:$item", balance)
+                }
             } else {
                 EngineLog.w("PetBathClient", "fetchBathInventory 失败: code=$code, err=$err")
             }
-            callback(code, map)
+            callback(if (code == 0 && ProtoWire.firstBytes(data, 1) == null) -104 else code, map)
         }
     }
 
@@ -329,7 +337,43 @@ class PetBathProtocolClient(
         scene: Long = 21L,
         callback: (code: Int, orderResult: Int, errorMsg: String?) -> Unit
     ) {
-        val itemIdLong = itemId.toLongOrNull() ?: 2010104L
+        val itemIdLong = itemId.toLongOrNull()
+        if (petId.isBlank() || itemIdLong == null || itemIdLong <= 0L || count <= 0) {
+            callback(-1, 0, "无效的香皂购买参数")
+            return
+        }
+        if (count > PurchaseGuard.MAX_PER_PURCHASE || purchaseGuard == null) {
+            callback(PurchaseGuard.BLOCKED_CODE, 0, "采购保护不可用或单次数量超过 10，暂停补购")
+            return
+        }
+        fetchBathInventory { inventoryCode, inventory ->
+            if (inventoryCode != 0 || (inventory[itemId] ?: 0) != 0) {
+                callback(PurchaseGuard.BLOCKED_CODE, 0, "库存未确认缺货，暂停补购")
+                return@fetchBathInventory
+            }
+            val (reservation, reason) = purchaseGuard.reserveForPet(petId, "bath:$itemId", count, 0)
+            if (reservation == null) {
+                EngineLog.w(TAG, "采购拦截: $reason")
+                callback(PurchaseGuard.BLOCKED_CODE, 0, reason)
+                return@fetchBathInventory
+            }
+            sendBathPurchase(petId, itemIdLong, count, scene) { code, orderResult, error ->
+                val outcome = when {
+                    code == 0 && orderResult == 1 -> PurchaseGuard.Outcome.SUCCESS
+                    code == 0 && orderResult == 2 -> PurchaseGuard.Outcome.REJECTED
+                    code == OidbChannel.MASTER_OFF_CODE || code == ProtocolBreakers.FAST_FAIL_CODE -> PurchaseGuard.Outcome.REJECTED
+                    else -> PurchaseGuard.Outcome.UNKNOWN
+                }
+                purchaseGuard.complete(reservation, outcome)
+                callback(code, orderResult, error)
+            }
+        }
+    }
+
+    private fun sendBathPurchase(
+        petId: String, itemIdLong: Long, count: Int, scene: Long,
+        callback: (Int, Int, String?) -> Unit
+    ) {
         val userInfoBytes = ProtoWire.message()
             .writeVarint(1, 1L)
             .writeVarint(2, 1001L)
@@ -363,21 +407,39 @@ class PetBathProtocolClient(
         petUin: String = "",
         callback: (BathResult) -> Unit
     ) {
-        // DEF-14: 彻底移除废弃 0x9bf3_1 请求，洗澡逻辑切换为 0x96a6_1 (行为上报) 驱动
-        bath(petId = petId, cleanValue = 100, stage = 2, petUin = petUin) { code, data, err ->
-            if (code == 0) {
-                if (petUin.isEmpty()) {
-                    onCleanUpdated(100)
-                }
-                EngineLog.i(
-                    TAG,
-                    "doBathOnce 行为上报 (0x96a6_1) 成功: petId=$petId"
-                )
-                callback(BathResult(0, 100, 20, 0, true, null))
-            } else {
-                EngineLog.w(TAG, "doBathOnce 行为上报失败或无宿主支持 (Safe-Fail): code=$code, err=$err")
-                callback(BathResult(code, -1, 0, -1, false, err))
+        if (petId.isBlank() || itemId.isBlank() || useNum <= 0) {
+            callback(BathResult(-1, -1, 0, -1, false, "无效的洗澡参数"))
+            return
+        }
+        val body = ProtoWire.message()
+            .writeString(1, petId)
+            .writeString(2, itemId)
+            .writeVarint(3, useNum.toLong())
+            .writeString(4, petUin)
+            .toByteArray()
+        channel.sendOidb("OidbSvcTrpcTcp.0x9bf3_1", 39923, 1, body) { code, data, err ->
+            val result = parseBathResult(code, data, err)
+            if (result.code == 0 && petUin.isEmpty() && result.newClean > 0) {
+                onCleanUpdated(result.newClean)
             }
+            EngineLog.i(TAG, "doBathOnce: code=${result.code}, clean=${result.newClean}, balance=${result.remainBalance}, full=${result.isFullClean}")
+            callback(result)
+        }
+    }
+
+    internal fun parseBathResult(code: Int, data: ByteArray?, errorMsg: String?): BathResult {
+        if (code != 0) return BathResult(code, -1, 0, -1, false, errorMsg)
+        if (data == null || data.isEmpty()) return BathResult(-1, -1, 0, -1, false, "洗澡回包为空")
+        return try {
+            val clean = ProtoWire.firstVarint(data, 1) ?: 0L
+            val balance = ProtoWire.firstVarint(data, 3) ?: 0L
+            val full = (ProtoWire.firstVarint(data, 4) ?: 0L) != 0L
+            require(clean in 0..Int.MAX_VALUE.toLong() && balance in 0..Int.MAX_VALUE.toLong())
+            require(clean > 0L || full) { "缺少有效清洁度" }
+            // 增量由任务层按前后清洁度计算，不猜测未确认字段。
+            BathResult(0, clean.toInt(), 0, balance.toInt(), full, null)
+        } catch (e: IllegalArgumentException) {
+            BathResult(-1, -1, 0, -1, false, "洗澡回包格式错误: ${e.message}")
         }
     }
 }

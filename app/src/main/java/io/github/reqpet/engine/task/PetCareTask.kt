@@ -62,8 +62,8 @@ object PetCareTask {
         try {
             withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
-                    bridge.queryPetAttributes(petId, isSelf) { _, attrs ->
-                        if (cont.isActive) cont.resume(attrs)
+                    bridge.queryPetAttributes(petId, isSelf) { code, attrs ->
+                        if (cont.isActive) cont.resume(if (code == 0) attrs else null)
                     }
                 }
             }
@@ -148,42 +148,11 @@ object PetCareTask {
             QQPetDirectBridge.BathResult(-99, -1, 0, -1, false, t.message)
         }
 
-    suspend fun bathAwait(
-        bridge: QQPetDirectBridge,
-        petId: String,
-        petUin: String = "",
-        timeoutMs: Long = NETWORK_TIMEOUT_MS
-    ): Pair<Int, ByteArray?> =
-        try {
-            try {
-                withTimeoutOrNull(timeoutMs) {
-                    suspendCancellableCoroutine<Unit> { cont ->
-                        bridge.bath(petId, cleanValue = 50, stage = 1, petUin = petUin) { _, _, _ ->
-                            if (cont.isActive) cont.resume(Unit)
-                        }
-                    }
-                }
-            } catch (e: Throwable) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-            }
-            delay(randomJitter(360L, 840L))
-            withTimeoutOrNull(timeoutMs) {
-                suspendCancellableCoroutine { cont ->
-                    bridge.bath(petId, cleanValue = 100, stage = 2, petUin = petUin) { code, data, _ ->
-                        if (cont.isActive) cont.resume(Pair(code, data))
-                    }
-                }
-            } ?: Pair(-99, null)
-        } catch (e: Throwable) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Pair(-99, null)
-        }
-
     suspend fun buyFoodAwait(
         bridge: QQPetDirectBridge,
         petId: String,
         count: Long = 5L,
-        itemType: String = "1",
+        itemType: String = "9990032",
         timeoutMs: Long = NETWORK_TIMEOUT_MS
     ): Pair<Int, String?> =
         try {
@@ -280,7 +249,7 @@ object PetCareTask {
         val (fCode, _) = feedAwait(bridge, petId)
         if (fCode == 1000210) {
             onLog("[自动采购] 背包饼干不足 (code=1000210)，立即自动采购 5 份爱心饼干...")
-            val (buyCode, buyErr) = buyFoodAwait(bridge, petId, 5L, "1")
+            val (buyCode, buyErr) = buyFoodAwait(bridge, petId, 5L)
             if (buyCode == 0) {
                 onLog("[自动采购] 5 份爱心饼干采购入库成功！继续为小宠喂食...")
                 delay(randomJitter(300L, 700L))
@@ -301,123 +270,21 @@ object PetCareTask {
         targetThreshold: Int = 80,
         onLog: TaskLogger
     ): QQPetDirectBridge.BathResult {
-        val target = resolveBathTarget(bridge, petId, targetThreshold)
-        if (target.startClean >= target.threshold || (target.maxClean > 0 && target.startClean >= target.maxClean)) {
-            onLog("[沐浴检查] 当前清洁度已不低于阈值 (${target.startClean}>=${target.threshold})，无需消耗${target.itemName} (库存: ${target.balance})")
-            return QQPetDirectBridge.BathResult(0, target.startClean, 0, target.balance, true, null)
+        val attrs = queryPetAttributesAwait(bridge, petId)
+        if (attrs == null || !attrs.clean.isFinite() || !attrs.maxClean.isFinite()) {
+            return QQPetDirectBridge.BathResult(-104, -1, 0, -1, false, "实时清洁度未确认，暂停照料")
         }
-        val loopRes = executeBathLoop(bridge, petId, target, onLog)
-        if (!loopRes.success) {
-            return QQPetDirectBridge.BathResult(
-                loopRes.code,
-                loopRes.curClean,
-                loopRes.totalAdded,
-                loopRes.balance,
-                false,
-                loopRes.errorMsg
-            )
-        }
-        try {
-            bathAwait(bridge, petId)
-        } catch (e: Throwable) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-        }
-        queryPetAttributesAwait(bridge, petId)
-        return QQPetDirectBridge.BathResult(
-            0,
-            loopRes.curClean,
-            loopRes.totalAdded,
-            loopRes.balance,
-            loopRes.curClean >= target.maxClean,
-            null
-        )
+        return bathTargetWithAutoBuyAwait(bridge, petId, petId, "", attrs.clean.toInt(),
+            attrs.maxClean.toInt(), targetThreshold, onLog)
     }
 
-    data class BathLoopResult(
-        val success: Boolean,
-        val code: Int,
-        val curClean: Int,
-        val totalAdded: Int,
-        val balance: Int,
-        val errorMsg: String?
-    )
-
-    private suspend fun executeBathLoop(
-        bridge: QQPetDirectBridge, petId: String, target: BathTargetInfo, onLog: TaskLogger
-    ): BathLoopResult {
-        var curClean = if (target.startClean >= 0) target.startClean else 0
-        var totalAdded = 0
-        var balance = target.balance
-        var steps = 0
-        while (curClean < target.threshold && curClean < target.maxClean && steps < 12) {
-            steps++
-            if (balance <= 0) {
-                val (_, newBal, err) = purchaseSoapIfNeeded(
-                    bridge,
-                    petId,
-                    target.itemId,
-                    target.itemName,
-                    target.cleanPerSoap,
-                    target.defaultBuyCount,
-                    curClean,
-                    target.threshold,
-                    onLog
-                )
-                if (err != null) return BathLoopResult(false, -2, curClean, totalAdded, balance, err)
-                balance = newBal
-            }
-            val res = doBathOnceAwait(bridge, petId, target.itemId, 1)
-            if (res.code != 0) {
-                if (balance > 0 && steps == 1) {
-                    balance = 0; continue
-                }
-                return BathLoopResult(false, res.code, curClean, totalAdded, balance, res.errorMsg)
-            }
-            curClean = res.newClean
-            totalAdded += res.addedClean
-            balance = res.remainBalance
-            onLog("[搓澡进度] 消耗 1 份${target.itemName} (+${res.addedClean}) -> 清洁度 $curClean（阈值 ${target.threshold}）(剩余库存: $balance)")
-            if (curClean >= target.threshold || res.isFullClean || curClean >= target.maxClean) break
-            delay(randomJitter(270L, 630L))
-        }
-        return BathLoopResult(true, 0, curClean, totalAdded, balance, null)
-    }
-
-    data class BathTargetInfo(
-        val startClean: Int, val maxClean: Int, val threshold: Int, val itemId: String,
-        val itemName: String, val cleanPerSoap: Int, val defaultBuyCount: Int, val balance: Int
-    )
-
-    private suspend fun resolveBathTarget(bridge: QQPetDirectBridge, petId: String, threshold: Int): BathTargetInfo {
-        val attrs = queryPetAttributesAwait(bridge, petId) ?: bridge.getPetAttributes(petId)
-        val startClean = attrs?.clean?.toInt() ?: -1
-        val maxClean = attrs?.maxClean?.toInt()?.takeIf { it > 0 } ?: 100
-        val (_, configs) = fetchBathItemConfigAwait(bridge)
-        val (_, inventory) = fetchBathInventoryAwait(bridge)
-        val chosenConfig = configs.firstOrNull { it.cleanValue > 0 } ?: configs.firstOrNull()
-        val itemId = chosenConfig?.itemId ?: inventory.keys.firstOrNull() ?: "2010104"
-        val itemName = chosenConfig?.name ?: "香皂片"
-        val cleanPerSoap = chosenConfig?.cleanValue?.takeIf { it > 0 } ?: 10
-        val defaultBuyCount = chosenConfig?.defaultPurchaseCount?.takeIf { it > 0 } ?: 5
-        val balance = inventory[itemId] ?: 0
-        return BathTargetInfo(startClean, maxClean, threshold, itemId, itemName, cleanPerSoap, defaultBuyCount, balance)
-    }
-
-    private suspend fun purchaseSoapIfNeeded(
-        bridge: QQPetDirectBridge, petId: String, itemId: String, itemName: String,
-        cleanPerSoap: Int, defaultBuyCount: Int, curClean: Int, maxClean: Int, onLog: TaskLogger
-    ): Triple<Int, Int, String?> {
-        val gapClean = (maxClean - curClean).coerceAtLeast(cleanPerSoap)
-        val buyCount = maxOf(((gapClean + cleanPerSoap - 1) / cleanPerSoap).coerceIn(1, 10), defaultBuyCount)
-        onLog("[自动采购] 背包${itemName}不足 (库存 0)，正在自动采购 $buyCount 份${itemName}...")
-        val (buyCode, orderResult, buyErr) = buyBathItemAwait(bridge, petId, itemId, buyCount)
-        if (buyCode == 0 && (orderResult == 1 || orderResult == 0)) {
-            onLog("[自动采购] 成功购入 $buyCount 份${itemName}！继续为小宠搓澡...")
-            delay(randomJitter(240L, 560L))
-            return Triple(buyCount, buyCount, null)
-        }
-        val reason = if (orderResult == 2) "金币不足" else (buyErr ?: "code=$buyCode, orderResult=$orderResult")
-        onLog.error("[自动采购] 购买${itemName}失败: $reason")
-        return Triple(0, 0, "购买${itemName}失败($reason)")
-    }
+    internal suspend fun bathTargetWithAutoBuyAwait(
+        bridge: QQPetDirectBridge, ownPetId: String, targetPetId: String, friendUin: String,
+        startClean: Int, maxClean: Int, targetThreshold: Int, onLog: TaskLogger
+    ): QQPetDirectBridge.BathResult = BathCareRunner(object : BathOperations {
+        override suspend fun configs() = fetchBathItemConfigAwait(bridge)
+        override suspend fun inventory() = fetchBathInventoryAwait(bridge)
+        override suspend fun buy(itemId: String, count: Int) = buyBathItemAwait(bridge, ownPetId, itemId, count)
+        override suspend fun bath(itemId: String) = doBathOnceAwait(bridge, targetPetId, itemId, 1, friendUin)
+    }, onLog).run(startClean, maxClean, targetThreshold)
 }

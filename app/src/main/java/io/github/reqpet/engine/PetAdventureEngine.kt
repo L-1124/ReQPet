@@ -546,11 +546,11 @@ class PetAdventureEngine(@Volatile private var bridge: QQPetDirectBridge) {
                 val outingSleep = if (hiredDecision != null && hiredDecision.nextSleepMillis > 0L) {
                     hiredDecision.nextSleepMillis
                 } else {
-                    StealthScheduler.calculateTaskSleepSeconds(rem, prefHumanLikeSleep) * 1000L
+                    StealthScheduler.calculateTaskSleepSeconds(rem, prefHumanLikeSleep, enableSlices = false) * 1000L
                 }
                 val waitMs = sleepForMaintenance(context, outingSleep)
                 val waitNote =
-                    if (waitMs < outingSleep) "按照料提前到 ${waitMs / 1000L} 秒后再查" else "${waitMs / 1000L} 秒后再查"
+                    if (waitMs < outingSleep) "按维护巡检提前到 ${waitMs / 1000L} 秒后再查" else "${waitMs / 1000L} 秒后到期结算"
                 sendLog(
                     "[任务进行中] 仍在$kind，剩余 ${PetPureCalculations.formatDuration(rem)}，$waitNote，StoryID=${story.storyId ?: "无"}"
                 )

@@ -50,6 +50,10 @@ internal object PetStoryHandlers {
             )
         }
 
+        val isWorkStory = storyId.startsWith("6400")
+        val isRecallEnabled = PetAdventureEngine.prefHiredRecallProgress > 0
+        if (!isWorkStory || !isRecallEnabled) return null
+
         val selfUin = PetAdventureEngine.currentActiveUin.toLongOrNull() ?: 0L
         var decision = PetHiredRecallTask.evaluateHiredMonitor(
             bridge, petId,

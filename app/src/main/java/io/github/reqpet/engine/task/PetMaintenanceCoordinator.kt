@@ -30,7 +30,8 @@ object PetMaintenanceCoordinator {
         isOuting: Boolean = false
     ): Long {
         val due = ArrayList<Long>(5)
-        if (PetAdventureEngine.enableOneClickCare || PetAdventureEngine.enableCare) due += maxOf(
+        val careEnabled = !isOuting && (PetAdventureEngine.enableOneClickCare || PetAdventureEngine.enableCare)
+        if (careEnabled) due += maxOf(
             careRetry.waitMillis(now), waitAfter(
                 PetAdventureEngine.lastCareTimeMillis,
                 CARE_CHECK_INTERVAL_MS,
@@ -76,7 +77,7 @@ object PetMaintenanceCoordinator {
     ) {
         val now = System.currentTimeMillis()
         try {
-            checkCareMaintenance(context, bridge, petId, now, forceCheck)
+            checkCareMaintenance(context, bridge, petId, now, story, forceCheck)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             PetAdventureEngine.sendLog("[自理] 照料维护异常: ${e.message}")
@@ -137,9 +138,11 @@ object PetMaintenanceCoordinator {
         bridge: QQPetDirectBridge,
         petId: String,
         now: Long,
+        story: StoryStatusResult,
         forceCheck: Boolean = false
     ) {
         if (!PetAdventureEngine.enableOneClickCare && !PetAdventureEngine.enableCare) return
+        if (story.isOngoing && !forceCheck) return
         if (careRetry.waitMillis(now) > 0L) return
         if (!forceCheck && (now - PetAdventureEngine.lastCareTimeMillis <= CARE_CHECK_INTERVAL_MS)) return
         PetAdventureEngine.lastCareTimeMillis = now

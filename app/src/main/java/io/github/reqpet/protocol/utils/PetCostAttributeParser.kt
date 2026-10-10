@@ -30,6 +30,9 @@ object PetCostAttributeParser {
             val maxEnergy = old?.maxEnergy ?: 100f
             val maxClean = old?.maxClean ?: 100f
             val mood = old?.mood ?: 100f
+            if (old != null && old.energy == newEnergy && old.clean == newClean && old.maxEnergy == maxEnergy && old.maxClean == maxClean) {
+                return old
+            }
             val attrs = PetAttributes(newEnergy, maxEnergy, newClean, maxClean, mood)
             QQPetDirectBridge.cachedPetAttributes = attrs
             EngineLog.d(
